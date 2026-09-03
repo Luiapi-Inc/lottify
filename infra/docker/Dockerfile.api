@@ -4,7 +4,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm prisma:generate && pnpm build:backend && pnpm prune --prod
+RUN DATABASE_URL=postgresql://localhost/lottify pnpm prisma:generate && pnpm build:backend && pnpm prune --prod
 
 FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
 ENV NODE_ENV=production

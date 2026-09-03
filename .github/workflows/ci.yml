@@ -34,7 +34,7 @@ jobs:
       APP_ENV: test
       DATABASE_URL: postgresql://lottify:lottify@localhost:5432/lottify?schema=public
       REDIS_URL: redis://localhost:6379
-      JWT_ACCESS_SECRET: 01234567890123456789012345678901
+      JWT_ACCESS_SECRET: "01234567890123456789012345678901"
       RUN_INTEGRATION_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +83,7 @@ jobs:
       APP_ENV: test
       DATABASE_URL: postgresql://lottify:lottify@127.0.0.1:5432/lottify?schema=public
       REDIS_URL: redis://127.0.0.1:6379
-      JWT_ACCESS_SECRET: 01234567890123456789012345678901
+      JWT_ACCESS_SECRET: "01234567890123456789012345678901"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
