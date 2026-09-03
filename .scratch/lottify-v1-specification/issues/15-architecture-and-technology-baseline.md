@@ -1,0 +1,63 @@
+# Lock architecture and technology baseline
+
+Type: grilling
+Status: resolved
+Blocked by: 01, 02, 04, 09, 13
+
+## Question
+
+What exact implementation baseline realizes the approved Modular Monolith + worker architecture, PostgreSQL transactional authority, Redis non-authoritative workloads, outbox/event delivery, API applications, observability, deployment topology, migration strategy, secret management, and blue-green/rollback requirements while keeping business requirements technology-independent?
+
+## Comments
+
+### Architecture round 1 — confirmed
+
+- Backend/runtime baseline: Lottify v1 uses TypeScript on Node.js with NestJS for the HTTP API and worker processes. API and workers share the same approved domain/application modules rather than reimplementing business logic in separate technology stacks. Technology choices remain an implementation baseline, not business requirements.
+- Modular Monolith module shape: each of the thirteen approved bounded contexts is implemented as a deep module with an explicit interface. Another context must not write its tables/repositories directly. Cross-context interaction uses the owning module's application interface, explicit command/orchestration contract, or published event as appropriate; persistence internals stay local to the owning module.
+- Process topology: v1 separates a stateless API process from workload-specific worker processes. The baseline worker groups are Settlement, Payment/Webhook/Reconciliation, Notification, and Scheduler/Outbox. They reuse the same domain/application modules while scaling independently according to workload and the Ticket 13 capacity targets.
+- PostgreSQL topology and ownership: v1 uses one authoritative PostgreSQL database so approved local atomic operations can use database transactions. Tables/schema objects have explicit bounded-context ownership; cross-context direct writes are forbidden. Wallet & Ledger applies the strictest transaction/concurrency controls for reservation, posting, idempotency, and race-sensitive financial invariants.
+- Application/backend deployment boundary: Member App and Admin App are separate frontend applications, while v1 uses one backend/API application under `/api/v1` with explicit Member/Admin authorization surfaces. A second independent backend deployment is not introduced without a demonstrated scaling, isolation, or security requirement.
+
+### Architecture round 2 — confirmed
+
+- Persistence/data-access baseline: Lottify v1 uses Prisma as the PostgreSQL data-access baseline. Prisma models and generated types remain persistence implementation details behind each bounded-context module's repository/transaction interfaces; they are not shared domain models and do not authorize cross-context direct persistence access.
+- Redis role and failure semantics: Redis is used only for non-authoritative cache, rate limiting, distributed coordination, and queue infrastructure. Loss, eviction, restart, or unavailability of Redis must not lose authoritative business or financial state. Cache miss/failure falls back to PostgreSQL where safe, or fails closed/safely when the operation cannot be completed without the non-authoritative facility.
+- Queue/worker baseline: BullMQ backed by Redis is the v1 worker-queue baseline. Critical asynchronous work originates from durable PostgreSQL state, including Transactional Outbox where required, before enqueue/publish. BullMQ delivery guarantees are never treated as a financial or business exactly-once invariant; consumers remain idempotent.
+- Transactional Outbox publishing: Scheduler/Outbox workers claim unpublished Outbox rows using concurrency-safe database coordination, publish/enqueue them, and record delivery progress without re-running the originating business transaction. Retry/backoff and crash recovery may cause redelivery, so every consumer preserves durable idempotency and domain uniqueness guarantees.
+- Realtime channel: realtime updates are a non-authoritative read-update channel separate from business command execution. WebSocket or SSE may be selected by implementation fit; disconnects and missed updates must recover through polling/refetch, and the canonical client state is refreshed from `/api/v1` rather than trusting realtime messages as authoritative state.
+
+### Architecture round 3 — confirmed
+
+- Frontend technology baseline: Member App and Admin App use TypeScript, Next.js, and React as separate frontend applications. They consume generated OpenAPI clients and may share UI primitives/types intended for presentation, but they do not share or embed backend business-domain implementation.
+- Deployment packaging: API, worker, Member App, and Admin App builds are immutable Docker/OCI artifacts. Runtime processes are stateless and horizontally scalable; authoritative persistent state remains in the approved PostgreSQL, Redis non-authoritative infrastructure, or external provider systems according to the ownership/authority rules already locked.
+- Configuration and secrets: non-secret runtime configuration is environment-specific and validated at process startup. Secrets are supplied through runtime secret references/secret-management infrastructure and must not be committed to source control or stored as ordinary business configuration values.
+- Database migration execution: Prisma migration tooling is the v1 migration baseline, but production migrations are reviewed deployment artifacts rather than uncontrolled application-startup side effects. Schema evolution follows `expand → backfill → contract`, preserves compatibility with old and new application versions during rollout, and forbids destructive one-step production migration.
+- Blue/green and recovery: an immutable candidate release is deployed to the inactive environment, migration compatibility and health/smoke evidence are verified, then traffic is switched. Rollback to the previous application release is allowed only while database/schema compatibility remains valid; irreversible schema/data changes require a governed roll-forward recovery path rather than pretending application rollback can restore prior data semantics.
+
+### Architecture round 4 — confirmed
+
+- Observability stack: Lottify v1 uses OpenTelemetry for vendor-neutral tracing/telemetry instrumentation, structured JSON logs, Prometheus-compatible metrics, and Sentry for error tracking. Business/domain modules do not depend directly on vendor-specific observability SDKs; instrumentation crosses explicit observability seams/adapters so the monitoring backend can change without changing business behavior.
+- Correlation model: every HTTP request, application command, cross-context orchestration step, Outbox Event, queue job, and external-provider attempt propagates `correlationId` where the workflow has one. Trace/span identifiers remain observability identities and are not reused as business transaction IDs, provider references, or idempotency keys.
+- PostgreSQL backup/PITR architecture: the production PostgreSQL platform must support continuous point-in-time recovery meeting Ticket 13 `RPO <= 5 minutes` and `RTO <= 60 minutes`, automated daily backups, and an isolated restore-verification environment at least monthly. The specification does not bind this capability to a particular cloud/database vendor, and restore success must include Ledger/schema/critical-reference integrity checks rather than database availability alone.
+- Health-check model: processes expose distinct startup, liveness, and readiness probes. Readiness checks only dependencies required for that process to safely accept its workload. A Redis degradation that can be handled by approved fallback/degraded semantics does not automatically make the whole API unready; operations that cannot proceed safely fail closed while unrelated capabilities remain available.
+- Scaling model: stateless API capacity scales horizontally from request concurrency, latency, throughput, and saturation signals; workload-specific workers scale from queue lag, throughput, execution duration, backlog age, and domain-specific demand. CPU utilization may inform scaling but is not the sole signal. Production sizing and autoscaling policies must be proven against Ticket 13 capacity/latency/queue/settlement acceptance targets.
+
+### Architecture round 5 — confirmed
+
+- Environment topology: v1 has explicit `local`, `test`, `staging`, and `production` environments. Staging is production-like enough to verify migration compatibility, provider sandbox integrations, observability, release smoke tests, and performance behavior before production promotion; environment-specific configuration does not change business semantics.
+- Shared-code policy: code may be shared for infrastructure primitives, generated contracts/clients, cross-cutting utilities, and presentation/UI primitives. A generic shared-domain package that owns or exposes mutable business concepts across bounded contexts is forbidden; each of the thirteen contexts keeps its own domain implementation and interface.
+- Database transaction policy: a database transaction is opened by the owning application use case around the invariants that require atomicity. Transactions do not span processes or external providers, and orchestration must not hide or imply a distributed transaction. Race-sensitive and financial paths use explicit locking, uniqueness, idempotency, and/or version checks according to the invariant being protected.
+- Technology-version policy: this specification locks technology families and architectural roles rather than arbitrary patch versions. The implementation roadmap must select and support explicit major/runtime versions, commit lockfiles and immutable container digests for reproducible builds, and govern upgrades separately without changing business requirements silently.
+- Architecture acceptance gate: the baseline is implementation-ready only when every bounded context can be traced through `Bounded Context → Module → Persistence ownership → Process → Interface/Event → Deployment unit → Observability/Recovery`, and no business or financial invariant relies on Redis, BullMQ, realtime/frontend state, or a provider-specific implementation as its source of truth.
+
+## Answer
+
+Lottify v1 implements the approved business specification as a TypeScript/Node.js Modular Monolith with NestJS, explicit bounded-context modules, a stateless HTTP API, and workload-specific worker processes. PostgreSQL is the sole authoritative transactional store for business and financial state; Prisma is a persistence implementation detail behind context-owned repository/transaction interfaces. Redis and BullMQ provide non-authoritative caching, coordination, rate limiting, and asynchronous execution, while critical asynchronous effects originate from durable PostgreSQL state and Transactional Outbox records with idempotent consumers.
+
+Member App and Admin App are separate TypeScript/Next.js/React applications consuming the authoritative `/api/v1` OpenAPI contract through generated clients. Realtime delivery is advisory only and recovers by refetching canonical API state. API, workers, and frontends are shipped as immutable Docker/OCI artifacts, remain stateless, and scale independently against Ticket 13 acceptance targets.
+
+Production database change follows reviewed `expand → backfill → contract` migrations compatible with blue/green rollout. Application rollback is permitted only while database compatibility remains valid; irreversible changes use governed roll-forward recovery. Configuration is environment-specific and startup-validated, while credentials are runtime secret references rather than source-controlled or ordinary business configuration.
+
+Observability uses vendor-neutral OpenTelemetry instrumentation, structured JSON logs, Prometheus-compatible metrics, Sentry error tracking, and end-to-end `correlationId` propagation without conflating observability IDs with business/idempotency identities. Production PostgreSQL must satisfy continuous PITR, backup and verified-restore requirements from Ticket 13. Startup/liveness/readiness checks and scaling signals are workload-specific and preserve safe degradation rather than turning non-authoritative dependency failure into silent data loss.
+
+The implementation boundary is accepted only when each of the thirteen bounded contexts has explicit module and persistence ownership, transaction and cross-context seams are visible, deployment/process ownership is traceable, and authoritative invariants remain independent from Redis, queues, frontend/realtime state, and provider vendors.
