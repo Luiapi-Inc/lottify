@@ -38,7 +38,7 @@ jobs:
       RUN_INTEGRATION_TESTS: "1"
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v4
         with:
           version: 11.25.0
       - uses: actions/setup-node@v7
@@ -88,7 +88,7 @@ jobs:
       JWT_ACCESS_SECRET: "01234567890123456789012345678901"
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v4
         with:
           version: 11.25.0
       - uses: actions/setup-node@v7
