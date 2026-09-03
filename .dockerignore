@@ -1,0 +1,10 @@
+.git
+.github
+.scratch
+node_modules
+dist
+coverage
+apps/*/.next
+.env
+.env.*
+*.log

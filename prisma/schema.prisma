@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model AuthSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  memberId         String   @map("member_id") @db.Uuid
+  deviceId         String?  @map("device_id")
+  refreshTokenHash String   @map("refresh_token_hash")
+  version          Int      @default(1)
+  expiresAt        DateTime @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([memberId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  scope          String
+  key            String
+  fingerprint    String
+  status         String
+  responseCode   Int?     @map("response_code")
+  responseBody   Json?    @map("response_body")
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model OutboxEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  topic         String
+  aggregateType String?  @map("aggregate_type")
+  aggregateId   String?  @map("aggregate_id")
+  payload       Json
+  correlationId String?  @map("correlation_id")
+  attempts      Int      @default(0)
+  lockedAt      DateTime? @map("locked_at")
+  lockOwner     String?  @map("lock_owner")
+  publishedAt   DateTime? @map("published_at")
+  lastError     String?  @map("last_error")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([publishedAt, lockedAt, createdAt])
+  @@index([topic, createdAt])
+  @@map("outbox_events")
+}

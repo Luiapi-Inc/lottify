@@ -1,0 +1,22 @@
+export interface AuthSessionRecord {
+  id: string;
+  memberId: string;
+  refreshTokenHash: string;
+  version: number;
+  expiresAt: Date;
+  revokedAt: Date | null;
+}
+
+export interface SessionRepository {
+  create(input: {
+    memberId: string;
+    deviceId?: string;
+    refreshTokenHash: string;
+    expiresAt: Date;
+  }): Promise<AuthSessionRecord>;
+  findById(id: string): Promise<AuthSessionRecord | null>;
+  rotate(input: { id: string; expectedHash: string; newHash: string; newExpiresAt: Date }): Promise<boolean>;
+  revoke(id: string): Promise<void>;
+}
+
+export const SESSION_REPOSITORY = Symbol("IDENTITY_ACCESS_SESSION_REPOSITORY");

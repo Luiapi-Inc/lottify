@@ -1,0 +1,34 @@
+import "reflect-metadata";
+import { ConsoleLogger } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
+import { getEnvironment } from "../../../src/platform/config/env";
+import { initObservability, shutdownObservability } from "../../../src/platform/observability/observability";
+import { PrismaService } from "../../../src/platform/persistence/prisma.service";
+import { startWorkerHealthServer } from "./health-server";
+import { OutboxDispatcher } from "./outbox-dispatcher";
+import { WorkerModule } from "./worker.module";
+
+async function bootstrap(): Promise<void> {
+  const env = getEnvironment();
+  initObservability(`lottify-worker-${env.WORKER_GROUP}`);
+  const app = await NestFactory.createApplicationContext(WorkerModule, {
+    logger: new ConsoleLogger({ json: true }),
+  });
+  const health = startWorkerHealthServer(app.get(PrismaService), env.WORKER_HEALTH_PORT);
+  const dispatcher = app.get(OutboxDispatcher);
+
+  if (env.WORKER_GROUP === "scheduler-outbox") {
+    void dispatcher.run();
+  }
+
+  const shutdown = async (): Promise<void> => {
+    await dispatcher.stop();
+    health.close();
+    await app.close();
+    await shutdownObservability();
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+}
+
+void bootstrap();
