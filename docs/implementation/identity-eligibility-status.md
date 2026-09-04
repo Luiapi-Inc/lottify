@@ -10,6 +10,7 @@ Source of truth: Wayfinder Tickets 01, 02, 06, 10, 11, 16, and 19. This record d
 - Refresh-token hashes remain persistence-only and are not exposed by the Member-facing application service.
 - Member capability restrictions are modeled as independent `BET_BLOCKED`, `WITHDRAWAL_BLOCKED`, `DEPOSIT_BLOCKED`, `LOGIN_BLOCKED`, and `PROMOTION_BLOCKED` controls with source, reason, effective period, and actor-or-policy reference; one account-wide status is not used.
 - KYC/Risk Eligibility Decisions now have the locked machine-readable outcomes plus capability, reason codes, policy version, evidence references, evaluation time, and bounded freshness window; the decision can be checked for freshness before a critical operation re-evaluates it.
+- Eligibility policy resolution follows the locked deny-first layer order: hard restriction/self-exclusion, compliance, risk, capability/business policy, then allow. Every layer is required as an input, and a lower-priority layer cannot replace an earlier non-allow decision.
 - No new persistence schema or REST path has been introduced for Device, OTP, or onboarding behavior whose detailed contract is not locked.
 
 ## Evidence confirmed on 2026-09-04
