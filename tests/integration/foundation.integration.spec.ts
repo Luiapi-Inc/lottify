@@ -53,12 +53,33 @@ describe.runIf(runIntegration)("foundation integration", () => {
   });
 
   it("rotates refresh tokens atomically and rejects reuse", async () => {
-    const issued = await sessions.issue(randomUUID(), "integration-device");
+    const memberId = randomUUID();
+    const issued = await sessions.issue(memberId, "integration-device");
     const rotated = await sessions.rotate(issued.sessionId, issued.refreshToken);
     expect(rotated.refreshToken).not.toBe(issued.refreshToken);
     await expect(sessions.rotate(issued.sessionId, issued.refreshToken)).rejects.toThrow();
-    await sessions.revoke(issued.sessionId);
+    await sessions.revoke(memberId, issued.sessionId);
     await expect(sessions.rotate(issued.sessionId, rotated.refreshToken)).rejects.toThrow();
+  });
+
+  it("lists and revokes member sessions without crossing member boundaries", async () => {
+    const memberId = randomUUID();
+    const otherMemberId = randomUUID();
+    const selected = await sessions.issue(memberId, "phone");
+    const retained = await sessions.issue(memberId, "tablet");
+    const otherMember = await sessions.issue(otherMemberId, "phone");
+
+    await sessions.revoke(memberId, otherMember.sessionId);
+    await expect(sessions.rotate(otherMember.sessionId, otherMember.refreshToken)).resolves.toBeDefined();
+
+    await sessions.revoke(memberId, selected.sessionId);
+    const active = await sessions.listForMember(memberId);
+
+    expect(active).toEqual([
+      expect.objectContaining({ sessionId: retained.sessionId, deviceId: "tablet" }),
+    ]);
+    expect(active.every((session) => !("refreshTokenHash" in session))).toBe(true);
+    await expect(sessions.rotate(selected.sessionId, selected.refreshToken)).rejects.toThrow();
   });
 
   it("revokes sessions at device and all-device scope without crossing member boundaries", async () => {

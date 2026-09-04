@@ -67,8 +67,23 @@ export class SessionService {
     };
   }
 
-  revoke(sessionId: string): Promise<void> {
-    return this.sessions.revoke(sessionId);
+  async listForMember(memberId: string): Promise<
+    Array<{
+      sessionId: string;
+      deviceId: string | null;
+      expiresAt: Date;
+    }>
+  > {
+    const sessions = await this.sessions.listActiveForMember(memberId);
+    return sessions.map((session) => ({
+      sessionId: session.id,
+      deviceId: session.deviceId,
+      expiresAt: session.expiresAt,
+    }));
+  }
+
+  revoke(memberId: string, sessionId: string): Promise<void> {
+    return this.sessions.revokeForMember(memberId, sessionId);
   }
 
   revokeByDevice(memberId: string, deviceId: string): Promise<void> {

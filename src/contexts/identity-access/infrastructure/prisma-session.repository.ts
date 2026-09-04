@@ -19,6 +19,17 @@ export class PrismaSessionRepository implements SessionRepository {
     return this.prisma.authSession.findUnique({ where: { id } });
   }
 
+  listActiveForMember(memberId: string): Promise<AuthSessionRecord[]> {
+    return this.prisma.authSession.findMany({
+      where: {
+        memberId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   async rotate(input: { id: string; expectedHash: string; newHash: string; newExpiresAt: Date }): Promise<boolean> {
     const result = await this.prisma.authSession.updateMany({
       where: {
@@ -36,9 +47,9 @@ export class PrismaSessionRepository implements SessionRepository {
     return result.count === 1;
   }
 
-  async revoke(id: string): Promise<void> {
+  async revokeForMember(memberId: string, id: string): Promise<void> {
     await this.prisma.authSession.updateMany({
-      where: { id, revokedAt: null },
+      where: { id, memberId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }

@@ -39,6 +39,13 @@ class InMemorySessionRepository implements SessionRepository {
     return this.records.get(id) ?? null;
   }
 
+  async listActiveForMember(memberId: string): Promise<AuthSessionRecord[]> {
+    const now = new Date();
+    return [...this.records.values()].filter(
+      (record) => record.memberId === memberId && !record.revokedAt && record.expiresAt > now,
+    );
+  }
+
   async rotate(input: {
     id: string;
     expectedHash: string;
@@ -60,9 +67,9 @@ class InMemorySessionRepository implements SessionRepository {
     return true;
   }
 
-  async revoke(id: string): Promise<void> {
+  async revokeForMember(memberId: string, id: string): Promise<void> {
     const record = this.records.get(id);
-    if (record && !record.revokedAt) record.revokedAt = new Date();
+    if (record?.memberId === memberId && !record.revokedAt) record.revokedAt = new Date();
   }
 
   async revokeByDevice(memberId: string, deviceId: string): Promise<void> {
@@ -98,6 +105,37 @@ describe("refresh token hashing", () => {
 });
 
 describe("session revocation", () => {
+  it("lists only active sessions owned by the selected member without exposing refresh-token state", async () => {
+    const sessions = new SessionService(new InMemorySessionRepository(), new JwtService());
+    const memberId = randomUUID();
+    const otherMemberId = randomUUID();
+    const phone = await sessions.issue(memberId, "phone");
+    const tablet = await sessions.issue(memberId, "tablet");
+    await sessions.issue(otherMemberId, "phone");
+
+    await sessions.revoke(memberId, phone.sessionId);
+    const active = await sessions.listForMember(memberId);
+
+    expect(active).toEqual([
+      expect.objectContaining({ sessionId: tablet.sessionId, deviceId: "tablet" }),
+    ]);
+    expect(active).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sessionId: phone.sessionId })]),
+    );
+    expect(active.every((session) => !("refreshTokenHash" in session))).toBe(true);
+  });
+
+  it("does not allow a member to revoke another member's session by id", async () => {
+    const sessions = new SessionService(new InMemorySessionRepository(), new JwtService());
+    const memberId = randomUUID();
+    const otherMemberId = randomUUID();
+    const otherMember = await sessions.issue(otherMemberId, "phone");
+
+    await sessions.revoke(memberId, otherMember.sessionId);
+
+    await expect(sessions.rotate(otherMember.sessionId, otherMember.refreshToken)).resolves.toBeDefined();
+  });
+
   it("revokes only sessions for the selected member device", async () => {
     const sessions = new SessionService(new InMemorySessionRepository(), new JwtService());
     const memberId = randomUUID();
