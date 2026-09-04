@@ -42,4 +42,18 @@ export class PrismaSessionRepository implements SessionRepository {
       data: { revokedAt: new Date() },
     });
   }
+
+  async revokeByDevice(memberId: string, deviceId: string): Promise<void> {
+    await this.prisma.authSession.updateMany({
+      where: { memberId, deviceId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async revokeAllForMember(memberId: string): Promise<void> {
+    await this.prisma.authSession.updateMany({
+      where: { memberId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
 }

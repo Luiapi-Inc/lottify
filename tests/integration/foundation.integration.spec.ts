@@ -61,6 +61,25 @@ describe.runIf(runIntegration)("foundation integration", () => {
     await expect(sessions.rotate(issued.sessionId, rotated.refreshToken)).rejects.toThrow();
   });
 
+  it("revokes sessions at device and all-device scope without crossing member boundaries", async () => {
+    const memberId = randomUUID();
+    const otherMemberId = randomUUID();
+    const selectedDevice = await sessions.issue(memberId, "phone");
+    const otherDevice = await sessions.issue(memberId, "tablet");
+    const otherMember = await sessions.issue(otherMemberId, "phone");
+
+    await sessions.revokeByDevice(memberId, "phone");
+
+    await expect(sessions.rotate(selectedDevice.sessionId, selectedDevice.refreshToken)).rejects.toThrow();
+    const rotatedOtherDevice = await sessions.rotate(otherDevice.sessionId, otherDevice.refreshToken);
+    const rotatedOtherMember = await sessions.rotate(otherMember.sessionId, otherMember.refreshToken);
+
+    await sessions.revokeAllForMember(memberId);
+
+    await expect(sessions.rotate(otherDevice.sessionId, rotatedOtherDevice.refreshToken)).rejects.toThrow();
+    await expect(sessions.rotate(otherMember.sessionId, rotatedOtherMember.refreshToken)).resolves.toBeDefined();
+  });
+
   it("claims a transactional outbox row once per lease and marks it published", async () => {
     const eventId = await prisma.$transaction((tx) =>
       outbox.enqueue(tx, {

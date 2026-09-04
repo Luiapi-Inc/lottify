@@ -71,6 +71,14 @@ export class SessionService {
     return this.sessions.revoke(sessionId);
   }
 
+  revokeByDevice(memberId: string, deviceId: string): Promise<void> {
+    return this.sessions.revokeByDevice(memberId, deviceId);
+  }
+
+  revokeAllForMember(memberId: string): Promise<void> {
+    return this.sessions.revokeAllForMember(memberId);
+  }
+
   private signAccess(memberId: string, sessionId: string): Promise<string> {
     const env = getEnvironment();
     return this.jwt.signAsync(

@@ -17,6 +17,8 @@ export interface SessionRepository {
   findById(id: string): Promise<AuthSessionRecord | null>;
   rotate(input: { id: string; expectedHash: string; newHash: string; newExpiresAt: Date }): Promise<boolean>;
   revoke(id: string): Promise<void>;
+  revokeByDevice(memberId: string, deviceId: string): Promise<void>;
+  revokeAllForMember(memberId: string): Promise<void>;
 }
 
 export const SESSION_REPOSITORY = Symbol("IDENTITY_ACCESS_SESSION_REPOSITORY");
