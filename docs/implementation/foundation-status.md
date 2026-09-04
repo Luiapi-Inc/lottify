@@ -18,25 +18,14 @@ Source of truth: Wayfinder Tickets 01, 13, 15, 16, and 19. This record does not 
 - Immutable OCI Dockerfile skeletons for API, workers, Member, and Admin pinned to the Node 24.20.0 base-image digest.
 - Local PostgreSQL 18 / Redis 8 Compose definition, CI pipeline, blue/green release skeleton, environment validation, and secret-reference-ready runtime configuration.
 
-## Evidence produced on 2026-09-03
+## Evidence confirmed on 2026-09-04
 
-- Prisma schema validation: PASS.
-- OpenAPI spec generation + TypeScript client generation: PASS.
-- TypeScript typecheck: PASS.
-- Unit/architecture tests: 12/12 PASS.
-- Backend TypeScript production build: PASS.
-- Next.js Member standalone production build: PASS.
-- Next.js Admin standalone production build: PASS.
-- API runtime smoke: `/api/v1`, startup, liveness, and metrics return 200; readiness correctly returns 503 when required PostgreSQL is unavailable and reports Redis as degraded.
-- Worker runtime smoke: startup/liveness return 200; readiness correctly returns 503 when PostgreSQL/Redis are unavailable.
-- Production dependency audit: zero Critical findings after OpenTelemetry dependency correction. Two High and one Moderate findings remain in Prisma tooling transitive dependencies and require resolution or governed risk acceptance before Production GO.
+GitHub Actions `ci` run `33822450161` on commit `815581560e2c905de10b6a74933dbc6ca46efcac` provides the Foundation environment evidence.
 
-## Environment-blocked evidence
+- `verify`: PASS after a rerun of a transient npm registry timeout. PostgreSQL 18 and Redis 8 service containers were healthy; Prisma generation and migration deploy passed; OpenAPI/client generation passed; typecheck passed; all 16 tests passed, including the four Foundation integration tests enabled by `RUN_INTEGRATION_TESTS=1`; `pnpm audit --prod --audit-level high` reported `No known vulnerabilities found`; and the backend, Member, and Admin production builds passed.
+- `container-smoke`: PASS. The initial migration applied against PostgreSQL, all four OCI images built, and API, worker, Member, and Admin containers all passed their runtime smoke checks against the CI environment.
+- The previously environment-blocked PostgreSQL, Redis/BullMQ, OCI build, and container-runtime proof cells are therefore satisfied by CI evidence rather than by the local host.
 
-The current host has no Docker CLI, PostgreSQL server/client, or Redis server/client. Therefore these proof cells cannot be truthfully marked PASS on this host:
+## Milestone disposition
 
-- Apply the initial migration to a real PostgreSQL instance and execute the database integration tests.
-- Execute the Redis/BullMQ integration test against a real Redis instance.
-- Build and run the four OCI images locally and verify their container health checks/runtime behavior.
-
-CI is configured with PostgreSQL and Redis services and `RUN_INTEGRATION_TESTS=1` so those integration scenarios execute in an environment that supplies the dependencies. Production GO remains subject to the complete Ticket 13/16 evidence matrix; this Foundation milestone does not imply production readiness.
+Foundation implementation and its scoped CI/runtime evidence are complete for this milestone. This is not Production GO: the complete Ticket 13/16 release evidence matrix and all remaining production acceptance criteria still govern release readiness. The Member and Admin applications remain Foundation skeletons and are not an approval of final production UX.
