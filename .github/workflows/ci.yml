@@ -53,9 +53,13 @@ jobs:
       - run: pnpm test
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level high
-        # pnpm audit performs its own bounded registry retry/backoff. Keep this
-        # fail-closed, but allow the built-in retry cycle to reach a real result.
-        timeout-minutes: 6
+        env:
+          # The npm audit endpoint can legitimately take longer than pnpm's
+          # default 60s request timeout. Keep the gate fail-closed while giving
+          # one bounded retry enough time to return an authoritative result.
+          PNPM_CONFIG_FETCH_TIMEOUT: "180000"
+          PNPM_CONFIG_FETCH_RETRIES: "1"
+        timeout-minutes: 7
       - run: pnpm build
 
   container-smoke:
