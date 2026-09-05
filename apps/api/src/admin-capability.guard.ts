@@ -8,8 +8,10 @@ import {
   type ExecutionContext,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { randomUUID } from "node:crypto";
 import type { AdminCapability } from "../../../src/contexts/identity-access/domain/admin-auth.repository";
 import type { AdminAuthenticatedRequest } from "./admin-auth.guard";
+import { currentCorrelationId } from "./correlation";
 
 const ADMIN_CAPABILITIES_METADATA = "lottify.admin.required-capabilities";
 
@@ -35,11 +37,23 @@ export class AdminCapabilityGuard implements CanActivate {
       .switchToHttp()
       .getRequest<AdminAuthenticatedRequest>();
     const admin = request.adminAuth;
-    if (!admin) throw new UnauthorizedException("Admin authentication required");
+    if (!admin) {
+      throw new UnauthorizedException({
+        code: "AUTHENTICATION_REQUIRED",
+        message: "Admin authentication required",
+        details: {},
+        correlationId: currentCorrelationId() ?? randomUUID(),
+      });
+    }
 
     const granted = new Set(admin.capabilities);
     if (!required.every((capability) => granted.has(capability))) {
-      throw new ForbiddenException("Insufficient Admin capability");
+      throw new ForbiddenException({
+        code: "ACCESS_DENIED",
+        message: "Insufficient Admin capability",
+        details: { required },
+        correlationId: currentCorrelationId() ?? randomUUID(),
+      });
     }
     return true;
   }

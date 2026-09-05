@@ -1,6 +1,9 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  AccountingPeriodRuleError,
   ACCOUNTING_TIME_ZONE,
+  normalizeBangkokCalendarDate,
+  type AccountingPeriodCommandResult,
   type AccountingPeriodView,
 } from "../domain/accounting-period";
 import {
@@ -16,26 +19,96 @@ export class AccountingPeriodService {
     private readonly repository: AccountingPeriodRepository,
   ) {}
 
-  async getById(id: string): Promise<AccountingPeriodView> {
+  async getById(
+    id: string,
+    options: { canSubmit?: boolean } = {},
+  ): Promise<AccountingPeriodView> {
     const period = await this.repository.getById(id);
     if (!period) throw new NotFoundException("Accounting Period not found");
-    return toView(period);
+    return toView(period, options.canSubmit === true);
   }
 
-  async list(): Promise<readonly AccountingPeriodView[]> {
+  async list(options: { canSubmit?: boolean } = {}): Promise<readonly AccountingPeriodView[]> {
     const periods = await this.repository.list();
-    return periods.map(toView);
+    return periods.map((period) => toView(period, options.canSubmit === true));
   }
 
   async ensureAutomaticCoverage(): Promise<void> {
     await this.repository.ensureAutomaticCoverage();
   }
+
+  async createCustom(input: {
+    startDate: string;
+    endDate: string;
+    reason: string;
+    createdByAdminId: string;
+  }): Promise<AccountingPeriodCommandResult> {
+    const reason = input.reason.trim();
+    if (!reason) {
+      throw new AccountingPeriodRuleError(
+        "VALIDATION_ERROR",
+        "Custom Accounting Period reason is required",
+        { field: "reason" },
+      );
+    }
+
+    const effectiveStart = parseCalendarDate("startDate", input.startDate);
+    const effectiveEnd = parseCalendarDate("endDate", input.endDate);
+    if (effectiveEnd.getTime() <= effectiveStart.getTime()) {
+      throw new AccountingPeriodRuleError(
+        "VALIDATION_ERROR",
+        "Custom Accounting Period end date must be after start date",
+        { field: "endDate" },
+      );
+    }
+
+    const result = await this.repository.createCustom({
+      effectiveStart,
+      effectiveEnd,
+      reason,
+      createdByAdminId: input.createdByAdminId,
+    });
+    return {
+      period: toView(result.period, true),
+      replacementPreview: result.replacementPreview,
+    };
+  }
+
+  async submitCustom(input: {
+    id: string;
+    expectedVersion: number;
+  }): Promise<AccountingPeriodCommandResult> {
+    if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+      throw new AccountingPeriodRuleError(
+        "VALIDATION_ERROR",
+        "expectedVersion must be a positive integer",
+        { field: "expectedVersion" },
+      );
+    }
+    const result = await this.repository.submitCustom(input);
+    return {
+      period: toView(result.period, true),
+      replacementPreview: result.replacementPreview,
+    };
+  }
 }
 
-function toView(period: AccountingPeriodRecord): AccountingPeriodView {
+function toView(period: AccountingPeriodRecord, canSubmit: boolean): AccountingPeriodView {
   return {
     ...period,
     accountingTimezone: ACCOUNTING_TIME_ZONE,
-    allowedActions: [],
+    allowedActions: canSubmit && period.state === "DRAFT" ? ["submit"] : [],
   };
+}
+
+function parseCalendarDate(field: "startDate" | "endDate", value: string): Date {
+  try {
+    return normalizeBangkokCalendarDate(value);
+  } catch (error) {
+    throw new AccountingPeriodRuleError(
+      "VALIDATION_ERROR",
+      error instanceof Error ? error.message : "Invalid Accounting Period date",
+      { field },
+    );
+  }
 }

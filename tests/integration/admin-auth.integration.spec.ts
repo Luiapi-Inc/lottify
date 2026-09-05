@@ -94,7 +94,11 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
     expect(context).toMatchObject({
       adminId: account.id,
       role: "ADMIN",
-      capabilities: ["accounting-period.read"],
+      capabilities: [
+        "accounting-period.read",
+        "accounting-period.create-custom",
+        "accounting-period.submit",
+      ],
     });
 
     const rotated = await auth.refresh(issued.refreshToken);

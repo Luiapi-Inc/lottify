@@ -38,6 +38,7 @@ model AdminUser {
   updatedAt           DateTime              @updatedAt @map("updated_at")
   sessions            AdminAuthSession[]
   reauthEvidence      AdminReauthEvidence[]
+  accountingPeriodsCreated AccountingPeriod[] @relation("AccountingPeriodCreatedBy")
 
   @@index([status, role])
   @@map("admin_users")
@@ -173,12 +174,15 @@ model AccountingPeriod {
   effectiveEnd          DateTime               @map("effective_end")
   state                 String
   version               Int                    @default(1)
+  reason                String?
+  createdByAdminId      String?                @map("created_by_admin_id") @db.Uuid
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
   financialTransactions FinancialTransaction[]
+  createdByAdmin        AdminUser?             @relation("AccountingPeriodCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
 
-  @@unique([effectiveStart, effectiveEnd])
   @@index([state, effectiveStart, effectiveEnd])
+  @@index([createdByAdminId, createdAt])
   @@map("accounting_periods")
 }
 

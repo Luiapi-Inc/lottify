@@ -1,19 +1,30 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
 import type {
   AccountingPeriodGenerationKind,
   AccountingPeriodMode,
+  AccountingPeriodReplacementPreview,
   AccountingPeriodState,
 } from "../domain/accounting-period";
+import {
+  AccountingPeriodRuleError,
+  automaticWeeklyAccountingPeriodBounds,
+} from "../domain/accounting-period";
 import type {
+  AccountingPeriodCustomCommandRecord,
   AccountingPeriodRecord,
   AccountingPeriodRepository,
 } from "../domain/accounting-period.repository";
 import {
   type AccountingPeriodTransactionClock,
   DatabaseAccountingPeriodTransactionClock,
+  EFFECTIVE_ACCOUNTING_PERIOD_STATES,
   ensureAutomaticAccountingPeriodCoverage,
+  lockAccountingCalendar,
 } from "./accounting-period-runtime";
+
+type TransactionClient = Prisma.TransactionClient;
 
 @Injectable()
 export class PrismaAccountingPeriodRepository implements AccountingPeriodRepository {
@@ -44,6 +55,222 @@ export class PrismaAccountingPeriodRepository implements AccountingPeriodReposit
       await ensureAutomaticAccountingPeriodCoverage(tx, instant);
     });
   }
+
+  async createCustom(input: {
+    effectiveStart: Date;
+    effectiveEnd: Date;
+    reason: string;
+    createdByAdminId: string;
+  }): Promise<AccountingPeriodCustomCommandRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const instant = await this.clock.now(tx);
+      await lockAccountingCalendar(tx);
+      const replacementPreview = await buildCustomReplacementPreview(
+        tx,
+        input.effectiveStart,
+        input.effectiveEnd,
+        instant,
+      );
+      const period = await tx.accountingPeriod.create({
+        data: {
+          mode: "CUSTOM",
+          generationKind: "CUSTOM",
+          effectiveStart: input.effectiveStart,
+          effectiveEnd: input.effectiveEnd,
+          state: "DRAFT",
+          reason: input.reason,
+          createdByAdminId: input.createdByAdminId,
+        },
+      });
+      return { period: mapRecord(period), replacementPreview };
+    });
+  }
+
+  async submitCustom(input: {
+    id: string;
+    expectedVersion: number;
+  }): Promise<AccountingPeriodCustomCommandRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const instant = await this.clock.now(tx);
+      await lockAccountingCalendar(tx);
+      const current = await tx.accountingPeriod.findUnique({ where: { id: input.id } });
+      if (!current) {
+        throw new AccountingPeriodRuleError(
+          "ACCOUNTING_PERIOD_NOT_FOUND",
+          "Accounting Period not found",
+        );
+      }
+      if (current.version !== input.expectedVersion) {
+        throw new AccountingPeriodRuleError(
+          "VERSION_CONFLICT",
+          "Accounting Period version is stale",
+          { expectedVersion: input.expectedVersion, currentVersion: current.version },
+        );
+      }
+      if (current.mode !== "CUSTOM" || current.state !== "DRAFT") {
+        throw new AccountingPeriodRuleError(
+          "ACCOUNTING_PERIOD_STATE_CONFLICT",
+          "Accounting Period can be submitted only from DRAFT",
+          { state: current.state },
+        );
+      }
+
+      const replacementPreview = await buildCustomReplacementPreview(
+        tx,
+        current.effectiveStart,
+        current.effectiveEnd,
+        instant,
+      );
+
+      const updated = await tx.accountingPeriod.updateMany({
+        where: {
+          id: current.id,
+          version: input.expectedVersion,
+          state: "DRAFT",
+        },
+        data: {
+          state: "PENDING_APPROVAL",
+          version: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) {
+        const latest = await tx.accountingPeriod.findUnique({ where: { id: current.id } });
+        if (!latest) {
+          throw new AccountingPeriodRuleError(
+            "ACCOUNTING_PERIOD_NOT_FOUND",
+            "Accounting Period not found",
+          );
+        }
+        if (latest.version !== input.expectedVersion) {
+          throw new AccountingPeriodRuleError(
+            "VERSION_CONFLICT",
+            "Accounting Period version is stale",
+            { expectedVersion: input.expectedVersion, currentVersion: latest.version },
+          );
+        }
+        throw new AccountingPeriodRuleError(
+          "ACCOUNTING_PERIOD_STATE_CONFLICT",
+          "Accounting Period can be submitted only from DRAFT",
+          { state: latest.state },
+        );
+      }
+
+      const period = await tx.accountingPeriod.findUniqueOrThrow({
+        where: { id: current.id },
+      });
+      return { period: mapRecord(period), replacementPreview };
+    });
+  }
+}
+
+async function buildCustomReplacementPreview(
+  tx: TransactionClient,
+  effectiveStart: Date,
+  effectiveEnd: Date,
+  instant: Date,
+): Promise<AccountingPeriodReplacementPreview> {
+  if (effectiveStart.getTime() <= instant.getTime()) {
+    throw new AccountingPeriodRuleError(
+      "ACCOUNTING_PERIOD_NOT_FUTURE",
+      "Custom Accounting Period must start in the future",
+      { authoritativeNow: instant.toISOString() },
+    );
+  }
+
+  const blocking = await tx.accountingPeriod.findFirst({
+    where: {
+      state: { in: [...EFFECTIVE_ACCOUNTING_PERIOD_STATES] },
+      effectiveStart: { lt: effectiveEnd },
+      effectiveEnd: { gt: effectiveStart },
+      OR: [
+        { state: { in: ["OPEN", "CLOSING", "CLOSED"] } },
+        { mode: { not: "AUTOMATIC_WEEKLY" } },
+        { generationKind: { not: "NOMINAL_WEEK" } },
+        { financialTransactions: { some: {} } },
+      ],
+    },
+    orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      mode: true,
+      generationKind: true,
+      state: true,
+      effectiveStart: true,
+      effectiveEnd: true,
+    },
+  });
+  if (blocking) {
+    throw new AccountingPeriodRuleError(
+      "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+      "Custom Accounting Period overlaps coverage that cannot be overridden",
+      {
+        conflictingPeriodId: blocking.id,
+        conflictingState: blocking.state,
+        conflictingMode: blocking.mode,
+      },
+    );
+  }
+
+  const persistedAutomatic = await tx.accountingPeriod.findMany({
+    where: {
+      state: "SCHEDULED",
+      mode: "AUTOMATIC_WEEKLY",
+      generationKind: "NOMINAL_WEEK",
+      effectiveStart: { lt: effectiveEnd },
+      effectiveEnd: { gt: effectiveStart },
+    },
+    orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    select: { id: true, effectiveStart: true, effectiveEnd: true },
+  });
+
+  const affectedAutomaticPeriods = [] as Array<{
+    id: string | null;
+    effectiveStart: Date;
+    effectiveEnd: Date;
+    generationKind: "NOMINAL_WEEK";
+  }>;
+  let bounds = automaticWeeklyAccountingPeriodBounds(effectiveStart);
+  while (bounds.start.getTime() < effectiveEnd.getTime()) {
+    const persisted = persistedAutomatic.find(
+      (period) =>
+        period.effectiveStart.getTime() === bounds.start.getTime() &&
+        period.effectiveEnd.getTime() === bounds.end.getTime(),
+    );
+    affectedAutomaticPeriods.push({
+      id: persisted?.id ?? null,
+      effectiveStart: bounds.start,
+      effectiveEnd: bounds.end,
+      generationKind: "NOMINAL_WEEK",
+    });
+    bounds = automaticWeeklyAccountingPeriodBounds(bounds.end);
+  }
+
+  const residualFragments = [] as Array<{
+    sourcePeriodId: string | null;
+    effectiveStart: Date;
+    effectiveEnd: Date;
+    generationKind: "DERIVED_FRAGMENT";
+  }>;
+  const first = affectedAutomaticPeriods[0];
+  if (first && first.effectiveStart.getTime() < effectiveStart.getTime()) {
+    residualFragments.push({
+      sourcePeriodId: first.id,
+      effectiveStart: first.effectiveStart,
+      effectiveEnd: effectiveStart,
+      generationKind: "DERIVED_FRAGMENT",
+    });
+  }
+  const last = affectedAutomaticPeriods.at(-1);
+  if (last && last.effectiveEnd.getTime() > effectiveEnd.getTime()) {
+    residualFragments.push({
+      sourcePeriodId: last.id,
+      effectiveStart: effectiveEnd,
+      effectiveEnd: last.effectiveEnd,
+      generationKind: "DERIVED_FRAGMENT",
+    });
+  }
+
+  return { affectedAutomaticPeriods, residualFragments };
 }
 
 function mapRecord(period: {
@@ -54,6 +281,8 @@ function mapRecord(period: {
   effectiveEnd: Date;
   state: string;
   version: number;
+  reason: string | null;
+  createdByAdminId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): AccountingPeriodRecord {
@@ -65,6 +294,8 @@ function mapRecord(period: {
     effectiveEnd: period.effectiveEnd,
     state: period.state as AccountingPeriodState,
     version: period.version,
+    reason: period.reason,
+    createdByAdminId: period.createdByAdminId,
     createdAt: period.createdAt,
     updatedAt: period.updatedAt,
   };

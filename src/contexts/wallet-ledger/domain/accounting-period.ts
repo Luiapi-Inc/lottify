@@ -20,6 +20,9 @@ export type AccountingPeriodMode = (typeof ACCOUNTING_PERIOD_MODES)[number];
 export type AccountingPeriodGenerationKind =
   (typeof ACCOUNTING_PERIOD_GENERATION_KINDS)[number];
 export type AccountingPeriodState = (typeof ACCOUNTING_PERIOD_STATES)[number];
+export const ACCOUNTING_PERIOD_ALLOWED_ACTIONS = ["submit"] as const;
+export type AccountingPeriodAllowedAction =
+  (typeof ACCOUNTING_PERIOD_ALLOWED_ACTIONS)[number];
 
 const BANGKOK_UTC_OFFSET_MILLISECONDS = 7 * 60 * 60 * 1_000;
 const WEEK_MILLISECONDS = 7 * 24 * 60 * 60 * 1_000;
@@ -38,9 +41,54 @@ export interface AccountingPeriodView {
   accountingTimezone: typeof ACCOUNTING_TIME_ZONE;
   state: AccountingPeriodState;
   version: number;
+  reason: string | null;
+  createdByAdminId: string | null;
   createdAt: Date;
   updatedAt: Date;
-  allowedActions: readonly string[];
+  allowedActions: readonly AccountingPeriodAllowedAction[];
+}
+
+export interface AccountingPeriodReplacementPreviewPeriod {
+  id: string | null;
+  effectiveStart: Date;
+  effectiveEnd: Date;
+  generationKind: "NOMINAL_WEEK";
+}
+
+export interface AccountingPeriodResidualFragment {
+  sourcePeriodId: string | null;
+  effectiveStart: Date;
+  effectiveEnd: Date;
+  generationKind: "DERIVED_FRAGMENT";
+}
+
+export interface AccountingPeriodReplacementPreview {
+  affectedAutomaticPeriods: readonly AccountingPeriodReplacementPreviewPeriod[];
+  residualFragments: readonly AccountingPeriodResidualFragment[];
+}
+
+export interface AccountingPeriodCommandResult {
+  period: AccountingPeriodView;
+  replacementPreview: AccountingPeriodReplacementPreview;
+}
+
+export type AccountingPeriodRuleErrorCode =
+  | "VALIDATION_ERROR"
+  | "ACCOUNTING_PERIOD_NOT_FOUND"
+  | "ACCOUNTING_PERIOD_NOT_FUTURE"
+  | "ACCOUNTING_PERIOD_COVERAGE_CONFLICT"
+  | "ACCOUNTING_PERIOD_STATE_CONFLICT"
+  | "VERSION_CONFLICT";
+
+export class AccountingPeriodRuleError extends Error {
+  constructor(
+    readonly code: AccountingPeriodRuleErrorCode,
+    message: string,
+    readonly details: Readonly<Record<string, unknown>> = {},
+  ) {
+    super(message);
+    this.name = "AccountingPeriodRuleError";
+  }
 }
 
 export function automaticWeeklyAccountingPeriodBounds(instant: Date): AccountingPeriodBounds {
@@ -58,4 +106,26 @@ export function automaticWeeklyAccountingPeriodBounds(instant: Date): Accounting
   const start = new Date(startLocalMidnightUtc - BANGKOK_UTC_OFFSET_MILLISECONDS);
 
   return { start, end: new Date(start.getTime() + WEEK_MILLISECONDS) };
+}
+
+export function normalizeBangkokCalendarDate(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    throw new Error("Accounting Period date must use YYYY-MM-DD");
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const localMidnightUtc = Date.UTC(year, month - 1, day);
+  const validation = new Date(localMidnightUtc);
+  if (
+    validation.getUTCFullYear() !== year ||
+    validation.getUTCMonth() !== month - 1 ||
+    validation.getUTCDate() !== day
+  ) {
+    throw new Error("Accounting Period date is not a valid calendar date");
+  }
+
+  return new Date(localMidnightUtc - BANGKOK_UTC_OFFSET_MILLISECONDS);
 }

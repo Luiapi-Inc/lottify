@@ -20,6 +20,12 @@ import {
 import type { Request, Response } from "express";
 import { z, type ZodType } from "zod";
 import { AdminAuthService } from "../../../src/contexts/identity-access/application/admin-auth.service";
+import {
+  ADMIN_CAPABILITIES,
+  ADMIN_ROLES,
+  type AdminCapability,
+  type AdminRole,
+} from "../../../src/contexts/identity-access/domain/admin-auth.repository";
 import { getEnvironment } from "../../../src/platform/config/env";
 import {
   AdminAuthGuard,
@@ -96,6 +102,23 @@ class AdminAccessTokenResponse {
 class AdminRevokedResponse {
   @ApiProperty({ type: Boolean, example: true })
   revoked!: true;
+}
+
+class AdminMeResponse {
+  @ApiProperty({ type: String })
+  id!: string;
+
+  @ApiProperty({ type: String, format: "email" })
+  email!: string;
+
+  @ApiProperty({ type: String })
+  name!: string;
+
+  @ApiProperty({ enum: [...ADMIN_ROLES] })
+  role!: AdminRole;
+
+  @ApiProperty({ enum: [...ADMIN_CAPABILITIES], isArray: true })
+  capabilities!: readonly AdminCapability[];
 }
 
 @ApiTags("Admin Auth")
@@ -198,6 +221,7 @@ export class AdminAuthController {
   @UseGuards(AdminAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Return server-authoritative Admin identity and capabilities" })
+  @ApiOkResponse({ type: AdminMeResponse })
   me(@Req() request: AdminAuthenticatedRequest) {
     return this.adminAuth.me(request.adminAuth!);
   }

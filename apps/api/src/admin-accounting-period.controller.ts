@@ -1,13 +1,25 @@
 import {
+  Body,
   Controller,
   Get,
+  Headers,
+  HttpCode,
+  HttpException,
+  HttpStatus,
   Inject,
   Param,
+  Post,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
+  ApiConflictResponse,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiHeader,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -16,19 +28,30 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { Prisma } from "@prisma/client";
+import { createHash, randomUUID } from "node:crypto";
 import { AccountingPeriodService } from "../../../src/contexts/wallet-ledger/application/accounting-period.service";
 import {
   ACCOUNTING_PERIOD_GENERATION_KINDS,
   ACCOUNTING_PERIOD_MODES,
   ACCOUNTING_PERIOD_STATES,
   ACCOUNTING_TIME_ZONE,
+  AccountingPeriodRuleError,
+  type AccountingPeriodCommandResult,
   type AccountingPeriodView,
 } from "../../../src/contexts/wallet-ledger/domain/accounting-period";
-import { AdminAuthGuard } from "./admin-auth.guard";
+import { IdempotencyService } from "../../../src/platform/idempotency/idempotency.service";
+import { currentCorrelationId } from "./correlation";
+import {
+  AdminAuthGuard,
+  type AdminAuthenticatedRequest,
+} from "./admin-auth.guard";
 import {
   AdminCapabilityGuard,
   RequireAdminCapabilities,
 } from "./admin-capability.guard";
+
+const IDEMPOTENCY_CONTRACT_EXPIRY = new Date("9999-12-31T23:59:59.999Z");
 
 class AccountingPeriodResponse {
   @ApiProperty({ type: String, description: "Opaque immutable Accounting Period identity" })
@@ -55,6 +78,16 @@ class AccountingPeriodResponse {
   @ApiProperty({ type: Number, minimum: 1 })
   version!: number;
 
+  @ApiProperty({ type: String, nullable: true })
+  reason!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Admin actor that created the Custom proposal",
+  })
+  createdByAdminId!: string | null;
+
   @ApiProperty({ type: String, format: "date-time" })
   createdAt!: Date;
 
@@ -63,6 +96,87 @@ class AccountingPeriodResponse {
 
   @ApiProperty({ type: [String], description: "Currently permitted explicit commands" })
   allowedActions!: readonly string[];
+}
+
+class AccountingPeriodPreviewPeriodResponse {
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Persisted Automatic period id when already generated",
+  })
+  id!: string | null;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  effectiveStart!: Date;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  effectiveEnd!: Date;
+
+  @ApiProperty({ enum: ["NOMINAL_WEEK"] })
+  generationKind!: "NOMINAL_WEEK";
+}
+
+class AccountingPeriodResidualFragmentResponse {
+  @ApiProperty({ type: String, nullable: true })
+  sourcePeriodId!: string | null;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  effectiveStart!: Date;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  effectiveEnd!: Date;
+
+  @ApiProperty({ enum: ["DERIVED_FRAGMENT"] })
+  generationKind!: "DERIVED_FRAGMENT";
+}
+
+class AccountingPeriodReplacementPreviewResponse {
+  @ApiProperty({ type: [AccountingPeriodPreviewPeriodResponse] })
+  affectedAutomaticPeriods!: readonly AccountingPeriodPreviewPeriodResponse[];
+
+  @ApiProperty({ type: [AccountingPeriodResidualFragmentResponse] })
+  residualFragments!: readonly AccountingPeriodResidualFragmentResponse[];
+}
+
+class AccountingPeriodCommandResponse {
+  @ApiProperty({ type: AccountingPeriodResponse })
+  period!: AccountingPeriodResponse;
+
+  @ApiProperty({ type: AccountingPeriodReplacementPreviewResponse })
+  replacementPreview!: AccountingPeriodReplacementPreviewResponse;
+}
+
+class CreateCustomAccountingPeriodBody {
+  @ApiProperty({ type: String, format: "date", example: "2026-09-08" })
+  startDate!: string;
+
+  @ApiProperty({ type: String, format: "date", example: "2026-09-18" })
+  endDate!: string;
+
+  @ApiProperty({
+    type: String,
+    example: "Align the future close window with an operational cycle",
+  })
+  reason!: string;
+}
+
+class SubmitAccountingPeriodBody {
+  @ApiProperty({ type: Number, minimum: 1, example: 1 })
+  expectedVersion!: number;
+}
+
+class ApiErrorResponse {
+  @ApiProperty({ type: String, example: "VERSION_CONFLICT" })
+  code!: string;
+
+  @ApiProperty({ type: String })
+  message!: string;
+
+  @ApiProperty({ type: Object, additionalProperties: true })
+  details!: Record<string, unknown>;
+
+  @ApiProperty({ type: String })
+  correlationId!: string;
 }
 
 @ApiTags("Admin Accounting Periods")
@@ -74,15 +188,17 @@ export class AdminAccountingPeriodController {
   constructor(
     @Inject(AccountingPeriodService)
     private readonly accountingPeriods: AccountingPeriodService,
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: "List authoritative Accounting Periods" })
   @ApiOkResponse({ type: [AccountingPeriodResponse] })
-  @ApiUnauthorizedResponse({ description: "Admin authentication required" })
-  @ApiForbiddenResponse({ description: "Insufficient Admin capability" })
-  list(): Promise<readonly AccountingPeriodView[]> {
-    return this.accountingPeriods.list();
+  @ApiUnauthorizedResponse({ type: ApiErrorResponse })
+  @ApiForbiddenResponse({ type: ApiErrorResponse })
+  list(@Req() request: AdminAuthenticatedRequest): Promise<readonly AccountingPeriodView[]> {
+    return this.accountingPeriods.list({ canSubmit: canSubmit(request) });
   }
 
   @Get(":id")
@@ -93,10 +209,242 @@ export class AdminAccountingPeriodController {
     description: "Opaque immutable Accounting Period identity",
   })
   @ApiOkResponse({ type: AccountingPeriodResponse })
-  @ApiUnauthorizedResponse({ description: "Admin authentication required" })
-  @ApiForbiddenResponse({ description: "Insufficient Admin capability" })
-  @ApiNotFoundResponse({ description: "Accounting Period not found" })
-  getById(@Param("id") id: string): Promise<AccountingPeriodView> {
-    return this.accountingPeriods.getById(id);
+  @ApiUnauthorizedResponse({ type: ApiErrorResponse })
+  @ApiForbiddenResponse({ type: ApiErrorResponse })
+  @ApiNotFoundResponse({ type: ApiErrorResponse })
+  async getById(
+    @Param("id") id: string,
+    @Req() request: AdminAuthenticatedRequest,
+  ): Promise<AccountingPeriodView> {
+    try {
+      return await this.accountingPeriods.getById(id, { canSubmit: canSubmit(request) });
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.NOT_FOUND) {
+        throw apiError(
+          request,
+          HttpStatus.NOT_FOUND,
+          "ACCOUNTING_PERIOD_NOT_FOUND",
+          "Accounting Period not found",
+          {},
+        );
+      }
+      throw error;
+    }
   }
+
+  @Post("create-custom")
+  @RequireAdminCapabilities("accounting-period.create-custom")
+  @ApiOperation({
+    summary: "Create a governed Custom Accounting Period DRAFT and replacement preview",
+  })
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  @ApiBody({ type: CreateCustomAccountingPeriodBody })
+  @ApiCreatedResponse({ type: AccountingPeriodCommandResponse })
+  @ApiBadRequestResponse({ type: ApiErrorResponse })
+  @ApiConflictResponse({ type: ApiErrorResponse })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponse })
+  @ApiForbiddenResponse({ type: ApiErrorResponse })
+  async createCustom(
+    @Body() body: CreateCustomAccountingPeriodBody,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Req() request: AdminAuthenticatedRequest,
+  ): Promise<AccountingPeriodCommandResult | Prisma.JsonValue> {
+    const admin = requiredAdmin(request);
+    const parsed = parseCreateCustomBody(body, request);
+    return this.executeIdempotent({
+      request,
+      key: idempotencyKey,
+      scope: `admin:${admin.adminId}:accounting-period:create-custom`,
+      fingerprintPayload: parsed,
+      responseCode: HttpStatus.CREATED,
+      execute: () =>
+        this.accountingPeriods.createCustom({
+          ...parsed,
+          createdByAdminId: admin.adminId,
+        }),
+    });
+  }
+
+  @Post(":id/submit")
+  @HttpCode(HttpStatus.OK)
+  @RequireAdminCapabilities("accounting-period.submit")
+  @ApiOperation({ summary: "Submit a Custom Accounting Period DRAFT for approval" })
+  @ApiParam({ name: "id", type: String, description: "Opaque Accounting Period identity" })
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  @ApiBody({ type: SubmitAccountingPeriodBody })
+  @ApiOkResponse({ type: AccountingPeriodCommandResponse })
+  @ApiBadRequestResponse({ type: ApiErrorResponse })
+  @ApiNotFoundResponse({ type: ApiErrorResponse })
+  @ApiConflictResponse({ type: ApiErrorResponse })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponse })
+  @ApiForbiddenResponse({ type: ApiErrorResponse })
+  async submit(
+    @Param("id") id: string,
+    @Body() body: SubmitAccountingPeriodBody,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Req() request: AdminAuthenticatedRequest,
+  ): Promise<AccountingPeriodCommandResult | Prisma.JsonValue> {
+    const admin = requiredAdmin(request);
+    const parsed = parseSubmitBody(body, request);
+    return this.executeIdempotent({
+      request,
+      key: idempotencyKey,
+      scope: `admin:${admin.adminId}:accounting-period:${id}:submit`,
+      fingerprintPayload: { id, ...parsed },
+      responseCode: HttpStatus.OK,
+      execute: () => this.accountingPeriods.submitCustom({ id, ...parsed }),
+    });
+  }
+
+  private async executeIdempotent(input: {
+    request: AdminAuthenticatedRequest;
+    key: string | undefined;
+    scope: string;
+    fingerprintPayload: Readonly<Record<string, unknown>>;
+    responseCode: number;
+    execute: () => Promise<AccountingPeriodCommandResult>;
+  }): Promise<AccountingPeriodCommandResult | Prisma.JsonValue> {
+    const key = input.key?.trim();
+    if (!key) {
+      throw apiError(
+        input.request,
+        HttpStatus.BAD_REQUEST,
+        "VALIDATION_ERROR",
+        "Idempotency-Key header is required",
+        { header: "Idempotency-Key" },
+      );
+    }
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(input.fingerprintPayload), "utf8")
+      .digest("hex");
+    const claim = await this.idempotency.claim({
+      scope: input.scope,
+      key,
+      fingerprint,
+      expiresAt: IDEMPOTENCY_CONTRACT_EXPIRY,
+    });
+
+    if (claim.kind === "existing") {
+      if (claim.fingerprint !== fingerprint) {
+        throw apiError(
+          input.request,
+          HttpStatus.CONFLICT,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different payload",
+          {},
+        );
+      }
+      if (claim.status === "COMPLETED" && claim.responseBody !== null) {
+        if (claim.responseCode !== null && claim.responseCode >= 400) {
+          throw new HttpException(
+            claim.responseBody as Record<string, unknown>,
+            claim.responseCode,
+          );
+        }
+        return claim.responseBody;
+      }
+      throw apiError(
+        input.request,
+        HttpStatus.CONFLICT,
+        "IDEMPOTENCY_IN_PROGRESS",
+        "The idempotent command has not completed",
+        { status: claim.status },
+      );
+    }
+
+    try {
+      const result = await input.execute();
+      const serialized = JSON.parse(JSON.stringify(result)) as Prisma.InputJsonValue;
+      await this.idempotency.complete(claim.recordId, input.responseCode, serialized);
+      return result;
+    } catch (error) {
+      const mapped = mapCommandError(input.request, error);
+      if (mapped instanceof HttpException) {
+        const response = mapped.getResponse();
+        const serialized = JSON.parse(JSON.stringify(response)) as Prisma.InputJsonValue;
+        await this.idempotency.complete(claim.recordId, mapped.getStatus(), serialized);
+        throw mapped;
+      }
+      await this.idempotency.fail(claim.recordId);
+      throw mapped;
+    }
+  }
+}
+
+function canSubmit(request: AdminAuthenticatedRequest): boolean {
+  return request.adminAuth?.capabilities.includes("accounting-period.submit") === true;
+}
+
+function requiredAdmin(request: AdminAuthenticatedRequest) {
+  const admin = request.adminAuth;
+  if (!admin) {
+    throw apiError(
+      request,
+      HttpStatus.UNAUTHORIZED,
+      "AUTHENTICATION_REQUIRED",
+      "Admin authentication required",
+      {},
+    );
+  }
+  return admin;
+}
+
+function parseCreateCustomBody(
+  body: CreateCustomAccountingPeriodBody,
+  request: AdminAuthenticatedRequest,
+): { startDate: string; endDate: string; reason: string } {
+  if (
+    !body ||
+    typeof body.startDate !== "string" ||
+    typeof body.endDate !== "string" ||
+    typeof body.reason !== "string"
+  ) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "startDate, endDate and reason are required",
+      {},
+    );
+  }
+  return { startDate: body.startDate, endDate: body.endDate, reason: body.reason };
+}
+
+function parseSubmitBody(
+  body: SubmitAccountingPeriodBody,
+  request: AdminAuthenticatedRequest,
+): { expectedVersion: number } {
+  if (!body || typeof body.expectedVersion !== "number") {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "expectedVersion is required",
+      { field: "expectedVersion" },
+    );
+  }
+  return { expectedVersion: body.expectedVersion };
+}
+
+function mapCommandError(request: AdminAuthenticatedRequest, error: unknown): unknown {
+  if (!(error instanceof AccountingPeriodRuleError)) return error;
+  if (error.code === "VALIDATION_ERROR") {
+    return apiError(request, HttpStatus.BAD_REQUEST, error.code, error.message, error.details);
+  }
+  if (error.code === "ACCOUNTING_PERIOD_NOT_FOUND") {
+    return apiError(request, HttpStatus.NOT_FOUND, error.code, error.message, error.details);
+  }
+  return apiError(request, HttpStatus.CONFLICT, error.code, error.message, error.details);
+}
+
+function apiError(
+  request: AdminAuthenticatedRequest,
+  status: number,
+  code: string,
+  message: string,
+  details: Readonly<Record<string, unknown>>,
+): HttpException {
+  const correlationId =
+    currentCorrelationId() ?? request.header("x-correlation-id") ?? randomUUID();
+  return new HttpException({ code, message, details, correlationId }, status);
 }

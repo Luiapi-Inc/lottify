@@ -1,7 +1,11 @@
 export const ADMIN_ROLES = ["SUPER_ADMIN", "ADMIN", "AUDITOR"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
-export const ADMIN_CAPABILITIES = ["accounting-period.read"] as const;
+export const ADMIN_CAPABILITIES = [
+  "accounting-period.read",
+  "accounting-period.create-custom",
+  "accounting-period.submit",
+] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 
 export interface AdminPrincipalRecord {

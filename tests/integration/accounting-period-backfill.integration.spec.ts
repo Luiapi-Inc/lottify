@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -18,9 +19,18 @@ describe.runIf(runBackfillMigration)("Accounting Period historical backfill migr
   const periodStartsToClean = new Set<number>();
 
   function executeBackfillMigration(): void {
-    execFileSync("pnpm", ["exec", "prisma", "db", "execute", "--file", migrationPath], {
+    const historicalSql = readFileSync(migrationPath, "utf8");
+    const replaySql = historicalSql.replace(
+      'ON CONFLICT ("effective_start", "effective_end") DO NOTHING;',
+      "ON CONFLICT DO NOTHING;",
+    );
+    if (replaySql === historicalSql) {
+      throw new Error("Historical Accounting Period backfill conflict clause was not found");
+    }
+    execFileSync("pnpm", ["exec", "prisma", "db", "execute", "--stdin"], {
       cwd: process.cwd(),
       env: process.env,
+      input: replaySql,
       stdio: "pipe",
     });
   }
@@ -360,12 +370,10 @@ describe.runIf(runBackfillMigration)("Accounting Period historical backfill migr
     });
     expect(transaction.accountingPeriodId).toBe(wrongPeriod.id);
     expect(
-      await prisma.accountingPeriod.findUnique({
+      await prisma.accountingPeriod.findFirst({
         where: {
-          effectiveStart_effectiveEnd: {
-            effectiveStart: correctBounds.start,
-            effectiveEnd: correctBounds.end,
-          },
+          effectiveStart: correctBounds.start,
+          effectiveEnd: correctBounds.end,
         },
       }),
     ).toBeNull();

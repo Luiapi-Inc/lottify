@@ -4,7 +4,12 @@ import { automaticWeeklyAccountingPeriodBounds } from "../domain/accounting-peri
 
 type TransactionClient = Prisma.TransactionClient;
 
-const EFFECTIVE_STATES = ["SCHEDULED", "OPEN", "CLOSING", "CLOSED"] as const;
+export const EFFECTIVE_ACCOUNTING_PERIOD_STATES = [
+  "SCHEDULED",
+  "OPEN",
+  "CLOSING",
+  "CLOSED",
+] as const;
 
 export interface AccountingPeriodTransactionClock {
   now(tx: TransactionClient): Promise<Date>;
@@ -60,7 +65,7 @@ export async function ensureAutomaticAccountingPeriodCoverage(
   return { current, next };
 }
 
-async function lockAccountingCalendar(tx: TransactionClient): Promise<void> {
+export async function lockAccountingCalendar(tx: TransactionClient): Promise<void> {
   const acquired = await tx.$queryRaw<Array<{ locked: number }>>(Prisma.sql`
     WITH calendar_lock AS MATERIALIZED (
       SELECT pg_advisory_xact_lock(19002026, 1)
@@ -80,7 +85,7 @@ async function ensureNominalAutomaticPeriod(
 ): Promise<{ id: string; effectiveStart: Date; effectiveEnd: Date }> {
   const overlapping = await tx.accountingPeriod.findMany({
     where: {
-      state: { in: [...EFFECTIVE_STATES] },
+      state: { in: [...EFFECTIVE_ACCOUNTING_PERIOD_STATES] },
       effectiveStart: { lt: bounds.end },
       effectiveEnd: { gt: bounds.start },
     },

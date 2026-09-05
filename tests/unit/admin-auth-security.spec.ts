@@ -55,6 +55,16 @@ describe("Admin authentication security primitives", () => {
     expect(parseAdminRole("ADMIN")).toBe("ADMIN");
     expect(parseAdminRole("AUDITOR")).toBe("AUDITOR");
     expect(parseAdminRole("OPERATOR")).toBeNull();
+    expect(capabilitiesForRole("ADMIN")).toEqual([
+      "accounting-period.read",
+      "accounting-period.create-custom",
+      "accounting-period.submit",
+    ]);
+    expect(capabilitiesForRole("SUPER_ADMIN")).toEqual([
+      "accounting-period.read",
+      "accounting-period.create-custom",
+      "accounting-period.submit",
+    ]);
     expect(capabilitiesForRole("AUDITOR")).toEqual(["accounting-period.read"]);
   });
 });

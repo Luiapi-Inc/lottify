@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -25,6 +26,23 @@ describe.runIf(runContractMigration)("Accounting Period contract migration", () 
   const accountIdsToClean = new Set<string>();
 
   function executeMigration(path: string): void {
+    if (path === backfillMigrationPath) {
+      const historicalSql = readFileSync(path, "utf8");
+      const replaySql = historicalSql.replace(
+        'ON CONFLICT ("effective_start", "effective_end") DO NOTHING;',
+        "ON CONFLICT DO NOTHING;",
+      );
+      if (replaySql === historicalSql) {
+        throw new Error("Historical Accounting Period backfill conflict clause was not found");
+      }
+      execFileSync("pnpm", ["exec", "prisma", "db", "execute", "--stdin"], {
+        cwd: process.cwd(),
+        env: process.env,
+        input: replaySql,
+        stdio: "pipe",
+      });
+      return;
+    }
     execFileSync("pnpm", ["exec", "prisma", "db", "execute", "--file", path], {
       cwd: process.cwd(),
       env: process.env,
@@ -191,6 +209,45 @@ describe.runIf(runContractMigration)("Accounting Period contract migration", () 
       ).rejects.toThrow();
     } finally {
       await prisma.accountingPeriod.delete({ where: { id: draftId } });
+    }
+  });
+
+  it("allows exact-range Custom proposals to coexist with future Automatic coverage", async () => {
+    const automatic = await prisma.accountingPeriod.findFirstOrThrow({
+      where: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        state: "SCHEDULED",
+      },
+      orderBy: { effectiveStart: "asc" },
+      select: { effectiveStart: true, effectiveEnd: true },
+    });
+    const proposal = await prisma.accountingPeriod.create({
+      data: {
+        mode: "CUSTOM",
+        generationKind: "CUSTOM",
+        effectiveStart: automatic.effectiveStart,
+        effectiveEnd: automatic.effectiveEnd,
+        state: "DRAFT",
+        reason: "Exact-range proposal coexistence regression",
+      },
+      select: { id: true },
+    });
+    try {
+      await expect(
+        prisma.accountingPeriod.update({
+          where: { id: proposal.id },
+          data: { state: "PENDING_APPROVAL" },
+        }),
+      ).resolves.toMatchObject({ state: "PENDING_APPROVAL" });
+      await expect(
+        prisma.accountingPeriod.update({
+          where: { id: proposal.id },
+          data: { state: "SCHEDULED" },
+        }),
+      ).rejects.toThrow();
+    } finally {
+      await prisma.accountingPeriod.delete({ where: { id: proposal.id } });
     }
   });
 

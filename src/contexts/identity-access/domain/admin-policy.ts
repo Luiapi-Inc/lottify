@@ -5,8 +5,16 @@ import {
 } from "./admin-auth.repository";
 
 const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
-  SUPER_ADMIN: ["accounting-period.read"],
-  ADMIN: ["accounting-period.read"],
+  SUPER_ADMIN: [
+    "accounting-period.read",
+    "accounting-period.create-custom",
+    "accounting-period.submit",
+  ],
+  ADMIN: [
+    "accounting-period.read",
+    "accounting-period.create-custom",
+    "accounting-period.submit",
+  ],
   AUDITOR: ["accounting-period.read"],
 };
 
