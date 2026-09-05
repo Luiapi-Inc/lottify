@@ -58,6 +58,20 @@ export interface ReservationConsumptionDestinationRequest {
   amountMinor: bigint;
 }
 
+export interface WalletBucketProjection {
+  bucket: MemberLedgerBucket;
+  postedMinor: bigint;
+  reservedMinor: bigint;
+  availableMinor: bigint;
+}
+
+export interface WalletProjection {
+  memberId: string;
+  currency: FinancialCurrency;
+  dataAsOf: Date;
+  buckets: readonly WalletBucketProjection[];
+}
+
 export interface ConsumeReservationAndPostInput {
   reservationId: string;
   businessTransactionId: string;
@@ -85,6 +99,7 @@ export interface FinancialLedgerRepository {
   releaseReservation(reservationId: string): Promise<Date>;
   consumeReservationAndPost(input: ConsumeReservationAndPostInput): Promise<string>;
   getAvailableMinorUnits(accountId: string): Promise<bigint>;
+  getWalletProjection(memberId: string, currency: FinancialCurrency): Promise<WalletProjection>;
 }
 
 export const FINANCIAL_LEDGER_REPOSITORY = Symbol("FINANCIAL_LEDGER_REPOSITORY");

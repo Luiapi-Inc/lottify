@@ -5,6 +5,7 @@ import {
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReserveFundsInput,
+  type WalletProjection,
 } from "../domain/financial-ledger.repository";
 import type { FinancialCurrency, MemberLedgerBucket } from "../domain/financial-invariants";
 
@@ -48,5 +49,12 @@ export class FinancialLedgerService {
 
   getAvailableMinorUnits(accountId: string): Promise<bigint> {
     return this.repository.getAvailableMinorUnits(accountId);
+  }
+
+  getWalletProjection(
+    memberId: string,
+    currency: FinancialCurrency = "THB",
+  ): Promise<WalletProjection> {
+    return this.repository.getWalletProjection(memberId, currency);
   }
 }

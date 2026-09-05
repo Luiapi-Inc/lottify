@@ -151,6 +151,80 @@ describe.runIf(runIntegration)("financial core integration", () => {
     expect(await ledger.getAvailableMinorUnits(cashAccountId)).toBe(5_000n);
   });
 
+  it("projects Wallet state from Ledger plus active Reservations and keeps LOCKED non-spendable", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const bonusAccountId = await ledger.ensureMemberAccount(memberId, "BONUS");
+    const lockedAccountId = await ledger.ensureMemberAccount(memberId, "LOCKED");
+    const fundingAccountId = await ledger.ensureSystemAccount(`funding:${randomUUID()}`);
+
+    await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "TEST_SEED_WALLET_PROJECTION",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.wallet-projection.seed",
+        key: randomUUID(),
+        fingerprint: "seed:cash:4000:bonus:3000:locked:2000",
+      },
+      domainReferences: { test: "wallet-projection" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: fundingAccountId, side: "DEBIT", amountMinor: 9_000n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 4_000n },
+        { accountId: bonusAccountId, side: "CREDIT", amountMinor: 3_000n },
+        { accountId: lockedAccountId, side: "CREDIT", amountMinor: 2_000n },
+      ],
+    });
+
+    await expect(
+      ledger.reserve({
+        purpose: "BET",
+        businessReference: `bet:${randomUUID()}`,
+        memberId,
+        currency: "THB",
+        amountMinor: 1_000n,
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.wallet-projection.locked",
+          key: randomUUID(),
+          fingerprint: "bet:locked:1000",
+        },
+        allocations: [{ accountId: lockedAccountId, amountMinor: 1_000n }],
+      }),
+    ).rejects.toThrow("Bet reservations may use Member CASH or BONUS only");
+
+    await ledger.reserve({
+      purpose: "BET",
+      businessReference: `bet:${randomUUID()}`,
+      memberId,
+      currency: "THB",
+      amountMinor: 2_500n,
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.wallet-projection.reserve",
+        key: randomUUID(),
+        fingerprint: "bet:cash:1000:bonus:1500",
+      },
+      allocations: [
+        { accountId: cashAccountId, amountMinor: 1_000n },
+        { accountId: bonusAccountId, amountMinor: 1_500n },
+      ],
+    });
+
+    const projection = await ledger.getWalletProjection(memberId);
+    expect(projection.memberId).toBe(memberId);
+    expect(projection.currency).toBe("THB");
+    expect(projection.dataAsOf).toBeInstanceOf(Date);
+    expect(projection.buckets).toEqual([
+      { bucket: "CASH", postedMinor: 4_000n, reservedMinor: 1_000n, availableMinor: 3_000n },
+      { bucket: "BONUS", postedMinor: 3_000n, reservedMinor: 1_500n, availableMinor: 1_500n },
+      { bucket: "LOCKED", postedMinor: 2_000n, reservedMinor: 0n, availableMinor: 0n },
+    ]);
+    expect(await ledger.getAvailableMinorUnits(lockedAccountId)).toBe(0n);
+  });
+
   it("atomically consumes the persisted Reservation allocation into one balanced Ledger transaction", async () => {
     const memberId = randomUUID();
     const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");

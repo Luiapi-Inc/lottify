@@ -6,8 +6,10 @@ import {
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReserveFundsInput,
+  type WalletProjection,
 } from "../domain/financial-ledger.repository";
 import {
+  MEMBER_LEDGER_BUCKETS,
   assertBalancedLedgerPostings,
   assertReservationCanBeCreated,
   calculateAvailableMinorUnits,
@@ -185,6 +187,13 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
           }
           if (input.purpose === "WITHDRAWAL" && account.bucket !== "CASH") {
             throw new Error("Withdrawal reservations may use Member CASH only");
+          }
+          if (
+            input.purpose === "BET" &&
+            account.bucket !== "CASH" &&
+            account.bucket !== "BONUS"
+          ) {
+            throw new Error("Bet reservations may use Member CASH or BONUS only");
           }
 
           const availability = await getAccountAvailability(tx, allocation.accountId);
@@ -414,11 +423,12 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
   async getAvailableMinorUnits(accountId: string): Promise<bigint> {
     const account = await this.prisma.ledgerAccount.findUnique({
       where: { id: accountId },
-      select: { kind: true },
+      select: { kind: true, bucket: true },
     });
     if (!account || account.kind !== "MEMBER") {
       throw new Error("Wallet availability requires a Member Ledger account");
     }
+    if (account.bucket === "LOCKED") return 0n;
 
     const availability = await getAccountAvailability(this.prisma, accountId);
     const availableMinor = calculateAvailableMinorUnits(
@@ -426,6 +436,48 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
       availability.activeReservationAmountsMinor,
     );
     return availableMinor > 0n ? availableMinor : 0n;
+  }
+
+  async getWalletProjection(memberId: string, currency: "THB"): Promise<WalletProjection> {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const dataAsOf = new Date();
+        const accounts = await tx.ledgerAccount.findMany({
+          where: { kind: "MEMBER", memberId, currency },
+          select: { id: true, bucket: true },
+        });
+        const accountByBucket = new Map(accounts.map((account) => [account.bucket, account.id]));
+
+        const buckets = await Promise.all(
+          MEMBER_LEDGER_BUCKETS.map(async (bucket) => {
+            const accountId = accountByBucket.get(bucket);
+            if (!accountId) {
+              return { bucket, postedMinor: 0n, reservedMinor: 0n, availableMinor: 0n };
+            }
+
+            const availability = await getAccountAvailability(tx, accountId);
+            const reservedMinor = availability.activeReservationAmountsMinor.reduce(
+              (total, amountMinor) => total + amountMinor,
+              0n,
+            );
+            const derivedAvailableMinor = calculateAvailableMinorUnits(
+              availability.postedMinor,
+              availability.activeReservationAmountsMinor,
+            );
+            return {
+              bucket,
+              postedMinor: availability.postedMinor,
+              reservedMinor,
+              availableMinor:
+                bucket === "LOCKED" || derivedAvailableMinor < 0n ? 0n : derivedAvailableMinor,
+            };
+          }),
+        );
+
+        return { memberId, currency, dataAsOf, buckets };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
   }
 
   private async findReplayableReservation(input: ReserveFundsInput): Promise<string | null> {
