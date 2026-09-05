@@ -176,8 +176,9 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     expect(detailResponse.status).toBe(200);
     await expect(detailResponse.json()).resolves.toMatchObject({ id: fixturePeriodId });
 
+    const unknownPeriodId = randomUUID();
     const missingResponse = await fetch(
-      `${baseUrl}/api/v1/admin/accounting-periods/not-a-real-period`,
+      `${baseUrl}/api/v1/admin/accounting-periods/${unknownPeriodId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     expect(missingResponse.status).toBe(404);
