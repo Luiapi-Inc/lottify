@@ -99,6 +99,7 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
         "accounting-period.create-custom",
         "accounting-period.submit",
         "accounting-period.approve",
+        "accounting-period.cancel",
       ],
     });
 

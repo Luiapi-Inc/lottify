@@ -569,7 +569,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     );
     await expect(requesterRead.json()).resolves.toMatchObject({
       state: "PENDING_APPROVAL",
-      allowedActions: [],
+      allowedActions: ["cancel"],
     });
 
     const missingReauth = await command(
@@ -1713,8 +1713,8 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       data: {
         mode: "AUTOMATIC_WEEKLY",
         generationKind: "NOMINAL_WEEK",
-        effectiveStart: new Date("2199-07-06T17:00:00.000Z"),
-        effectiveEnd: new Date("2199-07-13T17:00:00.000Z"),
+        effectiveStart: new Date("2199-07-07T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-07-14T17:00:00.000Z"),
         state: "SCHEDULED",
       },
     });
@@ -1780,13 +1780,13 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     const effective = await prisma.accountingPeriod.findMany({
       where: {
         state: { in: ["SCHEDULED", "OPEN", "CLOSING", "CLOSED"] },
-        effectiveStart: { lt: new Date("2199-07-13T17:00:00.000Z") },
-        effectiveEnd: { gt: new Date("2199-07-06T17:00:00.000Z") },
+        effectiveStart: { lt: new Date("2199-07-14T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-07-07T17:00:00.000Z") },
       },
       orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
     });
-    expect(effective[0]!.effectiveStart).toEqual(new Date("2199-07-06T17:00:00.000Z"));
-    expect(effective.at(-1)!.effectiveEnd).toEqual(new Date("2199-07-13T17:00:00.000Z"));
+    expect(effective[0]!.effectiveStart).toEqual(new Date("2199-07-07T17:00:00.000Z"));
+    expect(effective.at(-1)!.effectiveEnd).toEqual(new Date("2199-07-14T17:00:00.000Z"));
     for (let index = 1; index < effective.length; index += 1) {
       expect(effective[index - 1]!.effectiveEnd.getTime()).toBe(
         effective[index]!.effectiveStart.getTime(),
@@ -1796,8 +1796,8 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       await prisma.accountingPeriod.count({
         where: {
           state: { in: ["SCHEDULED", "OPEN", "CLOSING", "CLOSED"] },
-          effectiveStart: { lt: new Date("2199-07-13T17:00:00.000Z") },
-          effectiveEnd: { gt: new Date("2199-07-06T17:00:00.000Z") },
+          effectiveStart: { lt: new Date("2199-07-14T17:00:00.000Z") },
+          effectiveEnd: { gt: new Date("2199-07-07T17:00:00.000Z") },
         },
       }),
     ).toBe(1);
