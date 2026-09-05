@@ -2,33 +2,37 @@
 
 Source of truth: Wayfinder Tickets 04, 16, and 19. This record does not redefine those requirements.
 
-## Implemented checkpoint
+## Accepted checkpoints
 
 - Member Ledger buckets are locked to `CASH`, `BONUS`, and `LOCKED`.
 - THB v1 posting amounts are represented as exact integer minor units (satang) rather than binary floating point.
 - A financial posting set must contain at least two positive postings and balance total debit to total credit before it can be accepted by the domain invariant layer.
 - Wallet availability follows the locked formula `posted spendable balance - active reservations`.
 - Active Reservation amounts must be positive, and a new Reservation is rejected when it would exceed the remaining available spendable balance.
-- This checkpoint deliberately introduces no Prisma schema, persistence contract, REST path, or cross-context orchestration shape that is not already locked by the specification.
+- Immutable Financial Transaction/posting and durable Reservation persistence are implemented with business/correlation/idempotency identity, domain references, timestamps, Reservation allocations, release/consume state, and correction linkage fields required by the current financial-core contracts.
+- Reservation create/release is idempotent and persistence-backed. Reservation creation serializes the authoritative account state so concurrent requests cannot overspend the same available balance.
+- Reservation consumption and its resulting Ledger posting are atomic in one PostgreSQL transaction. The final Member debit postings use the persisted Reservation source allocation, preserving accepted mixed `CASH`/`BONUS` funding rather than recomputing from current balances.
+- Released Reservations cannot be consumed. Exact idempotent consume replay returns the original Financial Transaction; conflicting replay is rejected; concurrent alternate consume identities produce one financial effect only.
 
 ## Evidence confirmed on 2026-09-05
 
-- Focused financial-invariant unit tests: 9 passed.
-- Full local unit/architecture suite: 57 passed; 6 Foundation integration tests were skipped because the local integration-test environment was not enabled.
-- TypeScript typecheck passed.
+- Domain-invariant checkpoint: focused financial-invariant unit tests passed; full local unit/architecture suite and TypeScript typecheck passed.
+- Persistence/concurrency checkpoint commit `95dc7db54c88892c72fc2aa9d5f15522e2f9113d`: GitHub Actions run `33941017223` completed successfully, including migration, deterministic integration tests, typecheck, dependency scan, build, OCI image scans, and API/worker/Member/Admin container smokes.
+- Atomic Reservation consume + Ledger posting checkpoint commit `75e2afce863fb29e3321cd4cb7367dbf2b0f77d2`: local typecheck passed; local test suite reported 57 passed with integration tests skipped because no local integration database was enabled. GitHub Actions run `33942236945` completed successfully, including migration, deterministic integration tests, typecheck, dependency scan, build, all OCI image scans, and API/worker/Member/Admin container smokes.
+- Atomic-consume integration evidence covers persisted mixed-bucket allocation, exact idempotent replay, released-Reservation rejection, concurrent consume serialization, and forced-failure rollback proving Reservation consume state and Ledger posting commit or roll back together.
 
 ## Remaining financial-core requirements
 
 This checkpoint does not complete the financial-core prerequisite in Ticket 19. The following approved requirements still need implementation and acceptance evidence before money-moving downstream verticals can claim completion:
 
-1. Immutable Financial Transaction and posting persistence with business/correlation/idempotency identity, domain references, effective/posted times, and reversal/compensation linkage.
-2. Durable Reservation persistence with unique reservation/business identity and idempotent reserve/release/consume behavior.
-3. Concurrency-safe reservation creation so simultaneous requests cannot drive availability below zero.
-4. Atomic Reservation consumption together with the resulting authoritative Ledger posting.
-5. Wallet projection derived from Ledger postings plus active Reservations, with Ledger remaining authoritative on disagreement.
-6. Reversal/compensation, source-bucket allocation, period-close, recovery/debt, fee, and reconciliation invariants required by Ticket 04.
-7. Deterministic Integration tests for Ledger balance/integrity, Reservation concurrency, idempotency/replay, and downstream financial finalization as required by Ticket 16.
+1. Wallet projection derived from Ledger postings plus active Reservations, with Ledger remaining authoritative on disagreement and deterministic rebuild/reconciliation behavior.
+2. Reversal and business-semantic compensation behavior with immutable linkage and once-only semantics.
+3. Accounting-period/effective-time enforcement, including rejection of postings/backdating into CLOSED periods and current-period correction linkage.
+4. Recovery/debt behavior that can represent negative net position without exposing negative value as spendable `CASH`, with betting/withdrawal availability clamped to zero while unresolved according to policy.
+5. Explicit fee posting behavior and the remaining Ticket 04 operation-specific posting invariants.
+6. Durable reconciliation/discrepancy behavior across Ledger ↔ Wallet projection and the later dependent provider/betting/promotion seams; monetary resolution must use approved Adjustment/Compensation rather than direct balance edits.
+7. Remaining deterministic Integration evidence required by Ticket 16 for each financial capability and downstream financial finalization as those work packages become eligible.
 
 ## Milestone disposition
 
-The financial-core domain-invariant checkpoint is implemented, but the financial core is not yet complete. Withdrawal finalization and other downstream money-moving acceptance remain blocked until the remaining Ticket 04/16/19 prerequisites above are implemented and proven.
+The persistence/concurrency and atomic-consume checkpoints are accepted, but the financial core is not yet complete. Withdrawal finalization and other downstream money-moving acceptance remain blocked until the remaining Ticket 04/16/19 prerequisites above are implemented and proven.
