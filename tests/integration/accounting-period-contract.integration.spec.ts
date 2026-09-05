@@ -165,13 +165,15 @@ describe.runIf(runContractMigration)("Accounting Period contract migration", () 
       select: { effectiveStart: true, effectiveEnd: true },
     });
     const draftId = randomUUID();
+    const draftStart = new Date(current.effectiveStart.getTime() + 60_000);
+    const draftEnd = new Date(current.effectiveEnd.getTime() - 60_000);
     await prisma.accountingPeriod.create({
       data: {
         id: draftId,
         mode: "CUSTOM",
         generationKind: "CUSTOM",
-        effectiveStart: current.effectiveStart,
-        effectiveEnd: current.effectiveEnd,
+        effectiveStart: draftStart,
+        effectiveEnd: draftEnd,
         state: "DRAFT",
       },
     });
@@ -181,8 +183,8 @@ describe.runIf(runContractMigration)("Accounting Period contract migration", () 
           data: {
             mode: "CUSTOM",
             generationKind: "CUSTOM",
-            effectiveStart: new Date(current.effectiveStart.getTime() + 60_000),
-            effectiveEnd: new Date(current.effectiveEnd.getTime() + 60_000),
+            effectiveStart: new Date(current.effectiveStart.getTime() + 120_000),
+            effectiveEnd: new Date(current.effectiveEnd.getTime() - 120_000),
             state: "SCHEDULED",
           },
         }),
