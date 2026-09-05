@@ -35,6 +35,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
   let adminAuth: AdminAuthService;
   let baseUrl: string;
   let accessToken: string;
+  let fixturePeriodId: string;
 
   beforeAll(async () => {
     resetEnvironmentForTests();
@@ -53,11 +54,10 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       controllers: [AdminAccountingPeriodController],
       providers: [
         { provide: AccountingPeriodService, useValue: accountingPeriods },
-        { provide: AdminAuthGuard, useValue: new AdminAuthGuard(adminAuth) },
-        {
-          provide: AdminCapabilityGuard,
-          useValue: new AdminCapabilityGuard(reflector),
-        },
+        { provide: AdminAuthService, useValue: adminAuth },
+        { provide: Reflector, useValue: reflector },
+        AdminAuthGuard,
+        AdminCapabilityGuard,
       ],
     })
     class AdminAccountingPeriodContractTestModule {}
@@ -67,6 +67,18 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     });
     await app.listen(0, "127.0.0.1");
     baseUrl = await app.getUrl();
+
+    fixturePeriodId = randomUUID();
+    await prisma.accountingPeriod.create({
+      data: {
+        id: fixturePeriodId,
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2099-01-04T17:00:00.000Z"),
+        effectiveEnd: new Date("2099-01-11T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
 
     const password = "Accounting period integration password 123!";
     const secret = generateTotpSecret();
@@ -100,6 +112,9 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
   });
 
   afterAll(async () => {
+    await prisma.accountingPeriod.deleteMany({
+      where: { id: fixturePeriodId },
+    });
     await prisma.adminReauthEvidence.deleteMany({
       where: { adminUser: { email: { startsWith: emailPrefix } } },
     });
@@ -136,37 +151,30 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     });
     expect(response.status).toBe(200);
     const periods = (await response.json()) as Array<Record<string, unknown>>;
-    expect(periods.length).toBeGreaterThan(0);
-    expect(periods[0]).toEqual({
-      id: expect.any(String),
-      mode: expect.stringMatching(/^(AUTOMATIC_WEEKLY|CUSTOM)$/),
-      generationKind: expect.stringMatching(/^(NOMINAL_WEEK|DERIVED_FRAGMENT|CUSTOM)$/),
-      effectiveStart: expect.any(String),
-      effectiveEnd: expect.any(String),
+    const fixture = periods.find((period) => period.id === fixturePeriodId);
+    expect(fixture).toEqual({
+      id: fixturePeriodId,
+      mode: "AUTOMATIC_WEEKLY",
+      generationKind: "NOMINAL_WEEK",
+      effectiveStart: "2099-01-04T17:00:00.000Z",
+      effectiveEnd: "2099-01-11T17:00:00.000Z",
       accountingTimezone: "Asia/Bangkok",
-      state: expect.any(String),
-      version: expect.any(Number),
+      state: "SCHEDULED",
+      version: 1,
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
       allowedActions: [],
     });
-    expect(periods[0]).not.toHaveProperty("financialTransactions");
+    expect(fixture).not.toHaveProperty("financialTransactions");
   });
 
   it("returns one period by opaque identity and returns 404 for an unknown identity", async () => {
-    const listResponse = await fetch(`${baseUrl}/api/v1/admin/accounting-periods`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const periods = (await listResponse.json()) as Array<{ id: string }>;
-    const selected = periods[0];
-    if (!selected) throw new Error("Expected seeded Accounting Period");
-
     const detailResponse = await fetch(
-      `${baseUrl}/api/v1/admin/accounting-periods/${encodeURIComponent(selected.id)}`,
+      `${baseUrl}/api/v1/admin/accounting-periods/${encodeURIComponent(fixturePeriodId)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     expect(detailResponse.status).toBe(200);
-    await expect(detailResponse.json()).resolves.toMatchObject({ id: selected.id });
+    await expect(detailResponse.json()).resolves.toMatchObject({ id: fixturePeriodId });
 
     const missingResponse = await fetch(
       `${baseUrl}/api/v1/admin/accounting-periods/not-a-real-period`,

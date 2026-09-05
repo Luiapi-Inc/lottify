@@ -1,5 +1,6 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
   SetMetadata,
   UnauthorizedException,
@@ -17,7 +18,10 @@ export const RequireAdminCapabilities = (...capabilities: AdminCapability[]) =>
 
 @Injectable()
 export class AdminCapabilityGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    @Inject(Reflector)
+    private readonly reflector: Reflector,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const required =

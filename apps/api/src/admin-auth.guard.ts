@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   UnauthorizedException,
   type CanActivate,
@@ -16,7 +17,10 @@ export interface AdminAuthenticatedRequest extends Request {
 
 @Injectable()
 export class AdminAuthGuard implements CanActivate {
-  constructor(private readonly adminAuth: AdminAuthService) {}
+  constructor(
+    @Inject(AdminAuthService)
+    private readonly adminAuth: AdminAuthService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context
