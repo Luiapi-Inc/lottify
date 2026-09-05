@@ -2,6 +2,7 @@
 
 import type { components } from "@lottify/contracts";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { accountingPeriodCancellationUi } from "./accounting-period-cancellation-ui";
 
 type AccountingPeriod = components["schemas"]["AccountingPeriodResponse"];
 type AccountingPeriodCommand = components["schemas"]["AccountingPeriodCommandResponse"];
@@ -237,8 +238,8 @@ export default function AccountingPeriodWorkspace() {
 
   async function cancelPeriod(period: AccountingPeriod) {
     const reason = cancellationReason.trim();
-    const approvingCancellation =
-      period.state === "SCHEDULED" && period.cancellationRequestedByAdminId !== null;
+    const cancellationUi = accountingPeriodCancellationUi(period);
+    const approvingCancellation = cancellationUi?.requiresMfa === true;
     if (!reason) {
       setError({
         code: "VALIDATION_ERROR",
@@ -746,15 +747,16 @@ function CancellationPanel({
   onDismiss: () => void;
   onConfirm: (period: AccountingPeriod) => void;
 }) {
-  if (!period || !period.allowedActions.includes("cancel")) return null;
-  const governed = period.state === "SCHEDULED";
-  const approvingCancellation = governed && period.cancellationRequestedByAdminId !== null;
+  if (!period) return null;
+  const cancellationUi = accountingPeriodCancellationUi(period);
+  if (!cancellationUi) return null;
+  const { governed, approvingCancellation } = cancellationUi;
   return (
     <div className="cancellation-panel" aria-live="polite">
       <div className="approval-summary">
         <div>
           <span className={`state state-${period.state.toLowerCase()}`}>{period.state}</span>
-          <h3>{cancelActionLabel(period)}</h3>
+          <h3>{cancellationUi.actionLabel}</h3>
           <p>
             {formatBangkok(period.effectiveStart)} → {formatBangkok(period.effectiveEnd)} · Version {period.version}
           </p>
@@ -766,18 +768,16 @@ function CancellationPanel({
           rows={3}
           value={reason}
           onChange={(event) => onReasonChange(event.target.value)}
-          disabled={busy !== null || approvingCancellation}
+          disabled={busy !== null || cancellationUi.reasonReadOnly}
           placeholder="ระบุเหตุผลที่ต้องยกเลิกหรือถอนคำขอ"
         />
       </label>
       {governed ? (
         <>
           <p className="permission-note">
-            {approvingCancellation
-              ? "คำขอยกเลิกถูกบันทึกแล้ว ช่วงนี้ยังคงเป็น SCHEDULED และ coverage ยังไม่เปลี่ยน ผู้อนุมัติคนอื่นต้องยืนยันด้วย MFA ก่อนระบบคืน Automatic coverage แบบ atomic"
-              : "การส่งคำขอยกเลิกจะยังไม่เปลี่ยน SCHEDULED หรือ coverage ผู้อนุมัติคนอื่นต้องอนุมัติในขั้นถัดไปก่อนจึงจะคืน Automatic coverage แบบ atomic"}
+            {cancellationUi.permissionNote}
           </p>
-          {approvingCancellation ? (
+          {cancellationUi.requiresMfa ? (
             <label>
               <span>รหัส MFA 6 หลัก</span>
               <input
@@ -803,11 +803,11 @@ function CancellationPanel({
           disabled={
             busy !== null ||
             reason.trim().length === 0 ||
-            (approvingCancellation && code.length !== 6)
+            (cancellationUi.requiresMfa && code.length !== 6)
           }
           onClick={() => onConfirm(period)}
         >
-          {busy === "cancel" ? "กำลังดำเนินการ…" : cancelActionLabel(period)}
+          {busy === "cancel" ? "กำลังดำเนินการ…" : cancellationUi.actionLabel}
         </button>
       </div>
     </div>
@@ -815,10 +815,7 @@ function CancellationPanel({
 }
 
 function cancelActionLabel(period: AccountingPeriod): string {
-  if (period.state === "DRAFT") return "ยกเลิก DRAFT";
-  if (period.state === "PENDING_APPROVAL") return "ถอนคำขอ";
-  if (period.cancellationRequestedByAdminId !== null) return "อนุมัติการยกเลิก";
-  return "ส่งคำขอยกเลิก";
+  return accountingPeriodCancellationUi(period)?.actionLabel ?? "—";
 }
 
 function formatBangkok(value: string): string {
