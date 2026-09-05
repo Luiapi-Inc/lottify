@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, type NestModule } from "@nestjs/common";
 import { collectDefaultMetrics } from "prom-client";
 import { ContextsModule } from "../../../src/contexts/contexts.module";
 import { PlatformModule } from "../../../src/platform/platform.module";
+import { AdminAccountingPeriodController } from "./admin-accounting-period.controller";
 import { AdminAuthController } from "./admin-auth.controller";
 import { AdminAuthGuard } from "./admin-auth.guard";
 import { AdminCapabilityGuard } from "./admin-capability.guard";
@@ -17,6 +18,7 @@ collectDefaultMetrics({ prefix: "lottify_" });
   imports: [PlatformModule, ContextsModule],
   controllers: [
     ApiV1Controller,
+    AdminAccountingPeriodController,
     AdminAuthController,
     HealthController,
     MetricsController,

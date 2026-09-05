@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   ACCOUNTING_TIME_ZONE,
   type AccountingPeriodView,
@@ -18,7 +18,7 @@ export class AccountingPeriodService {
 
   async getById(id: string): Promise<AccountingPeriodView> {
     const period = await this.repository.getById(id);
-    if (!period) throw new Error("Accounting Period not found");
+    if (!period) throw new NotFoundException("Accounting Period not found");
     return toView(period);
   }
 
