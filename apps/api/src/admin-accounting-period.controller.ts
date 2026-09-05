@@ -33,6 +33,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { AccountingPeriodService } from "../../../src/contexts/wallet-ledger/application/accounting-period.service";
 import {
   ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
+  ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
   AccountingPeriodApprovalService,
 } from "./accounting-period-approval.service";
 import { AdminAuthService } from "../../../src/contexts/identity-access/application/admin-auth.service";
@@ -92,6 +93,23 @@ class AccountingPeriodResponse {
     description: "Admin actor that created the Custom proposal",
   })
   createdByAdminId!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Admin actor that initiated governed SCHEDULED cancellation",
+  })
+  cancellationRequestedByAdminId!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Immutable reason for a pending or completed governed cancellation",
+  })
+  cancellationReason!: string | null;
+
+  @ApiProperty({ type: String, format: "date-time", nullable: true })
+  cancellationRequestedAt!: Date | null;
 
   @ApiProperty({ type: String, format: "date-time" })
   createdAt!: Date;
@@ -173,6 +191,22 @@ class SubmitAccountingPeriodBody {
 class ApproveAccountingPeriodBody {
   @ApiProperty({ type: Number, minimum: 1, example: 2 })
   expectedVersion!: number;
+}
+
+class CancelAccountingPeriodBody {
+  @ApiProperty({ type: Number, minimum: 1, example: 2 })
+  expectedVersion!: number;
+
+  @ApiProperty({
+    type: String,
+    example: "Operational exception no longer requires the Custom window",
+  })
+  reason!: string;
+}
+
+class AccountingPeriodCancellationResponse {
+  @ApiProperty({ type: AccountingPeriodResponse })
+  period!: AccountingPeriodResponse;
 }
 
 class ApiErrorResponse {
@@ -414,6 +448,120 @@ export class AdminAccountingPeriodController {
     return approvalResultOrThrow(result);
   }
 
+  @Post(":id/cancel")
+  @HttpCode(HttpStatus.OK)
+  @RequireAdminCapabilities("accounting-period.cancel")
+  @ApiOperation({
+    summary: "Cancel or withdraw a pre-OPEN Custom Accounting Period",
+  })
+  @ApiParam({ name: "id", type: String, description: "Opaque Accounting Period identity" })
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  @ApiBody({ type: CancelAccountingPeriodBody })
+  @ApiOkResponse({ type: AccountingPeriodCancellationResponse })
+  @ApiBadRequestResponse({ type: ApiErrorResponse })
+  @ApiNotFoundResponse({ type: ApiErrorResponse })
+  @ApiConflictResponse({ type: ApiErrorResponse })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponse })
+  @ApiForbiddenResponse({ type: ApiErrorResponse })
+  async cancel(
+    @Param("id") id: string,
+    @Body() body: CancelAccountingPeriodBody,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Req() request: AdminAuthenticatedRequest,
+  ): Promise<Prisma.JsonValue> {
+    const admin = requiredAdmin(request);
+    const parsed = parseCancelBody(body, request);
+    const key = idempotencyKey?.trim();
+    if (!key) {
+      throw apiError(
+        request,
+        HttpStatus.BAD_REQUEST,
+        "VALIDATION_ERROR",
+        "Idempotency-Key header is required",
+        { header: "Idempotency-Key" },
+      );
+    }
+    const correlationId = correlationIdFor(request);
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify({ id, ...parsed }), "utf8")
+      .digest("hex");
+    const claim = await this.idempotency.claim({
+      scope: `admin:${admin.adminId}:accounting-period:${id}:cancel`,
+      key,
+      fingerprint,
+      expiresAt: IDEMPOTENCY_CONTRACT_EXPIRY,
+    });
+
+    if (claim.kind === "existing") {
+      if (claim.fingerprint !== fingerprint) {
+        throw apiError(
+          request,
+          HttpStatus.CONFLICT,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different payload",
+          {},
+        );
+      }
+      if (
+        claim.status === "COMPLETED" &&
+        claim.responseCode !== null &&
+        claim.responseBody !== null
+      ) {
+        return approvalResultOrThrow({
+          statusCode: claim.responseCode,
+          body: claim.responseBody,
+        });
+      }
+      if (claim.status !== "IN_PROGRESS") {
+        throw apiError(
+          request,
+          HttpStatus.CONFLICT,
+          "IDEMPOTENCY_IN_PROGRESS",
+          "The idempotent command cannot be resumed from its current status",
+          { status: claim.status },
+        );
+      }
+    }
+
+    let currentPeriod: AccountingPeriodView | undefined;
+    try {
+      currentPeriod = await this.accountingPeriods.getById(id, viewOptions(request));
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.NOT_FOUND) {
+        currentPeriod = undefined;
+      } else {
+        throw error;
+      }
+    }
+
+    let reauthEvidence;
+    if (
+      currentPeriod?.state === "SCHEDULED" &&
+      currentPeriod.cancellationRequestedByAdminId !== null
+    ) {
+      try {
+        reauthEvidence = await this.adminAuth.requireFreshMfa(
+          admin,
+          ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
+        );
+      } catch {
+        reauthEvidence = undefined;
+      }
+    }
+
+    const result = await this.approvals.cancelCustom({
+      id,
+      expectedVersion: parsed.expectedVersion,
+      reason: parsed.reason,
+      actor: admin,
+      reauthEvidence,
+      correlationId,
+      idempotencyRecordId: claim.recordId,
+      fingerprint,
+    });
+    return approvalResultOrThrow(result);
+  }
+
   private async executeIdempotent(input: {
     request: AdminAuthenticatedRequest;
     key: string | undefined;
@@ -497,11 +645,16 @@ function canApprove(request: AdminAuthenticatedRequest): boolean {
   return request.adminAuth?.capabilities.includes("accounting-period.approve") === true;
 }
 
+function canCancel(request: AdminAuthenticatedRequest): boolean {
+  return request.adminAuth?.capabilities.includes("accounting-period.cancel") === true;
+}
+
 function viewOptions(request: AdminAuthenticatedRequest) {
   const admin = request.adminAuth;
   return {
     canSubmit: canSubmit(request),
     canApprove: canApprove(request),
+    canCancel: canCancel(request),
     actorAdminId: admin?.adminId,
     canSelfApprove: admin?.role === "SUPER_ADMIN",
   };
@@ -574,6 +727,26 @@ function parseApproveBody(
   return { expectedVersion: body.expectedVersion };
 }
 
+function parseCancelBody(
+  body: CancelAccountingPeriodBody,
+  request: AdminAuthenticatedRequest,
+): { expectedVersion: number; reason: string } {
+  if (
+    !body ||
+    typeof body.expectedVersion !== "number" ||
+    typeof body.reason !== "string"
+  ) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "expectedVersion and reason are required",
+      {},
+    );
+  }
+  return { expectedVersion: body.expectedVersion, reason: body.reason };
+}
+
 function mapCommandError(request: AdminAuthenticatedRequest, error: unknown): unknown {
   if (!(error instanceof AccountingPeriodRuleError)) return error;
   if (error.code === "VALIDATION_ERROR") {
@@ -583,6 +756,9 @@ function mapCommandError(request: AdminAuthenticatedRequest, error: unknown): un
     return apiError(request, HttpStatus.NOT_FOUND, error.code, error.message, error.details);
   }
   if (error.code === "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN") {
+    return apiError(request, HttpStatus.FORBIDDEN, error.code, error.message, error.details);
+  }
+  if (error.code === "ACCOUNTING_PERIOD_CANCELLATION_FORBIDDEN") {
     return apiError(request, HttpStatus.FORBIDDEN, error.code, error.message, error.details);
   }
   return apiError(request, HttpStatus.CONFLICT, error.code, error.message, error.details);

@@ -15,6 +15,9 @@ export interface AccountingPeriodRecord {
   version: number;
   reason: string | null;
   createdByAdminId: string | null;
+  cancellationRequestedByAdminId: string | null;
+  cancellationReason: string | null;
+  cancellationRequestedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

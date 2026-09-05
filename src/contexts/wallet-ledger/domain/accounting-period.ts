@@ -20,7 +20,7 @@ export type AccountingPeriodMode = (typeof ACCOUNTING_PERIOD_MODES)[number];
 export type AccountingPeriodGenerationKind =
   (typeof ACCOUNTING_PERIOD_GENERATION_KINDS)[number];
 export type AccountingPeriodState = (typeof ACCOUNTING_PERIOD_STATES)[number];
-export const ACCOUNTING_PERIOD_ALLOWED_ACTIONS = ["submit", "approve"] as const;
+export const ACCOUNTING_PERIOD_ALLOWED_ACTIONS = ["submit", "approve", "cancel"] as const;
 export type AccountingPeriodAllowedAction =
   (typeof ACCOUNTING_PERIOD_ALLOWED_ACTIONS)[number];
 
@@ -43,6 +43,9 @@ export interface AccountingPeriodView {
   version: number;
   reason: string | null;
   createdByAdminId: string | null;
+  cancellationRequestedByAdminId: string | null;
+  cancellationReason: string | null;
+  cancellationRequestedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   allowedActions: readonly AccountingPeriodAllowedAction[];
@@ -79,6 +82,7 @@ export type AccountingPeriodRuleErrorCode =
   | "ACCOUNTING_PERIOD_COVERAGE_CONFLICT"
   | "ACCOUNTING_PERIOD_STATE_CONFLICT"
   | "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN"
+  | "ACCOUNTING_PERIOD_CANCELLATION_FORBIDDEN"
   | "ACCOUNTING_PERIOD_START_ELAPSED"
   | "VERSION_CONFLICT";
 

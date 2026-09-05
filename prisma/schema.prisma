@@ -42,6 +42,7 @@ model AdminUser {
   approvalRequests    AdminApprovalEvidence[] @relation("AdminApprovalRequester")
   approvalDecisions   AdminApprovalEvidence[] @relation("AdminApprovalApprover")
   auditRecords        AuditRecord[]
+  accountingPeriodCancellationRequests AccountingPeriod[] @relation("AccountingPeriodCancellationRequestedBy")
 
   @@index([status, role])
   @@map("admin_users")
@@ -236,13 +237,18 @@ model AccountingPeriod {
   version               Int                    @default(1)
   reason                String?
   createdByAdminId      String?                @map("created_by_admin_id") @db.Uuid
+  cancellationRequestedByAdminId String?       @map("cancellation_requested_by_admin_id") @db.Uuid
+  cancellationReason    String?                @map("cancellation_reason")
+  cancellationRequestedAt DateTime?            @map("cancellation_requested_at")
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
   financialTransactions FinancialTransaction[]
   createdByAdmin        AdminUser?             @relation("AccountingPeriodCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  cancellationRequestedBy AdminUser?           @relation("AccountingPeriodCancellationRequestedBy", fields: [cancellationRequestedByAdminId], references: [id], onDelete: Restrict)
 
   @@index([state, effectiveStart, effectiveEnd])
   @@index([createdByAdminId, createdAt])
+  @@index([cancellationRequestedByAdminId, cancellationRequestedAt])
   @@map("accounting_periods")
 }
 

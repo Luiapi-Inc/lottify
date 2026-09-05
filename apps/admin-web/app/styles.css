@@ -437,6 +437,40 @@ textarea:focus {
   background: #f7f8fa;
 }
 
+.compact-button {
+  min-height: 34px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.cancellation-panel {
+  display: grid;
+  gap: 14px;
+  margin: 0 22px 22px;
+  padding: 16px;
+  border: 1px solid #e1e6ed;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.cancellation-panel label {
+  display: grid;
+  gap: 7px;
+  max-width: 620px;
+}
+
+.cancellation-panel label > span {
+  color: #4f5b70;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cancellation-panel .approval-summary p {
+  margin: 6px 0 0;
+  color: #657087;
+  font-size: 12px;
+}
+
 .preview-panel {
   min-width: 0;
   padding: 22px;

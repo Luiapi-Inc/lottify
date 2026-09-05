@@ -16,6 +16,7 @@ import {
 interface AccountingPeriodViewOptions {
   canSubmit?: boolean;
   canApprove?: boolean;
+  canCancel?: boolean;
   actorAdminId?: string;
   canSelfApprove?: boolean;
 }
@@ -115,6 +116,17 @@ function toView(
     (options.canSelfApprove === true || period.createdByAdminId !== options.actorAdminId)
   ) {
     allowedActions.push("approve");
+  }
+  if (
+    options.canCancel === true &&
+    period.mode === "CUSTOM" &&
+    ((period.state === "DRAFT" || period.state === "PENDING_APPROVAL")
+      ? period.createdByAdminId === options.actorAdminId
+      : period.state === "SCHEDULED" &&
+        (period.cancellationRequestedByAdminId === null ||
+          period.cancellationRequestedByAdminId !== options.actorAdminId))
+  ) {
+    allowedActions.push("cancel");
   }
   return {
     ...period,

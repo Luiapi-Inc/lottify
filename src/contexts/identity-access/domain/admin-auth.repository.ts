@@ -6,6 +6,7 @@ export const ADMIN_CAPABILITIES = [
   "accounting-period.create-custom",
   "accounting-period.submit",
   "accounting-period.approve",
+  "accounting-period.cancel",
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 

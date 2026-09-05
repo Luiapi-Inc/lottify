@@ -10,8 +10,20 @@ type AdminMe = components["schemas"]["AdminMeResponse"];
 type CreateCustomBody = components["schemas"]["CreateCustomAccountingPeriodBody"];
 type SubmitBody = components["schemas"]["SubmitAccountingPeriodBody"];
 type ApproveBody = components["schemas"]["ApproveAccountingPeriodBody"];
+type CancelBody = components["schemas"]["CancelAccountingPeriodBody"];
+type CancellationResponse = components["schemas"]["AccountingPeriodCancellationResponse"];
+
+type BusyAction =
+  | "session"
+  | "create"
+  | "submit"
+  | "approve"
+  | "cancel"
+  | "refresh"
+  | null;
 
 const ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS = "accounting-period.approve";
+const ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS = "accounting-period.cancel";
 
 const navigation = [
   "ภาพรวม",
@@ -38,11 +50,10 @@ export default function AccountingPeriodWorkspace() {
   const [reason, setReason] = useState("");
   const [approvalPeriodId, setApprovalPeriodId] = useState<string | null>(null);
   const [approvalCode, setApprovalCode] = useState("");
-  const [busy, setBusy] = useState<
-    "session" | "create" | "submit" | "approve" | "refresh" | null
-  >(
-    "session",
-  );
+  const [cancellationPeriodId, setCancellationPeriodId] = useState<string | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [cancellationCode, setCancellationCode] = useState("");
+  const [busy, setBusy] = useState<BusyAction>("session");
   const [error, setError] = useState<ApiError | null>(null);
   const [sessionUnavailable, setSessionUnavailable] = useState(false);
 
@@ -224,6 +235,77 @@ export default function AccountingPeriodWorkspace() {
     }
   }
 
+  async function cancelPeriod(period: AccountingPeriod) {
+    const reason = cancellationReason.trim();
+    const approvingCancellation =
+      period.state === "SCHEDULED" && period.cancellationRequestedByAdminId !== null;
+    if (!reason) {
+      setError({
+        code: "VALIDATION_ERROR",
+        message: "ระบุเหตุผลสำหรับการยกเลิกหรือถอนคำขอ",
+        details: { field: "reason" },
+        correlationId: "client-validation",
+      });
+      return;
+    }
+    if (approvingCancellation && !/^\d{6}$/.test(cancellationCode)) {
+      setError({
+        code: "VALIDATION_ERROR",
+        message: "กรอกรหัส MFA 6 หลักเพื่ออนุมัติการยกเลิกช่วงที่ SCHEDULED",
+        details: { field: "code" },
+        correlationId: "client-validation",
+      });
+      return;
+    }
+
+    const payload: CancelBody = { expectedVersion: period.version, reason };
+    setBusy("cancel");
+    setError(null);
+    try {
+      if (approvingCancellation) {
+        const reauth = await authorizedFetch("/api/v1/admin/auth/reauth", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            actionClass: ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
+            code: cancellationCode,
+          }),
+        });
+        if (!reauth.ok) throw await readApiError(reauth);
+      }
+
+      const response = await authorizedFetch(
+        `/api/v1/admin/accounting-periods/${encodeURIComponent(period.id)}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "Idempotency-Key": idempotencyKey(
+              commandKeys.current,
+              `cancel:${period.id}`,
+              payload,
+            ),
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!response.ok) throw await readApiError(response);
+      const result = (await response.json()) as CancellationResponse;
+      if (draft?.period.id === period.id) setDraft(null);
+      setPeriods((current) =>
+        current.map((item) => (item.id === result.period.id ? result.period : item)),
+      );
+      setCancellationPeriodId(null);
+      setCancellationReason("");
+      setCancellationCode("");
+      await loadPeriods();
+    } catch (caught) {
+      setError(normalizeError(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function beginAnotherDraft() {
     setDraft(null);
     setStartDate("");
@@ -321,6 +403,7 @@ export default function AccountingPeriodWorkspace() {
                   <th>โหมด</th>
                   <th>สถานะ</th>
                   <th>Version</th>
+                  <th>คำสั่ง</th>
                 </tr>
               </thead>
               <tbody>
@@ -337,11 +420,47 @@ export default function AccountingPeriodWorkspace() {
                       </span>
                     </td>
                     <td>v{period.version}</td>
+                    <td>
+                      {period.allowedActions.includes("cancel") ? (
+                        <button
+                          type="button"
+                          className="secondary-button compact-button"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setCancellationPeriodId(period.id);
+                            setCancellationReason(period.cancellationReason ?? "");
+                            setCancellationCode("");
+                            setError(null);
+                          }}
+                        >
+                          {cancelActionLabel(period)}
+                        </button>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {cancellationPeriodId ? (
+            <CancellationPanel
+              period={periods.find((period) => period.id === cancellationPeriodId) ?? null}
+              reason={cancellationReason}
+              code={cancellationCode}
+              busy={busy}
+              onReasonChange={setCancellationReason}
+              onCodeChange={setCancellationCode}
+              onDismiss={() => {
+                setCancellationPeriodId(null);
+                setCancellationReason("");
+                setCancellationCode("");
+              }}
+              onConfirm={(period) => void cancelPeriod(period)}
+            />
+          ) : null}
         </section>
 
         <section className="approval-section" aria-labelledby="approval-title">
@@ -532,7 +651,7 @@ function Preview({
   onSubmit,
 }: {
   command: AccountingPeriodCommand;
-  busy: "session" | "create" | "submit" | "approve" | "refresh" | null;
+  busy: BusyAction;
   onSubmit: () => void;
 }) {
   const { period, replacementPreview } = command;
@@ -606,6 +725,100 @@ function Preview({
       )}
     </div>
   );
+}
+
+function CancellationPanel({
+  period,
+  reason,
+  code,
+  busy,
+  onReasonChange,
+  onCodeChange,
+  onDismiss,
+  onConfirm,
+}: {
+  period: AccountingPeriod | null;
+  reason: string;
+  code: string;
+  busy: BusyAction;
+  onReasonChange: (value: string) => void;
+  onCodeChange: (value: string) => void;
+  onDismiss: () => void;
+  onConfirm: (period: AccountingPeriod) => void;
+}) {
+  if (!period || !period.allowedActions.includes("cancel")) return null;
+  const governed = period.state === "SCHEDULED";
+  const approvingCancellation = governed && period.cancellationRequestedByAdminId !== null;
+  return (
+    <div className="cancellation-panel" aria-live="polite">
+      <div className="approval-summary">
+        <div>
+          <span className={`state state-${period.state.toLowerCase()}`}>{period.state}</span>
+          <h3>{cancelActionLabel(period)}</h3>
+          <p>
+            {formatBangkok(period.effectiveStart)} → {formatBangkok(period.effectiveEnd)} · Version {period.version}
+          </p>
+        </div>
+      </div>
+      <label>
+        <span>เหตุผล</span>
+        <textarea
+          rows={3}
+          value={reason}
+          onChange={(event) => onReasonChange(event.target.value)}
+          disabled={busy !== null || approvingCancellation}
+          placeholder="ระบุเหตุผลที่ต้องยกเลิกหรือถอนคำขอ"
+        />
+      </label>
+      {governed ? (
+        <>
+          <p className="permission-note">
+            {approvingCancellation
+              ? "คำขอยกเลิกถูกบันทึกแล้ว ช่วงนี้ยังคงเป็น SCHEDULED และ coverage ยังไม่เปลี่ยน ผู้อนุมัติคนอื่นต้องยืนยันด้วย MFA ก่อนระบบคืน Automatic coverage แบบ atomic"
+              : "การส่งคำขอยกเลิกจะยังไม่เปลี่ยน SCHEDULED หรือ coverage ผู้อนุมัติคนอื่นต้องอนุมัติในขั้นถัดไปก่อนจึงจะคืน Automatic coverage แบบ atomic"}
+          </p>
+          {approvingCancellation ? (
+            <label>
+              <span>รหัส MFA 6 หลัก</span>
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={code}
+                onChange={(event) => onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                disabled={busy !== null}
+              />
+            </label>
+          ) : null}
+        </>
+      ) : null}
+      <div className="approval-actions">
+        <button type="button" className="secondary-button" disabled={busy !== null} onClick={onDismiss}>
+          กลับ
+        </button>
+        <button
+          type="button"
+          className="primary-button"
+          disabled={
+            busy !== null ||
+            reason.trim().length === 0 ||
+            (approvingCancellation && code.length !== 6)
+          }
+          onClick={() => onConfirm(period)}
+        >
+          {busy === "cancel" ? "กำลังดำเนินการ…" : cancelActionLabel(period)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function cancelActionLabel(period: AccountingPeriod): string {
+  if (period.state === "DRAFT") return "ยกเลิก DRAFT";
+  if (period.state === "PENDING_APPROVAL") return "ถอนคำขอ";
+  if (period.cancellationRequestedByAdminId !== null) return "อนุมัติการยกเลิก";
+  return "ส่งคำขอยกเลิก";
 }
 
 function formatBangkok(value: string): string {

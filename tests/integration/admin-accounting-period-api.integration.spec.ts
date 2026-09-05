@@ -10,6 +10,7 @@ import { AdminAuthGuard } from "../../apps/api/src/admin-auth.guard";
 import { AdminCapabilityGuard } from "../../apps/api/src/admin-capability.guard";
 import {
   ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
+  ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
   AccountingPeriodApprovalService,
 } from "../../apps/api/src/accounting-period-approval.service";
 import { AdminAuthService } from "../../src/contexts/identity-access/application/admin-auth.service";
@@ -22,7 +23,10 @@ import {
 } from "../../src/contexts/identity-access/domain/totp";
 import { PrismaAdminAuthRepository } from "../../src/contexts/identity-access/infrastructure/prisma-admin-auth.repository";
 import { AccountingPeriodService } from "../../src/contexts/wallet-ledger/application/accounting-period.service";
-import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
+import {
+  type AccountingPeriodTransactionClock,
+  DatabaseAccountingPeriodTransactionClock,
+} from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
 import { PrismaAccountingPeriodRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-accounting-period.repository";
 import {
   getAdminMfaEncryptionKey,
@@ -138,7 +142,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       where: {
         effectiveStart: {
           gte: new Date("2199-02-03T17:00:00.000Z"),
-          lt: new Date("2199-07-01T17:00:00.000Z"),
+          lt: new Date("2199-08-01T17:00:00.000Z"),
         },
       },
     });
@@ -199,6 +203,9 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       version: 1,
       reason: null,
       createdByAdminId: null,
+      cancellationRequestedByAdminId: null,
+      cancellationReason: null,
+      cancellationRequestedAt: null,
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
       allowedActions: [],
@@ -1142,7 +1149,661 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     }
   });
 
-  it("publishes explicit create-custom/submit/approve OpenAPI operations and no generic PATCH", () => {
+  it("lets only the creator cancel a DRAFT immediately and replays the result idempotently", async () => {
+    const before = await effectiveCoverageSnapshot();
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-06-01",
+        endDate: "2199-06-02",
+        reason: "Draft cancellation fixture",
+      },
+    );
+    expect(created.response.status).toBe(201);
+    const periodId = (created.body as { period: { id: string } }).period.id;
+
+    const requesterRead = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${periodId}`,
+      { headers: authHeaders(adminToken) },
+    );
+    await expect(requesterRead.json()).resolves.toMatchObject({
+      state: "DRAFT",
+      allowedActions: expect.arrayContaining(["submit", "cancel"]),
+    });
+    const otherRead = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${periodId}`,
+      { headers: authHeaders(approverAdminToken) },
+    );
+    await expect(otherRead.json()).resolves.toMatchObject({
+      state: "DRAFT",
+      allowedActions: ["submit"],
+    });
+
+    const forbidden = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 1, reason: "Not the creator" },
+    );
+    expect(forbidden.response.status).toBe(403);
+    expect(forbidden.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_CANCELLATION_FORBIDDEN",
+      correlationId: expect.any(String),
+    });
+
+    const key = randomUUID();
+    const cancelled = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      adminToken,
+      key,
+      { expectedVersion: 1, reason: "Draft no longer required" },
+    );
+    expect(cancelled.response.status).toBe(200);
+    expect(cancelled.body).toMatchObject({
+      period: { id: periodId, state: "CANCELLED", version: 2, allowedActions: [] },
+    });
+    const replay = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      adminToken,
+      key,
+      { expectedVersion: 1, reason: "Draft no longer required" },
+    );
+    expect(replay.response.status).toBe(200);
+    expect(replay.body).toEqual(cancelled.body);
+    expect(await effectiveCoverageSnapshot()).toEqual(before);
+
+    const requesterId = await adminIdForToken(adminToken);
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: requesterId,
+          action: "ACCOUNTING_PERIOD_CUSTOM_CANCELLATION",
+          outcome: "CANCELLED",
+        },
+      }),
+    ).resolves.toMatchObject({
+      reason: "Draft no longer required",
+      reauthEvidenceId: null,
+      approvalId: null,
+      correlationId: expect.any(String),
+    });
+  });
+
+  it("lets the creator withdraw PENDING_APPROVAL and prevents stale activation", async () => {
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-06-02",
+        endDate: "2199-06-03",
+        reason: "Pending withdrawal fixture",
+      },
+    );
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    const submitted = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    expect(submitted.response.status).toBe(200);
+    expect(submitted.body).toMatchObject({
+      period: { state: "PENDING_APPROVAL", version: 2 },
+    });
+
+    const withdrawn = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 2, reason: "Withdraw before activation" },
+    );
+    expect(withdrawn.response.status).toBe(200);
+    expect(withdrawn.body).toMatchObject({
+      period: { id: periodId, state: "CANCELLED", version: 3, allowedActions: [] },
+    });
+
+    const requesterId = await adminIdForToken(adminToken);
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: requesterId,
+          action: "ACCOUNTING_PERIOD_CUSTOM_CANCELLATION",
+          outcome: "WITHDRAWN",
+        },
+      }),
+    ).resolves.toMatchObject({ reason: "Withdraw before activation" });
+
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const staleApproval = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(staleApproval.response.status).toBe(409);
+    expect(staleApproval.body).toMatchObject({
+      code: "VERSION_CONFLICT",
+      details: { expectedVersion: 2, currentVersion: 3 },
+    });
+    expect(
+      await prisma.adminApprovalEvidence.count({
+        where: { action: "ACCOUNTING_PERIOD_CUSTOM_ACTIVATION", resourceId: periodId },
+      }),
+    ).toBe(0);
+  });
+
+  it("requires two-actor governed SCHEDULED cancellation and atomically restores a fresh nominal Automatic week", async () => {
+    const originalAutomatic = await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-06-02T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-06-09T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-06-05",
+        endDate: "2199-06-08",
+        reason: "Scheduled cancellation restoration fixture",
+      },
+    );
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const approved = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(approved.response.status).toBe(200);
+    expect(approved.body).toMatchObject({
+      period: { id: periodId, state: "SCHEDULED", version: 3 },
+    });
+    const coverageBeforeRequest = await prisma.accountingPeriod.findMany({
+      where: {
+        state: "SCHEDULED",
+        effectiveStart: { lt: new Date("2199-06-09T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-06-02T17:00:00.000Z") },
+      },
+      orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    });
+
+    const requesterAdminId = await adminIdForToken(adminToken);
+    const requestKey = randomUUID();
+    const requested = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      adminToken,
+      requestKey,
+      { expectedVersion: 3, reason: "Restore Automatic coverage" },
+    );
+    expect(requested.response.status).toBe(200);
+    expect(requested.body).toMatchObject({
+      period: {
+        id: periodId,
+        state: "SCHEDULED",
+        version: 4,
+        cancellationRequestedByAdminId: requesterAdminId,
+        cancellationReason: "Restore Automatic coverage",
+        cancellationRequestedAt: expect.any(String),
+        allowedActions: [],
+      },
+    });
+    const coverageAfterRequest = await prisma.accountingPeriod.findMany({
+      where: {
+        state: "SCHEDULED",
+        effectiveStart: { lt: new Date("2199-06-09T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-06-02T17:00:00.000Z") },
+      },
+      orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    });
+    expect(
+      coverageAfterRequest.map(({ id, mode, generationKind, effectiveStart, effectiveEnd, state }) => ({
+        id,
+        mode,
+        generationKind,
+        effectiveStart,
+        effectiveEnd,
+        state,
+      })),
+    ).toEqual(
+      coverageBeforeRequest.map(({ id, mode, generationKind, effectiveStart, effectiveEnd, state }) => ({
+        id,
+        mode,
+        generationKind,
+        effectiveStart,
+        effectiveEnd,
+        state,
+      })),
+    );
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: periodId } }),
+    ).resolves.toMatchObject({
+      state: "SCHEDULED",
+      version: 4,
+      cancellationRequestedByAdminId: requesterAdminId,
+      cancellationReason: "Restore Automatic coverage",
+      cancellationRequestedAt: expect.any(Date),
+    });
+
+    const requestReplay = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      adminToken,
+      requestKey,
+      { expectedVersion: 3, reason: "Restore Automatic coverage" },
+    );
+    expect(requestReplay.response.status).toBe(200);
+    expect(requestReplay.body).toEqual(requested.body);
+
+    const requesterRead = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${periodId}`,
+      { headers: authHeaders(adminToken) },
+    );
+    await expect(requesterRead.json()).resolves.toMatchObject({
+      state: "SCHEDULED",
+      cancellationRequestedByAdminId: requesterAdminId,
+      allowedActions: [],
+    });
+    const approverRead = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${periodId}`,
+      { headers: authHeaders(approverAdminToken) },
+    );
+    await expect(approverRead.json()).resolves.toMatchObject({
+      state: "SCHEDULED",
+      cancellationRequestedByAdminId: requesterAdminId,
+      cancellationReason: "Restore Automatic coverage",
+      allowedActions: ["cancel"],
+    });
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: requesterAdminId,
+          action: "ACCOUNTING_PERIOD_CUSTOM_CANCELLATION",
+          outcome: "REQUESTED",
+        },
+      }),
+    ).resolves.toMatchObject({
+      reason: "Restore Automatic coverage",
+      reauthEvidenceId: null,
+    });
+
+    const selfApproval = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 4, reason: "Restore Automatic coverage" },
+    );
+    expect(selfApproval.response.status).toBe(403);
+    expect(selfApproval.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN",
+      details: { requesterAdminId },
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: periodId } }),
+    ).resolves.toMatchObject({ state: "SCHEDULED", version: 4 });
+
+    const missingApproverReauth = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 4, reason: "Restore Automatic coverage" },
+    );
+    expect(missingApproverReauth.response.status).toBe(403);
+    expect(missingApproverReauth.body).toMatchObject({
+      code: "REAUTH_REQUIRED",
+      details: { actionClass: ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS },
+    });
+
+    await freshCancellationReauth(approverAdminToken, approverAdminSecret);
+    const approvalKey = randomUUID();
+    const cancelled = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      approverAdminToken,
+      approvalKey,
+      { expectedVersion: 4, reason: "Restore Automatic coverage" },
+    );
+    expect(cancelled.response.status).toBe(200);
+    expect(cancelled.body).toMatchObject({
+      period: { id: periodId, state: "CANCELLED", version: 5, allowedActions: [] },
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: originalAutomatic.id } }),
+    ).resolves.toMatchObject({ state: "CANCELLED", version: 2 });
+
+    const restored = await prisma.accountingPeriod.findMany({
+      where: {
+        state: "SCHEDULED",
+        effectiveStart: { lt: new Date("2199-06-09T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-06-02T17:00:00.000Z") },
+      },
+      orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    });
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toMatchObject({
+      mode: "AUTOMATIC_WEEKLY",
+      generationKind: "NOMINAL_WEEK",
+      effectiveStart: new Date("2199-06-02T17:00:00.000Z"),
+      effectiveEnd: new Date("2199-06-09T17:00:00.000Z"),
+    });
+    expect(restored[0]!.id).not.toBe(originalAutomatic.id);
+
+    const cancellationApproval = await prisma.adminApprovalEvidence.findFirstOrThrow({
+      where: { action: "ACCOUNTING_PERIOD_CUSTOM_CANCELLATION", resourceId: periodId },
+    });
+    const cancellationApproverAdminId = await adminIdForToken(approverAdminToken);
+    expect(cancellationApproval).toMatchObject({
+      requesterAdminId,
+      approverAdminId: cancellationApproverAdminId,
+      requestedVersion: 4,
+      reason: "Restore Automatic coverage",
+      policyVersion: "accounting-period-custom-cancellation-v1",
+      reauthEvidenceId: expect.any(String),
+      correlationId: expect.any(String),
+    });
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({ where: { approvalId: cancellationApproval.id } }),
+    ).resolves.toMatchObject({
+      action: "ACCOUNTING_PERIOD_CUSTOM_CANCELLATION",
+      outcome: "APPROVED",
+      correlationId: cancellationApproval.correlationId,
+    });
+
+    const replay = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      approverAdminToken,
+      approvalKey,
+      { expectedVersion: 4, reason: "Restore Automatic coverage" },
+    );
+    expect(replay.response.status).toBe(200);
+    expect(replay.body).toEqual(cancelled.body);
+    expect(
+      await prisma.adminApprovalEvidence.count({
+        where: { action: "ACCOUNTING_PERIOD_CUSTOM_CANCELLATION", resourceId: periodId },
+      }),
+    ).toBe(1);
+  });
+
+  it("rejects cancellation after OPEN and for transaction-referenced SCHEDULED Custom coverage", async () => {
+    const requesterAdminId = await adminIdForToken(adminToken);
+    for (const fixture of [
+      ["OPEN", "2199-06-10T17:00:00.000Z", "2199-06-11T17:00:00.000Z"],
+      ["CLOSING", "2199-06-12T17:00:00.000Z", "2199-06-13T17:00:00.000Z"],
+      ["CLOSED", "2199-06-14T17:00:00.000Z", "2199-06-15T17:00:00.000Z"],
+    ] as const) {
+      const period = await prisma.accountingPeriod.create({
+        data: {
+          mode: "CUSTOM",
+          generationKind: "CUSTOM",
+          effectiveStart: new Date(fixture[1]),
+          effectiveEnd: new Date(fixture[2]),
+          state: fixture[0],
+          reason: `${fixture[0]} cancellation fixture`,
+          createdByAdminId: requesterAdminId,
+        },
+      });
+      const rejected = await command(
+        `/api/v1/admin/accounting-periods/${period.id}/cancel`,
+        adminToken,
+        randomUUID(),
+        { expectedVersion: 1, reason: "Must remain immutable" },
+      );
+      expect(rejected.response.status).toBe(409);
+      expect(rejected.body).toMatchObject({
+        code: "ACCOUNTING_PERIOD_STATE_CONFLICT",
+        details: { state: fixture[0] },
+      });
+    }
+
+    const referenced = await prisma.accountingPeriod.create({
+      data: {
+        mode: "CUSTOM",
+        generationKind: "CUSTOM",
+        effectiveStart: new Date("2199-06-18T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-06-20T17:00:00.000Z"),
+        state: "SCHEDULED",
+        reason: "Referenced cancellation fixture",
+        createdByAdminId: requesterAdminId,
+      },
+    });
+    const postedAt = new Date("2199-06-19T00:00:00.000Z");
+    await prisma.financialTransaction.create({
+      data: {
+        businessTransactionId: randomUUID(),
+        operationType: "TEST_ACCOUNTING_PERIOD_APPROVAL_BLOCKER",
+        correlationId: randomUUID(),
+        idempotencyScope: `test.accounting-period-cancellation.${referenced.id}`,
+        idempotencyKey: randomUUID(),
+        fingerprint: "referenced-custom-period",
+        domainReferences: { accountingPeriodCancellationFixture: referenced.id },
+        effectiveAt: postedAt,
+        postedAt,
+        accountingPeriodId: referenced.id,
+      },
+    });
+    await freshCancellationReauth(adminToken, adminSecret);
+    const rejectedReferenced = await command(
+      `/api/v1/admin/accounting-periods/${referenced.id}/cancel`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1, reason: "Must not rewrite referenced coverage" },
+    );
+    expect(rejectedReferenced.response.status).toBe(409);
+    expect(rejectedReferenced.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+      correlationId: expect.any(String),
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: referenced.id } }),
+    ).resolves.toMatchObject({ state: "SCHEDULED", version: 1 });
+  });
+
+  it("serializes SCHEDULED cancellation against an overlapping Custom approval", async () => {
+    await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-06-23T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-06-30T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const first = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      { startDate: "2199-06-25", endDate: "2199-06-28", reason: "Cancellation race A" },
+    );
+    const second = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      superAdminToken,
+      randomUUID(),
+      { startDate: "2199-06-26", endDate: "2199-06-29", reason: "Cancellation race B" },
+    );
+    const firstId = (first.body as { period: { id: string } }).period.id;
+    const secondId = (second.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${firstId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await command(
+      `/api/v1/admin/accounting-periods/${secondId}/submit`,
+      superAdminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const firstApproved = await command(
+      `/api/v1/admin/accounting-periods/${firstId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(firstApproved.response.status).toBe(200);
+
+    const cancellationRequested = await command(
+      `/api/v1/admin/accounting-periods/${firstId}/cancel`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 3, reason: "Race-safe cancellation" },
+    );
+    expect(cancellationRequested.response.status).toBe(200);
+    expect(cancellationRequested.body).toMatchObject({
+      period: { id: firstId, state: "SCHEDULED", version: 4 },
+    });
+
+    await freshCancellationReauth(superAdminToken, superAdminSecret);
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const [cancelledFirst, approvedSecond] = await Promise.all([
+      command(
+        `/api/v1/admin/accounting-periods/${firstId}/cancel`,
+        superAdminToken,
+        randomUUID(),
+        { expectedVersion: 4, reason: "Race-safe cancellation" },
+      ),
+      command(
+        `/api/v1/admin/accounting-periods/${secondId}/approve`,
+        approverAdminToken,
+        randomUUID(),
+        { expectedVersion: 2 },
+      ),
+    ]);
+    expect(cancelledFirst.response.status).toBe(200);
+    expect([200, 409]).toContain(approvedSecond.response.status);
+    if (approvedSecond.response.status === 409) {
+      expect(approvedSecond.body).toMatchObject({ code: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT" });
+    }
+
+    const effective = await prisma.accountingPeriod.findMany({
+      where: {
+        state: { in: ["SCHEDULED", "OPEN", "CLOSING", "CLOSED"] },
+        effectiveStart: { lt: new Date("2199-06-30T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-06-23T17:00:00.000Z") },
+      },
+      orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    });
+    expect(effective[0]!.effectiveStart).toEqual(new Date("2199-06-23T17:00:00.000Z"));
+    expect(effective.at(-1)!.effectiveEnd).toEqual(new Date("2199-06-30T17:00:00.000Z"));
+    for (let index = 1; index < effective.length; index += 1) {
+      expect(effective[index - 1]!.effectiveEnd.getTime()).toBe(
+        effective[index]!.effectiveStart.getTime(),
+      );
+    }
+  });
+
+  it("serializes SCHEDULED cancellation restoration against Automatic generation", async () => {
+    await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-07-06T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-07-13T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-07-09",
+        endDate: "2199-07-12",
+        reason: "Cancellation generation race fixture",
+      },
+    );
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const approved = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(approved.response.status).toBe(200);
+
+    const deterministicClock: AccountingPeriodTransactionClock = {
+      now: async () => new Date("2199-07-01T00:00:00.000Z"),
+    };
+    const generationService = new AccountingPeriodService(
+      new PrismaAccountingPeriodRepository(prisma, deterministicClock),
+    );
+    const cancellationRequested = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 3, reason: "Restore while scheduler races" },
+    );
+    expect(cancellationRequested.response.status).toBe(200);
+    expect(cancellationRequested.body).toMatchObject({
+      period: { id: periodId, state: "SCHEDULED", version: 4 },
+    });
+    await freshCancellationReauth(approverAdminToken, approverAdminSecret);
+
+    const [cancelResult, generationResult] = await Promise.allSettled([
+      command(
+        `/api/v1/admin/accounting-periods/${periodId}/cancel`,
+        approverAdminToken,
+        randomUUID(),
+        { expectedVersion: 4, reason: "Restore while scheduler races" },
+      ),
+      generationService.ensureAutomaticCoverage(),
+    ]);
+    expect(cancelResult.status).toBe("fulfilled");
+    if (cancelResult.status === "fulfilled") {
+      expect(cancelResult.value.response.status).toBe(200);
+    }
+    expect(["fulfilled", "rejected"]).toContain(generationResult.status);
+
+    const effective = await prisma.accountingPeriod.findMany({
+      where: {
+        state: { in: ["SCHEDULED", "OPEN", "CLOSING", "CLOSED"] },
+        effectiveStart: { lt: new Date("2199-07-13T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-07-06T17:00:00.000Z") },
+      },
+      orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    });
+    expect(effective[0]!.effectiveStart).toEqual(new Date("2199-07-06T17:00:00.000Z"));
+    expect(effective.at(-1)!.effectiveEnd).toEqual(new Date("2199-07-13T17:00:00.000Z"));
+    for (let index = 1; index < effective.length; index += 1) {
+      expect(effective[index - 1]!.effectiveEnd.getTime()).toBe(
+        effective[index]!.effectiveStart.getTime(),
+      );
+    }
+    expect(
+      await prisma.accountingPeriod.count({
+        where: {
+          state: { in: ["SCHEDULED", "OPEN", "CLOSING", "CLOSED"] },
+          effectiveStart: { lt: new Date("2199-07-13T17:00:00.000Z") },
+          effectiveEnd: { gt: new Date("2199-07-06T17:00:00.000Z") },
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it("publishes explicit create-custom/submit/approve/cancel OpenAPI operations and no generic PATCH", () => {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle("test").setVersion("1").addBearerAuth().build(),
@@ -1152,12 +1813,14 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     const createCustom = document.paths["/api/v1/admin/accounting-periods/create-custom"];
     const submit = document.paths["/api/v1/admin/accounting-periods/{id}/submit"];
     const approve = document.paths["/api/v1/admin/accounting-periods/{id}/approve"];
+    const cancel = document.paths["/api/v1/admin/accounting-periods/{id}/cancel"];
 
     expect(collection?.get?.security).toEqual([{ bearer: [] }]);
     expect(detail?.get?.security).toEqual([{ bearer: [] }]);
     expect(createCustom?.post?.security).toEqual([{ bearer: [] }]);
     expect(submit?.post?.security).toEqual([{ bearer: [] }]);
     expect(approve?.post?.security).toEqual([{ bearer: [] }]);
+    expect(cancel?.post?.security).toEqual([{ bearer: [] }]);
     expect(createCustom?.post?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true }),
@@ -1175,10 +1838,18 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
         expect.objectContaining({ name: "id", in: "path", required: true }),
       ]),
     );
+    expect(cancel?.post?.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true }),
+        expect.objectContaining({ name: "id", in: "path", required: true }),
+      ]),
+    );
     expect(createCustom?.post?.responses?.["409"]).toBeDefined();
     expect(submit?.post?.responses?.["409"]).toBeDefined();
     expect(approve?.post?.responses?.["403"]).toBeDefined();
     expect(approve?.post?.responses?.["409"]).toBeDefined();
+    expect(cancel?.post?.responses?.["403"]).toBeDefined();
+    expect(cancel?.post?.responses?.["409"]).toBeDefined();
     expect(collection?.post).toBeUndefined();
     expect(collection?.patch).toBeUndefined();
     expect(detail?.post).toBeUndefined();
@@ -1186,6 +1857,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     expect(createCustom?.patch).toBeUndefined();
     expect(submit?.patch).toBeUndefined();
     expect(approve?.patch).toBeUndefined();
+    expect(cancel?.patch).toBeUndefined();
   });
 
   async function createAdminSession(
@@ -1226,6 +1898,15 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     await adminAuth.reauthenticate(
       context,
       ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
+      generateTotpCode(secret),
+    );
+  }
+
+  async function freshCancellationReauth(accessToken: string, secret: string): Promise<void> {
+    const context = await adminAuth.authenticateAccess(accessToken);
+    await adminAuth.reauthenticate(
+      context,
+      ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
       generateTotpCode(secret),
     );
   }
