@@ -98,6 +98,7 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
         "accounting-period.read",
         "accounting-period.create-custom",
         "accounting-period.submit",
+        "accounting-period.approve",
       ],
     });
 
@@ -125,9 +126,19 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
       generateTotpCode(account.secret),
     );
     expect(evidence.expiresAt.getTime()).toBeGreaterThan(evidence.verifiedAt.getTime());
-    await expect(
-      auth.requireFreshMfa(context, "accounting-period.close"),
-    ).resolves.toBeUndefined();
+    const firstStored = await auth.requireFreshMfa(context, "accounting-period.close");
+    expect(firstStored).toMatchObject({
+      adminUserId: context.adminId,
+      sessionId: context.sessionId,
+      actionClass: "accounting-period.close",
+    });
+    await auth.reauthenticate(
+      context,
+      "accounting-period.close",
+      generateTotpCode(account.secret),
+    );
+    const secondStored = await auth.requireFreshMfa(context, "accounting-period.close");
+    expect(secondStored.id).not.toBe(firstStored.id);
     await expect(
       auth.requireFreshMfa(context, "result.confirm"),
     ).rejects.toThrow("Fresh MFA verification required");

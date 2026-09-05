@@ -16,6 +16,7 @@ import {
   type AdminAuthRepository,
   type AdminCapability,
   type AdminPrincipalRecord,
+  type AdminReauthEvidenceRecord,
   type AdminRole,
 } from "../domain/admin-auth.repository";
 import {
@@ -296,7 +297,7 @@ export class AdminAuthService {
     const expiresAt = new Date(
       verifiedAt.getTime() + getEnvironment().ADMIN_MFA_REAUTH_TTL_SECONDS * 1_000,
     );
-    await this.repository.upsertReauthEvidence({
+    await this.repository.createReauthEvidence({
       adminUserId: context.adminId,
       sessionId: context.sessionId,
       actionClass,
@@ -309,7 +310,7 @@ export class AdminAuthService {
   async requireFreshMfa(
     context: AdminRequestContext,
     actionClass: string,
-  ): Promise<void> {
+  ): Promise<AdminReauthEvidenceRecord> {
     const evidence = await this.repository.findReauthEvidence(
       context.sessionId,
       actionClass,
@@ -321,6 +322,7 @@ export class AdminAuthService {
     ) {
       throw new ForbiddenException("Fresh MFA verification required");
     }
+    return evidence;
   }
 
   private async requireActivePrincipal(id: string): Promise<AdminPrincipalRecord> {

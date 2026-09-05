@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOkResponse,
   ApiOperation,
   ApiProperty,
@@ -92,6 +93,17 @@ class AdminReauthBody {
 
   @ApiProperty({ type: String, pattern: "^[0-9]{6}$", example: "123456" })
   code!: string;
+}
+
+class AdminReauthResponse {
+  @ApiProperty({ type: String })
+  actionClass!: string;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  verifiedAt!: Date;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  expiresAt!: Date;
 }
 
 class AdminAccessTokenResponse {
@@ -231,6 +243,8 @@ export class AdminAuthController {
   @UseGuards(AdminAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Create scoped fresh-MFA evidence for a sensitive action class" })
+  @ApiBody({ type: AdminReauthBody })
+  @ApiOkResponse({ type: AdminReauthResponse })
   reauth(
     @Body() body: AdminReauthBody,
     @Req() request: AdminAuthenticatedRequest,

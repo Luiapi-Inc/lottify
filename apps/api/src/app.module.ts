@@ -6,6 +6,7 @@ import { AdminAccountingPeriodController } from "./admin-accounting-period.contr
 import { AdminAuthController } from "./admin-auth.controller";
 import { AdminAuthGuard } from "./admin-auth.guard";
 import { AdminCapabilityGuard } from "./admin-capability.guard";
+import { AccountingPeriodApprovalService } from "./accounting-period-approval.service";
 import { ApiV1Controller } from "./api-v1.controller";
 import { CorrelationMiddleware } from "./correlation.middleware";
 import { HealthController } from "./health.controller";
@@ -23,7 +24,12 @@ collectDefaultMetrics({ prefix: "lottify_" });
     HealthController,
     MetricsController,
   ],
-  providers: [AdminAuthGuard, AdminCapabilityGuard, HealthService],
+  providers: [
+    AdminAuthGuard,
+    AdminCapabilityGuard,
+    AccountingPeriodApprovalService,
+    HealthService,
+  ],
 })
 export class ApiModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

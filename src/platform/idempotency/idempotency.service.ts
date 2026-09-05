@@ -6,6 +6,7 @@ export type IdempotencyClaim =
   | { kind: "claimed"; recordId: string }
   | {
       kind: "existing";
+      recordId: string;
       status: string;
       fingerprint: string;
       responseCode: number | null;
@@ -45,6 +46,7 @@ export class IdempotencyService {
 
       return {
         kind: "existing",
+        recordId: existing.id,
         status: existing.status,
         fingerprint: existing.fingerprint,
         responseCode: existing.responseCode,

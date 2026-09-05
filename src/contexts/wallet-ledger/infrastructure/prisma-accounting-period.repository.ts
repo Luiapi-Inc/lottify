@@ -26,6 +26,25 @@ import {
 
 type TransactionClient = Prisma.TransactionClient;
 
+export type CustomAccountingPeriodApprovalCandidate = AccountingPeriodRecord & {
+  mode: "CUSTOM";
+  generationKind: "CUSTOM";
+  state: "PENDING_APPROVAL";
+  reason: string;
+  createdByAdminId: string;
+};
+
+export type CustomAccountingPeriodApprovalScheduleResult =
+  | {
+      kind: "elapsed";
+      period: AccountingPeriodRecord;
+    }
+  | {
+      kind: "scheduled";
+      period: AccountingPeriodRecord;
+      replacementPreview: AccountingPeriodReplacementPreview;
+    };
+
 @Injectable()
 export class PrismaAccountingPeriodRepository implements AccountingPeriodRepository {
   constructor(
@@ -163,7 +182,137 @@ export class PrismaAccountingPeriodRepository implements AccountingPeriodReposit
   }
 }
 
-async function buildCustomReplacementPreview(
+export async function getCustomAccountingPeriodApprovalCandidate(
+  tx: TransactionClient,
+  id: string,
+  expectedVersion: number,
+): Promise<CustomAccountingPeriodApprovalCandidate> {
+  const current = await tx.accountingPeriod.findUnique({ where: { id } });
+  if (!current) {
+    throw new AccountingPeriodRuleError(
+      "ACCOUNTING_PERIOD_NOT_FOUND",
+      "Accounting Period not found",
+    );
+  }
+  if (current.version !== expectedVersion) {
+    throw new AccountingPeriodRuleError(
+      "VERSION_CONFLICT",
+      "Accounting Period version is stale",
+      { expectedVersion, currentVersion: current.version },
+    );
+  }
+  if (
+    current.mode !== "CUSTOM" ||
+    current.generationKind !== "CUSTOM" ||
+    current.state !== "PENDING_APPROVAL"
+  ) {
+    throw new AccountingPeriodRuleError(
+      "ACCOUNTING_PERIOD_STATE_CONFLICT",
+      "Accounting Period can be approved only from PENDING_APPROVAL",
+      { state: current.state },
+    );
+  }
+  if (!current.createdByAdminId || !current.reason) {
+    throw new AccountingPeriodRuleError(
+      "ACCOUNTING_PERIOD_STATE_CONFLICT",
+      "Custom Accounting Period approval evidence is incomplete",
+    );
+  }
+  return mapRecord(current) as CustomAccountingPeriodApprovalCandidate;
+}
+
+export async function getAccountingPeriodApprovalAuditSubject(
+  tx: TransactionClient,
+  id: string,
+): Promise<AccountingPeriodRecord | null> {
+  const period = await tx.accountingPeriod.findUnique({ where: { id } });
+  return period ? mapRecord(period) : null;
+}
+
+export async function applyCustomAccountingPeriodApprovalSchedule(
+  tx: TransactionClient,
+  current: CustomAccountingPeriodApprovalCandidate,
+  instant: Date,
+): Promise<CustomAccountingPeriodApprovalScheduleResult> {
+  if (current.effectiveStart.getTime() <= instant.getTime()) {
+    const cancelled = await tx.accountingPeriod.updateMany({
+      where: {
+        id: current.id,
+        version: current.version,
+        state: "PENDING_APPROVAL",
+      },
+      data: { state: "CANCELLED", version: { increment: 1 } },
+    });
+    if (cancelled.count !== 1) {
+      throw new AccountingPeriodRuleError(
+        "VERSION_CONFLICT",
+        "Accounting Period changed while approval was being evaluated",
+      );
+    }
+    const period = await tx.accountingPeriod.findUniqueOrThrow({ where: { id: current.id } });
+    return { kind: "elapsed", period: mapRecord(period) };
+  }
+
+  const replacementPreview = await buildCustomReplacementPreview(
+    tx,
+    current.effectiveStart,
+    current.effectiveEnd,
+    instant,
+  );
+  const persistedIds = replacementPreview.affectedAutomaticPeriods.flatMap((period) =>
+    period.id ? [period.id] : [],
+  );
+  if (persistedIds.length > 0) {
+    const cancelled = await tx.accountingPeriod.updateMany({
+      where: {
+        id: { in: persistedIds },
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        state: "SCHEDULED",
+        financialTransactions: { none: {} },
+      },
+      data: { state: "CANCELLED", version: { increment: 1 } },
+    });
+    if (cancelled.count !== persistedIds.length) {
+      throw new AccountingPeriodRuleError(
+        "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+        "Automatic Accounting Period coverage changed during approval",
+      );
+    }
+  }
+
+  for (const fragment of replacementPreview.residualFragments) {
+    await tx.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "DERIVED_FRAGMENT",
+        effectiveStart: fragment.effectiveStart,
+        effectiveEnd: fragment.effectiveEnd,
+        state: "SCHEDULED",
+      },
+    });
+  }
+
+  const scheduled = await tx.accountingPeriod.updateMany({
+    where: {
+      id: current.id,
+      version: current.version,
+      state: "PENDING_APPROVAL",
+    },
+    data: { state: "SCHEDULED", version: { increment: 1 } },
+  });
+  if (scheduled.count !== 1) {
+    throw new AccountingPeriodRuleError(
+      "VERSION_CONFLICT",
+      "Accounting Period changed while approval was being applied",
+    );
+  }
+
+  const period = await tx.accountingPeriod.findUniqueOrThrow({ where: { id: current.id } });
+  return { kind: "scheduled", period: mapRecord(period), replacementPreview };
+}
+
+export async function buildCustomReplacementPreview(
   tx: TransactionClient,
   effectiveStart: Date,
   effectiveEnd: Date,

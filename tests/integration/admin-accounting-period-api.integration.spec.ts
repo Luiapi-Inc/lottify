@@ -3,11 +3,15 @@ import { Module, type INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AdminAccountingPeriodController } from "../../apps/api/src/admin-accounting-period.controller";
 import { AdminAuthGuard } from "../../apps/api/src/admin-auth.guard";
 import { AdminCapabilityGuard } from "../../apps/api/src/admin-capability.guard";
+import {
+  ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
+  AccountingPeriodApprovalService,
+} from "../../apps/api/src/accounting-period-approval.service";
 import { AdminAuthService } from "../../src/contexts/identity-access/application/admin-auth.service";
 import type { AdminRole } from "../../src/contexts/identity-access/domain/admin-auth.repository";
 import { hashAdminPassword } from "../../src/contexts/identity-access/domain/admin-password";
@@ -45,7 +49,11 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
   let baseUrl: string;
   let auditorToken: string;
   let adminToken: string;
+  let adminSecret: string;
+  let approverAdminToken: string;
+  let approverAdminSecret: string;
   let superAdminToken: string;
+  let superAdminSecret: string;
   let fixturePeriodId: string;
   const adminIds: string[] = [];
 
@@ -64,6 +72,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       ),
     );
     const idempotency = new IdempotencyService(prisma);
+    const approvals = new AccountingPeriodApprovalService(prisma);
     const reflector = new Reflector();
 
     @Module({
@@ -71,6 +80,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       providers: [
         { provide: AccountingPeriodService, useValue: accountingPeriods },
         { provide: AdminAuthService, useValue: adminAuth },
+        { provide: AccountingPeriodApprovalService, useValue: approvals },
         { provide: IdempotencyService, useValue: idempotency },
         { provide: Reflector, useValue: reflector },
         AdminAuthGuard,
@@ -98,11 +108,22 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     });
 
     auditorToken = (await createAdminSession("AUDITOR")).accessToken;
-    adminToken = (await createAdminSession("ADMIN")).accessToken;
-    superAdminToken = (await createAdminSession("SUPER_ADMIN")).accessToken;
+    const adminSession = await createAdminSession("ADMIN");
+    adminToken = adminSession.accessToken;
+    adminSecret = adminSession.secret;
+    const approverSession = await createAdminSession("ADMIN");
+    approverAdminToken = approverSession.accessToken;
+    approverAdminSecret = approverSession.secret;
+    const superAdminSession = await createAdminSession("SUPER_ADMIN");
+    superAdminToken = superAdminSession.accessToken;
+    superAdminSecret = superAdminSession.secret;
   });
 
   afterAll(async () => {
+    await deleteImmutableTestEvidence();
+    await prisma.financialTransaction.deleteMany({
+      where: { operationType: "TEST_ACCOUNTING_PERIOD_APPROVAL_BLOCKER" },
+    });
     if (adminIds.length > 0) {
       await prisma.accountingPeriod.deleteMany({
         where: { createdByAdminId: { in: adminIds } },
@@ -113,6 +134,14 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
         },
       });
     }
+    await prisma.accountingPeriod.deleteMany({
+      where: {
+        effectiveStart: {
+          gte: new Date("2199-02-03T17:00:00.000Z"),
+          lt: new Date("2199-07-01T17:00:00.000Z"),
+        },
+      },
+    });
     await prisma.accountingPeriod.deleteMany({ where: { id: fixturePeriodId } });
     await prisma.adminReauthEvidence.deleteMany({
       where: { adminUser: { email: { startsWith: emailPrefix } } },
@@ -497,7 +526,623 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     }
   });
 
-  it("publishes explicit create-custom/submit OpenAPI operations and no generic PATCH", () => {
+  it("requires fresh re-auth, rejects ADMIN self-approval, and lets a different ADMIN atomically schedule the Custom period", async () => {
+    const automatic = await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-02-03T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-02-10T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-02-06",
+        endDate: "2199-02-09",
+        reason: "Governed partial-week activation",
+      },
+    );
+    expect(created.response.status).toBe(201);
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    const submitted = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    expect(submitted.response.status).toBe(200);
+
+    const requesterRead = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${periodId}`,
+      { headers: authHeaders(adminToken) },
+    );
+    await expect(requesterRead.json()).resolves.toMatchObject({
+      state: "PENDING_APPROVAL",
+      allowedActions: [],
+    });
+
+    const missingReauth = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(missingReauth.response.status).toBe(403);
+    expect(missingReauth.body).toMatchObject({
+      code: "REAUTH_REQUIRED",
+      details: { actionClass: ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS },
+      correlationId: expect.any(String),
+    });
+    const approverId = await adminIdForToken(approverAdminToken);
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: approverId,
+          outcome: "REAUTH_REQUIRED",
+        },
+      }),
+    ).resolves.toMatchObject({ reauthEvidenceId: null });
+
+    await freshApprovalReauth(adminToken, adminSecret);
+    const selfDenied = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(selfDenied.response.status).toBe(403);
+    expect(selfDenied.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN",
+      correlationId: expect.any(String),
+    });
+    const requesterId = await adminIdForToken(adminToken);
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: requesterId,
+          outcome: "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN",
+        },
+      }),
+    ).resolves.toMatchObject({ reauthEvidenceId: expect.any(String) });
+
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const staleApproval = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    expect(staleApproval.response.status).toBe(409);
+    expect(staleApproval.body).toMatchObject({
+      code: "VERSION_CONFLICT",
+      details: { expectedVersion: 1, currentVersion: 2 },
+      correlationId: expect.any(String),
+    });
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: approverId,
+          outcome: "VERSION_CONFLICT",
+        },
+      }),
+    ).resolves.toMatchObject({ reauthEvidenceId: expect.any(String) });
+
+    const approvalKey = randomUUID();
+    const approved = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      approvalKey,
+      { expectedVersion: 2 },
+    );
+    expect(approved.response.status).toBe(200);
+    expect(approved.body).toMatchObject({
+      period: {
+        id: periodId,
+        state: "SCHEDULED",
+        version: 3,
+        allowedActions: [],
+      },
+      replacementPreview: {
+        affectedAutomaticPeriods: [{ id: automatic.id }],
+        residualFragments: [
+          {
+            sourcePeriodId: automatic.id,
+            effectiveStart: "2199-02-03T17:00:00.000Z",
+            effectiveEnd: "2199-02-05T17:00:00.000Z",
+          },
+          {
+            sourcePeriodId: automatic.id,
+            effectiveStart: "2199-02-08T17:00:00.000Z",
+            effectiveEnd: "2199-02-10T17:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: automatic.id } }),
+    ).resolves.toMatchObject({ state: "CANCELLED", version: 2 });
+    const effective = await prisma.accountingPeriod.findMany({
+      where: {
+        state: "SCHEDULED",
+        effectiveStart: { lt: new Date("2199-02-10T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-02-03T17:00:00.000Z") },
+      },
+      orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        mode: true,
+        generationKind: true,
+        effectiveStart: true,
+        effectiveEnd: true,
+      },
+    });
+    expect(effective).toEqual([
+      expect.objectContaining({
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "DERIVED_FRAGMENT",
+        effectiveStart: new Date("2199-02-03T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-02-05T17:00:00.000Z"),
+      }),
+      expect.objectContaining({
+        id: periodId,
+        mode: "CUSTOM",
+        generationKind: "CUSTOM",
+        effectiveStart: new Date("2199-02-05T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-02-08T17:00:00.000Z"),
+      }),
+      expect.objectContaining({
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "DERIVED_FRAGMENT",
+        effectiveStart: new Date("2199-02-08T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-02-10T17:00:00.000Z"),
+      }),
+    ]);
+
+    const evidence = await prisma.adminApprovalEvidence.findUniqueOrThrow({
+      where: {
+        action_resourceId: {
+          action: "ACCOUNTING_PERIOD_CUSTOM_ACTIVATION",
+          resourceId: periodId,
+        },
+      },
+    });
+    expect(evidence).toMatchObject({
+      requesterAdminId: requesterId,
+      approverAdminId: approverId,
+      requestedVersion: 2,
+      policyVersion: "accounting-period-custom-activation-v1",
+      correlationId: expect.any(String),
+    });
+    expect(evidence.payloadHash).toMatch(/^[a-f0-9]{64}$/);
+    const audit = await prisma.auditRecord.findFirstOrThrow({
+      where: { approvalId: evidence.id },
+    });
+    expect(audit).toMatchObject({
+      resourceId: periodId,
+      actorAdminId: approverId,
+      actorRole: "ADMIN",
+      outcome: "APPROVED",
+      correlationId: evidence.correlationId,
+    });
+    await expect(
+      prisma.adminApprovalEvidence.update({
+        where: { id: evidence.id },
+        data: { reason: "must not mutate" },
+      }),
+    ).rejects.toThrow("Immutable Admin evidence cannot be updated or deleted");
+    await expect(
+      prisma.adminApprovalEvidence.delete({ where: { id: evidence.id } }),
+    ).rejects.toThrow("Immutable Admin evidence cannot be updated or deleted");
+    await expect(
+      prisma.auditRecord.delete({ where: { id: audit.id } }),
+    ).rejects.toThrow("Immutable Admin evidence cannot be updated or deleted");
+
+    const replay = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      approvalKey,
+      { expectedVersion: 2 },
+    );
+    expect(replay.response.status).toBe(200);
+    expect(replay.body).toEqual(approved.body);
+    expect(
+      await prisma.adminApprovalEvidence.count({ where: { resourceId: periodId } }),
+    ).toBe(1);
+  });
+
+  it("resumes an approval from an existing IN_PROGRESS idempotency claim and commits the result once", async () => {
+    const automatic = await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-05-05T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-05-12T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-05-08",
+        endDate: "2199-05-10",
+        reason: "Resume approval after claim-only crash window",
+      },
+    );
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+
+    const approverId = await adminIdForToken(approverAdminToken);
+    const approvalKey = randomUUID();
+    const payload = { expectedVersion: 2 };
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify({ id: periodId, ...payload }), "utf8")
+      .digest("hex");
+    const scope = `admin:${approverId}:accounting-period:${periodId}:approve`;
+    await prisma.idempotencyRecord.create({
+      data: {
+        scope,
+        key: approvalKey,
+        fingerprint,
+        status: "IN_PROGRESS",
+        expiresAt: new Date("9999-12-31T23:59:59.999Z"),
+      },
+    });
+
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const approved = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      approvalKey,
+      payload,
+    );
+    expect(approved.response.status).toBe(200);
+    expect(approved.body).toMatchObject({
+      period: { id: periodId, state: "SCHEDULED", version: 3 },
+    });
+    await expect(
+      prisma.idempotencyRecord.findUniqueOrThrow({ where: { scope_key: { scope, key: approvalKey } } }),
+    ).resolves.toMatchObject({ status: "COMPLETED", responseCode: 200 });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: automatic.id } }),
+    ).resolves.toMatchObject({ state: "CANCELLED", version: 2 });
+    expect(
+      await prisma.adminApprovalEvidence.count({ where: { resourceId: periodId } }),
+    ).toBe(1);
+
+    const replay = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      approvalKey,
+      payload,
+    );
+    expect(replay.response.status).toBe(200);
+    expect(replay.body).toEqual(approved.body);
+    expect(
+      await prisma.adminApprovalEvidence.count({ where: { resourceId: periodId } }),
+    ).toBe(1);
+  });
+
+  it("blocks approval when previously eligible Automatic coverage becomes OPEN", async () => {
+    const automatic = await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-05-12T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-05-19T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-05-15",
+        endDate: "2199-05-17",
+        reason: "OPEN coverage must remain authoritative",
+      },
+    );
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await prisma.accountingPeriod.update({
+      where: { id: automatic.id },
+      data: { state: "OPEN" },
+    });
+
+    const approverId = await adminIdForToken(approverAdminToken);
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const rejected = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(rejected.response.status).toBe(409);
+    expect(rejected.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+      details: { conflictingPeriodId: automatic.id, conflictingState: "OPEN" },
+      correlationId: expect.any(String),
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: periodId } }),
+    ).resolves.toMatchObject({ state: "PENDING_APPROVAL", version: 2 });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: automatic.id } }),
+    ).resolves.toMatchObject({ state: "OPEN", version: 1 });
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: approverId,
+          outcome: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+        },
+      }),
+    ).resolves.toMatchObject({ reauthEvidenceId: expect.any(String) });
+  });
+
+  it("blocks approval when previously eligible Automatic coverage gains a Financial Transaction reference", async () => {
+    const automatic = await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-05-19T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-05-26T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-05-22",
+        endDate: "2199-05-24",
+        reason: "Referenced coverage must remain authoritative",
+      },
+    );
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    const postedAt = new Date("2199-05-21T00:00:00.000Z");
+    await prisma.financialTransaction.create({
+      data: {
+        businessTransactionId: randomUUID(),
+        operationType: "TEST_ACCOUNTING_PERIOD_APPROVAL_BLOCKER",
+        correlationId: randomUUID(),
+        idempotencyScope: `test.accounting-period-approval.${periodId}`,
+        idempotencyKey: randomUUID(),
+        fingerprint: "referenced-automatic-period",
+        domainReferences: { accountingPeriodApprovalFixture: periodId },
+        effectiveAt: postedAt,
+        postedAt,
+        accountingPeriodId: automatic.id,
+      },
+    });
+
+    const approverId = await adminIdForToken(approverAdminToken);
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const rejected = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(rejected.response.status).toBe(409);
+    expect(rejected.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+      details: { conflictingPeriodId: automatic.id },
+      correlationId: expect.any(String),
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: periodId } }),
+    ).resolves.toMatchObject({ state: "PENDING_APPROVAL", version: 2 });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: automatic.id } }),
+    ).resolves.toMatchObject({ state: "SCHEDULED", version: 1 });
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({
+        where: {
+          resourceId: periodId,
+          actorAdminId: approverId,
+          outcome: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+        },
+      }),
+    ).resolves.toMatchObject({ reauthEvidenceId: expect.any(String) });
+  });
+
+  it("allows SUPER_ADMIN to self-approve Custom activation while keeping the same invariants", async () => {
+    const automatic = await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-03-03T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-03-10T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const created = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      superAdminToken,
+      randomUUID(),
+      {
+        startDate: "2199-03-04",
+        endDate: "2199-03-11",
+        reason: "SUPER_ADMIN self-approval policy fixture",
+      },
+    );
+    const periodId = (created.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${periodId}/submit`,
+      superAdminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await freshApprovalReauth(superAdminToken, superAdminSecret);
+    const approved = await command(
+      `/api/v1/admin/accounting-periods/${periodId}/approve`,
+      superAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(approved.response.status).toBe(200);
+    expect(approved.body).toMatchObject({
+      period: { id: periodId, state: "SCHEDULED", version: 3 },
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: automatic.id } }),
+    ).resolves.toMatchObject({ state: "CANCELLED" });
+    const superAdminId = await adminIdForToken(superAdminToken);
+    await expect(
+      prisma.adminApprovalEvidence.findFirstOrThrow({ where: { resourceId: periodId } }),
+    ).resolves.toMatchObject({
+      requesterAdminId: superAdminId,
+      approverAdminId: superAdminId,
+    });
+  });
+
+  it("cancels an elapsed never-opened request instead of retroactively activating or shifting it", async () => {
+    const requesterAdminId = await adminIdForToken(adminToken);
+    const late = await prisma.accountingPeriod.create({
+      data: {
+        mode: "CUSTOM",
+        generationKind: "CUSTOM",
+        effectiveStart: new Date("2001-01-01T17:00:00.000Z"),
+        effectiveEnd: new Date("2001-01-02T17:00:00.000Z"),
+        state: "PENDING_APPROVAL",
+        version: 2,
+        reason: "Elapsed approval fixture",
+        createdByAdminId: requesterAdminId,
+      },
+    });
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const rejected = await command(
+      `/api/v1/admin/accounting-periods/${late.id}/approve`,
+      approverAdminToken,
+      randomUUID(),
+      { expectedVersion: 2 },
+    );
+    expect(rejected.response.status).toBe(409);
+    expect(rejected.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_START_ELAPSED",
+      details: { state: "CANCELLED", currentVersion: 3 },
+      correlationId: expect.any(String),
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: late.id } }),
+    ).resolves.toMatchObject({
+      state: "CANCELLED",
+      version: 3,
+      effectiveStart: new Date("2001-01-01T17:00:00.000Z"),
+      effectiveEnd: new Date("2001-01-02T17:00:00.000Z"),
+    });
+    expect(
+      await prisma.adminApprovalEvidence.count({ where: { resourceId: late.id } }),
+    ).toBe(0);
+    await expect(
+      prisma.auditRecord.findFirstOrThrow({ where: { resourceId: late.id } }),
+    ).resolves.toMatchObject({ outcome: "ELAPSED_START" });
+  });
+
+  it("serializes conflicting Custom approvals so only one schedule can commit", async () => {
+    await prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date("2199-03-31T17:00:00.000Z"),
+        effectiveEnd: new Date("2199-04-07T17:00:00.000Z"),
+        state: "SCHEDULED",
+      },
+    });
+    const firstCreated = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      { startDate: "2199-04-02", endDate: "2199-04-06", reason: "Race A" },
+    );
+    const secondCreated = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      superAdminToken,
+      randomUUID(),
+      { startDate: "2199-04-04", endDate: "2199-04-08", reason: "Race B" },
+    );
+    const firstId = (firstCreated.body as { period: { id: string } }).period.id;
+    const secondId = (secondCreated.body as { period: { id: string } }).period.id;
+    await command(
+      `/api/v1/admin/accounting-periods/${firstId}/submit`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await command(
+      `/api/v1/admin/accounting-periods/${secondId}/submit`,
+      superAdminToken,
+      randomUUID(),
+      { expectedVersion: 1 },
+    );
+    await freshApprovalReauth(approverAdminToken, approverAdminSecret);
+    const results = await Promise.all([
+      command(
+        `/api/v1/admin/accounting-periods/${firstId}/approve`,
+        approverAdminToken,
+        randomUUID(),
+        { expectedVersion: 2 },
+      ),
+      command(
+        `/api/v1/admin/accounting-periods/${secondId}/approve`,
+        approverAdminToken,
+        randomUUID(),
+        { expectedVersion: 2 },
+      ),
+    ]);
+    expect(results.map((result) => result.response.status).sort()).toEqual([200, 409]);
+    expect(results.find((result) => result.response.status === 409)?.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT",
+    });
+    expect(
+      await prisma.accountingPeriod.count({
+        where: { id: { in: [firstId, secondId] }, state: "SCHEDULED" },
+      }),
+    ).toBe(1);
+    const effective = await prisma.accountingPeriod.findMany({
+      where: {
+        state: { in: ["SCHEDULED", "OPEN", "CLOSING", "CLOSED"] },
+        effectiveStart: { lt: new Date("2199-04-07T17:00:00.000Z") },
+        effectiveEnd: { gt: new Date("2199-03-31T17:00:00.000Z") },
+      },
+      orderBy: { effectiveStart: "asc" },
+    });
+    for (let index = 1; index < effective.length; index += 1) {
+      expect(effective[index - 1]!.effectiveEnd.getTime()).toBe(
+        effective[index]!.effectiveStart.getTime(),
+      );
+    }
+  });
+
+  it("publishes explicit create-custom/submit/approve OpenAPI operations and no generic PATCH", () => {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle("test").setVersion("1").addBearerAuth().build(),
@@ -506,11 +1151,13 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     const detail = document.paths["/api/v1/admin/accounting-periods/{id}"];
     const createCustom = document.paths["/api/v1/admin/accounting-periods/create-custom"];
     const submit = document.paths["/api/v1/admin/accounting-periods/{id}/submit"];
+    const approve = document.paths["/api/v1/admin/accounting-periods/{id}/approve"];
 
     expect(collection?.get?.security).toEqual([{ bearer: [] }]);
     expect(detail?.get?.security).toEqual([{ bearer: [] }]);
     expect(createCustom?.post?.security).toEqual([{ bearer: [] }]);
     expect(submit?.post?.security).toEqual([{ bearer: [] }]);
+    expect(approve?.post?.security).toEqual([{ bearer: [] }]);
     expect(createCustom?.post?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true }),
@@ -522,17 +1169,28 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
         expect.objectContaining({ name: "id", in: "path", required: true }),
       ]),
     );
+    expect(approve?.post?.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true }),
+        expect.objectContaining({ name: "id", in: "path", required: true }),
+      ]),
+    );
     expect(createCustom?.post?.responses?.["409"]).toBeDefined();
     expect(submit?.post?.responses?.["409"]).toBeDefined();
+    expect(approve?.post?.responses?.["403"]).toBeDefined();
+    expect(approve?.post?.responses?.["409"]).toBeDefined();
     expect(collection?.post).toBeUndefined();
     expect(collection?.patch).toBeUndefined();
     expect(detail?.post).toBeUndefined();
     expect(detail?.patch).toBeUndefined();
     expect(createCustom?.patch).toBeUndefined();
     expect(submit?.patch).toBeUndefined();
+    expect(approve?.patch).toBeUndefined();
   });
 
-  async function createAdminSession(role: AdminRole): Promise<{ id: string; accessToken: string }> {
+  async function createAdminSession(
+    role: AdminRole,
+  ): Promise<{ id: string; accessToken: string; secret: string }> {
     const id = randomUUID();
     const password = "Accounting period integration password 123!";
     const secret = generateTotpSecret();
@@ -560,7 +1218,16 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       "127.0.0.1",
       "admin-accounting-period-api-integration",
     );
-    return { id, accessToken: tokens.accessToken };
+    return { id, accessToken: tokens.accessToken, secret };
+  }
+
+  async function freshApprovalReauth(accessToken: string, secret: string): Promise<void> {
+    const context = await adminAuth.authenticateAccess(accessToken);
+    await adminAuth.reauthenticate(
+      context,
+      ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
+      generateTotpCode(secret),
+    );
   }
 
   function authHeaders(accessToken: string): Record<string, string> {
@@ -583,6 +1250,24 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       body: JSON.stringify(payload),
     });
     return { response, body: await response.json() };
+  }
+
+  async function deleteImmutableTestEvidence(): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      // Test-only cleanup for an ephemeral integration database. Production evidence has no delete path.
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+      await tx.auditRecord.deleteMany({
+        where: { actorAdminId: { in: adminIds } },
+      });
+      await tx.adminApprovalEvidence.deleteMany({
+        where: {
+          OR: [
+            { requesterAdminId: { in: adminIds } },
+            { approverAdminId: { in: adminIds } },
+          ],
+        },
+      });
+    });
   }
 
   async function effectiveCoverageSnapshot() {

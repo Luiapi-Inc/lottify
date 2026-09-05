@@ -5,6 +5,7 @@ export const ADMIN_CAPABILITIES = [
   "accounting-period.read",
   "accounting-period.create-custom",
   "accounting-period.submit",
+  "accounting-period.approve",
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 
@@ -36,12 +37,15 @@ export interface AdminAuthSessionRecord {
 }
 
 export interface AdminReauthEvidenceRecord {
+  id: string;
   adminUserId: string;
   sessionId: string;
   actionClass: string;
   verifiedAt: Date;
   expiresAt: Date;
 }
+
+export type AdminReauthEvidenceCreateInput = Omit<AdminReauthEvidenceRecord, "id">;
 
 export interface AdminAuthRepository {
   findPrincipalByEmail(email: string): Promise<AdminPrincipalRecord | null>;
@@ -75,7 +79,9 @@ export interface AdminAuthRepository {
   }): Promise<AdminAuthSessionRecord | null>;
   revokeFamily(familyId: string): Promise<void>;
   revokeAllForAdmin(adminId: string): Promise<void>;
-  upsertReauthEvidence(input: AdminReauthEvidenceRecord): Promise<AdminReauthEvidenceRecord>;
+  createReauthEvidence(
+    input: AdminReauthEvidenceCreateInput,
+  ): Promise<AdminReauthEvidenceRecord>;
   findReauthEvidence(
     sessionId: string,
     actionClass: string,

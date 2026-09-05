@@ -9,6 +9,9 @@ type ApiError = components["schemas"]["ApiErrorResponse"];
 type AdminMe = components["schemas"]["AdminMeResponse"];
 type CreateCustomBody = components["schemas"]["CreateCustomAccountingPeriodBody"];
 type SubmitBody = components["schemas"]["SubmitAccountingPeriodBody"];
+type ApproveBody = components["schemas"]["ApproveAccountingPeriodBody"];
+
+const ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS = "accounting-period.approve";
 
 const navigation = [
   "ภาพรวม",
@@ -33,7 +36,11 @@ export default function AccountingPeriodWorkspace() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState<"session" | "create" | "submit" | "refresh" | null>(
+  const [approvalPeriodId, setApprovalPeriodId] = useState<string | null>(null);
+  const [approvalCode, setApprovalCode] = useState("");
+  const [busy, setBusy] = useState<
+    "session" | "create" | "submit" | "approve" | "refresh" | null
+  >(
     "session",
   );
   const [error, setError] = useState<ApiError | null>(null);
@@ -165,6 +172,58 @@ export default function AccountingPeriodWorkspace() {
     }
   }
 
+  async function approvePending(period: AccountingPeriod) {
+    if (!/^\d{6}$/.test(approvalCode)) {
+      setError({
+        code: "VALIDATION_ERROR",
+        message: "กรอกรหัส MFA 6 หลักเพื่อยืนยันการอนุมัติ",
+        details: { field: "code" },
+        correlationId: "client-validation",
+      });
+      return;
+    }
+    const payload: ApproveBody = { expectedVersion: period.version };
+    setBusy("approve");
+    setError(null);
+    try {
+      const reauth = await authorizedFetch("/api/v1/admin/auth/reauth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          actionClass: ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
+          code: approvalCode,
+        }),
+      });
+      if (!reauth.ok) throw await readApiError(reauth);
+
+      const response = await authorizedFetch(
+        `/api/v1/admin/accounting-periods/${encodeURIComponent(period.id)}/approve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "Idempotency-Key": idempotencyKey(
+              commandKeys.current,
+              `approve:${period.id}`,
+              payload,
+            ),
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!response.ok) throw await readApiError(response);
+      const result = (await response.json()) as AccountingPeriodCommand;
+      if (draft?.period.id === period.id) setDraft(result);
+      setApprovalPeriodId(null);
+      setApprovalCode("");
+      await loadPeriods();
+    } catch (caught) {
+      setError(normalizeError(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function beginAnotherDraft() {
     setDraft(null);
     setStartDate("");
@@ -285,6 +344,107 @@ export default function AccountingPeriodWorkspace() {
           </div>
         </section>
 
+        <section className="approval-section" aria-labelledby="approval-title">
+          <div className="section-heading">
+            <div>
+              <h2 id="approval-title">คำขอรออนุมัติ</h2>
+              <p>ตรวจสอบช่วงเวลา เหตุผล ผู้ร้องขอ และ version ปัจจุบันก่อนยืนยันด้วย MFA</p>
+            </div>
+          </div>
+          <div className="approval-list">
+            {periods.filter((period) => period.state === "PENDING_APPROVAL").length === 0 ? (
+              <p className="approval-empty">ไม่มี Custom Accounting Period ที่รออนุมัติ</p>
+            ) : (
+              periods
+                .filter((period) => period.state === "PENDING_APPROVAL")
+                .map((period) => {
+                  const canApprove = period.allowedActions.includes("approve");
+                  const selected = approvalPeriodId === period.id;
+                  return (
+                    <article className="approval-item" key={period.id}>
+                      <div className="approval-summary">
+                        <div>
+                          <span className="state state-pending_approval">PENDING_APPROVAL</span>
+                          <h3>
+                            {formatBangkok(period.effectiveStart)} → {formatBangkok(period.effectiveEnd)}
+                          </h3>
+                        </div>
+                        <span className="version">Version {period.version}</span>
+                      </div>
+                      <dl className="approval-evidence">
+                        <div>
+                          <dt>เหตุผล</dt>
+                          <dd>{period.reason}</dd>
+                        </div>
+                        <div>
+                          <dt>Requester</dt>
+                          <dd>{period.createdByAdminId ? shortId(period.createdByAdminId) : "ไม่ระบุ"}</dd>
+                        </div>
+                      </dl>
+                      {canApprove ? (
+                        selected ? (
+                          <div className="approval-confirm">
+                            <label>
+                              <span>รหัส MFA 6 หลัก</span>
+                              <input
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                pattern="[0-9]{6}"
+                                maxLength={6}
+                                value={approvalCode}
+                                onChange={(event) =>
+                                  setApprovalCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                                }
+                                disabled={busy !== null}
+                              />
+                            </label>
+                            <div className="approval-actions">
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                disabled={busy !== null}
+                                onClick={() => {
+                                  setApprovalPeriodId(null);
+                                  setApprovalCode("");
+                                }}
+                              >
+                                ยกเลิก
+                              </button>
+                              <button
+                                type="button"
+                                className="primary-button"
+                                disabled={busy !== null || approvalCode.length !== 6}
+                                onClick={() => void approvePending(period)}
+                              >
+                                {busy === "approve" ? "กำลังอนุมัติ…" : "ยืนยันและอนุมัติ"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="primary-button approval-button"
+                            disabled={busy !== null}
+                            onClick={() => {
+                              setApprovalPeriodId(period.id);
+                              setApprovalCode("");
+                            }}
+                          >
+                            ตรวจสอบและอนุมัติ
+                          </button>
+                        )
+                      ) : (
+                        <p className="permission-note">
+                          บัญชีนี้ไม่มีสิทธิ์อนุมัติคำขอนี้ หรือเป็น ADMIN ผู้ร้องขอเอง
+                        </p>
+                      )}
+                    </article>
+                  );
+                })
+            )}
+          </div>
+        </section>
+
         <section className="custom-section" aria-labelledby="custom-title">
           <div className="section-heading">
             <div>
@@ -372,7 +532,7 @@ function Preview({
   onSubmit,
 }: {
   command: AccountingPeriodCommand;
-  busy: "session" | "create" | "submit" | "refresh" | null;
+  busy: "session" | "create" | "submit" | "approve" | "refresh" | null;
   onSubmit: () => void;
 }) {
   const { period, replacementPreview } = command;

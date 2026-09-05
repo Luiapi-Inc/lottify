@@ -3,6 +3,7 @@ import {
   AccountingPeriodRuleError,
   ACCOUNTING_TIME_ZONE,
   normalizeBangkokCalendarDate,
+  type AccountingPeriodAllowedAction,
   type AccountingPeriodCommandResult,
   type AccountingPeriodView,
 } from "../domain/accounting-period";
@@ -11,6 +12,13 @@ import {
   type AccountingPeriodRecord,
   type AccountingPeriodRepository,
 } from "../domain/accounting-period.repository";
+
+interface AccountingPeriodViewOptions {
+  canSubmit?: boolean;
+  canApprove?: boolean;
+  actorAdminId?: string;
+  canSelfApprove?: boolean;
+}
 
 @Injectable()
 export class AccountingPeriodService {
@@ -21,16 +29,16 @@ export class AccountingPeriodService {
 
   async getById(
     id: string,
-    options: { canSubmit?: boolean } = {},
+    options: AccountingPeriodViewOptions = {},
   ): Promise<AccountingPeriodView> {
     const period = await this.repository.getById(id);
     if (!period) throw new NotFoundException("Accounting Period not found");
-    return toView(period, options.canSubmit === true);
+    return toView(period, options);
   }
 
-  async list(options: { canSubmit?: boolean } = {}): Promise<readonly AccountingPeriodView[]> {
+  async list(options: AccountingPeriodViewOptions = {}): Promise<readonly AccountingPeriodView[]> {
     const periods = await this.repository.list();
-    return periods.map((period) => toView(period, options.canSubmit === true));
+    return periods.map((period) => toView(period, options));
   }
 
   async ensureAutomaticCoverage(): Promise<void> {
@@ -69,7 +77,7 @@ export class AccountingPeriodService {
       createdByAdminId: input.createdByAdminId,
     });
     return {
-      period: toView(result.period, true),
+      period: toView(result.period, { canSubmit: true }),
       replacementPreview: result.replacementPreview,
     };
   }
@@ -87,17 +95,31 @@ export class AccountingPeriodService {
     }
     const result = await this.repository.submitCustom(input);
     return {
-      period: toView(result.period, true),
+      period: toView(result.period, { canSubmit: true }),
       replacementPreview: result.replacementPreview,
     };
   }
 }
 
-function toView(period: AccountingPeriodRecord, canSubmit: boolean): AccountingPeriodView {
+function toView(
+  period: AccountingPeriodRecord,
+  options: AccountingPeriodViewOptions,
+): AccountingPeriodView {
+  const allowedActions: AccountingPeriodAllowedAction[] = [];
+  if (options.canSubmit === true && period.state === "DRAFT") {
+    allowedActions.push("submit");
+  }
+  if (
+    options.canApprove === true &&
+    period.state === "PENDING_APPROVAL" &&
+    (options.canSelfApprove === true || period.createdByAdminId !== options.actorAdminId)
+  ) {
+    allowedActions.push("approve");
+  }
   return {
     ...period,
     accountingTimezone: ACCOUNTING_TIME_ZONE,
-    allowedActions: canSubmit && period.state === "DRAFT" ? ["submit"] : [],
+    allowedActions,
   };
 }
 

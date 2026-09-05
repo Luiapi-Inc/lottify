@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
 import type {
+  AdminReauthEvidenceCreateInput,
   AdminAuthRepository,
   AdminAuthSessionRecord,
   AdminPrincipalRecord,
@@ -135,31 +136,19 @@ export class PrismaAdminAuthRepository implements AdminAuthRepository {
     });
   }
 
-  upsertReauthEvidence(
-    input: AdminReauthEvidenceRecord,
+  createReauthEvidence(
+    input: AdminReauthEvidenceCreateInput,
   ): Promise<AdminReauthEvidenceRecord> {
-    return this.prisma.adminReauthEvidence.upsert({
-      where: {
-        sessionId_actionClass: {
-          sessionId: input.sessionId,
-          actionClass: input.actionClass,
-        },
-      },
-      create: input,
-      update: {
-        adminUserId: input.adminUserId,
-        verifiedAt: input.verifiedAt,
-        expiresAt: input.expiresAt,
-      },
-    });
+    return this.prisma.adminReauthEvidence.create({ data: input });
   }
 
   findReauthEvidence(
     sessionId: string,
     actionClass: string,
   ): Promise<AdminReauthEvidenceRecord | null> {
-    return this.prisma.adminReauthEvidence.findUnique({
-      where: { sessionId_actionClass: { sessionId, actionClass } },
+    return this.prisma.adminReauthEvidence.findFirst({
+      where: { sessionId, actionClass },
+      orderBy: [{ verifiedAt: "desc" }, { id: "desc" }],
     });
   }
 }

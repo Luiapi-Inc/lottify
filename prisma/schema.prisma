@@ -39,6 +39,9 @@ model AdminUser {
   sessions            AdminAuthSession[]
   reauthEvidence      AdminReauthEvidence[]
   accountingPeriodsCreated AccountingPeriod[] @relation("AccountingPeriodCreatedBy")
+  approvalRequests    AdminApprovalEvidence[] @relation("AdminApprovalRequester")
+  approvalDecisions   AdminApprovalEvidence[] @relation("AdminApprovalApprover")
+  auditRecords        AuditRecord[]
 
   @@index([status, role])
   @@map("admin_users")
@@ -59,6 +62,7 @@ model AdminAuthSession {
   lastUsedAt       DateTime?             @map("last_used_at")
   adminUser        AdminUser             @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   reauthEvidence   AdminReauthEvidence[]
+  auditRecords     AuditRecord[]
 
   @@index([adminUserId, createdAt])
   @@index([familyId])
@@ -77,10 +81,66 @@ model AdminReauthEvidence {
   updatedAt   DateTime         @updatedAt @map("updated_at")
   adminUser   AdminUser        @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   session     AdminAuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  approvals   AdminApprovalEvidence[]
+  auditRecords AuditRecord[]
 
-  @@unique([sessionId, actionClass])
+  @@index([sessionId, actionClass, expiresAt])
   @@index([adminUserId, expiresAt])
   @@map("admin_reauth_evidence")
+}
+
+model AdminApprovalEvidence {
+  id                String              @id @default(uuid()) @db.Uuid
+  action            String
+  resourceType      String              @map("resource_type")
+  resourceId        String              @map("resource_id") @db.Uuid
+  requesterAdminId  String              @map("requester_admin_id") @db.Uuid
+  approverAdminId   String              @map("approver_admin_id") @db.Uuid
+  requestedVersion  Int                 @map("requested_version")
+  payloadHash        String              @map("payload_hash")
+  reason             String
+  policyVersion      String              @map("policy_version")
+  reauthEvidenceId  String              @map("reauth_evidence_id") @db.Uuid
+  correlationId     String              @map("correlation_id")
+  approvedAt        DateTime            @map("approved_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  requester         AdminUser           @relation("AdminApprovalRequester", fields: [requesterAdminId], references: [id], onDelete: Restrict)
+  approver          AdminUser           @relation("AdminApprovalApprover", fields: [approverAdminId], references: [id], onDelete: Restrict)
+  reauthEvidence    AdminReauthEvidence @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
+  auditRecords      AuditRecord[]
+
+  @@unique([action, resourceId])
+  @@index([requesterAdminId, createdAt])
+  @@index([approverAdminId, createdAt])
+  @@index([correlationId])
+  @@map("admin_approval_evidence")
+}
+
+model AuditRecord {
+  id               String                 @id @default(uuid()) @db.Uuid
+  actorAdminId     String                 @map("actor_admin_id") @db.Uuid
+  actorRole        String                 @map("actor_role")
+  sessionId        String                 @map("session_id") @db.Uuid
+  action           String
+  resourceType     String                 @map("resource_type")
+  resourceId       String                 @map("resource_id") @db.Uuid
+  payloadHash      String                 @map("payload_hash")
+  reason           String
+  reauthEvidenceId String?                @map("reauth_evidence_id") @db.Uuid
+  approvalId       String?                @map("approval_id") @db.Uuid
+  correlationId    String                 @map("correlation_id")
+  outcome          String
+  createdAt        DateTime               @default(now()) @map("created_at")
+  actor            AdminUser              @relation(fields: [actorAdminId], references: [id], onDelete: Restrict)
+  session          AdminAuthSession        @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  reauthEvidence   AdminReauthEvidence?    @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
+  approval         AdminApprovalEvidence? @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+
+  @@index([resourceType, resourceId, createdAt])
+  @@index([actorAdminId, createdAt])
+  @@index([correlationId])
+  @@index([approvalId])
+  @@map("audit_records")
 }
 
 model IdempotencyRecord {
