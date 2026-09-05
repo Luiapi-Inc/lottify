@@ -4,7 +4,17 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm build:admin
+RUN APP_ENV=test \
+    DATABASE_URL=postgresql://localhost/lottify \
+    REDIS_URL=redis://localhost:6379 \
+    JWT_ACCESS_SECRET=foundation-container-build-secret \
+    pnpm prisma:generate && \
+    APP_ENV=test \
+    DATABASE_URL=postgresql://localhost/lottify \
+    REDIS_URL=redis://localhost:6379 \
+    JWT_ACCESS_SECRET=foundation-container-build-secret \
+    pnpm openapi:generate && \
+    pnpm build:admin
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:774b7d020b24214835769e24c3544835526cd0288f0b094eae48e8b2c2429a79 AS runtime
 ENV NODE_ENV=production
