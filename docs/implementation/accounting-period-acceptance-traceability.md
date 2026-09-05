@@ -1,0 +1,24 @@
+# Accounting Period final acceptance traceability
+
+Source of truth: GitHub Issue #10, parent Issue #1, Wayfinder Tickets 04, 10, 14, 16, and 19.
+This record maps approved Accounting Period acceptance criteria to durable implementation and test
+evidence; it does not redefine those requirements.
+
+## Traceability matrix
+
+| Requirement / decision | Acceptance criterion | Test scenario | Level | Durable evidence |
+| --- | --- | --- | --- | --- |
+| Reporting uses authoritative period identity persisted by Wallet & Ledger | Financial Transactions are grouped by stored `AccountingPeriodId`; period attributes are joined without independently deriving boundaries | Build accounting-period financial report from persisted transactions and compare report groups to each transaction's stored period relation | PostgreSQL Integration | `src/contexts/reporting/accounting-period-financial-report.service.ts`; `tests/integration/accounting-period-reporting.integration.spec.ts`; CI `test:accounting-period-reporting` |
+| `postedAt` is accounting assignment authority; `effectiveAt` is economic context only | An `effectiveAt` in a different historical window does not reclassify the transaction | Persist with historical `effectiveAt`, assert stored/report period follows server posting instant | PostgreSQL Integration | `tests/integration/accounting-period-reporting.integration.spec.ts`; existing `financial-core.integration.spec.ts` accounting-period assignment scenarios |
+| API resource/command contract from Ticket 10 | Read resources and explicit create-custom/submit/approve/cancel/close commands expose auth, `allowedActions`, version/`expectedVersion`, idempotency, common errors, and no generic status/boundary PATCH | Exercise auth/role/error/idempotency/version behavior and inspect generated OpenAPI operations | Integration + Contract + generated-client build | `tests/integration/admin-accounting-period-api.integration.spec.ts`; `apps/api/openapi/openapi.json`; `packages/contracts/src/generated/api.ts`; CI `openapi:generate`, `typecheck`, `build` |
+| Serialized calendar and financial boundary controls | Exact boundary, posting/generation race, conflicting Custom action, cancellation restoration, close race, replay, rollback, and recovery are deterministic | Run fixed-clock PostgreSQL scenarios for posting, generation, Custom approval/cancel/close, atomic consume rollback, and replay | PostgreSQL Integration | `tests/integration/financial-core.integration.spec.ts`; `tests/integration/admin-accounting-period-api.integration.spec.ts`; CI `pnpm test` |
+| Migration sequence is `expand -> backfill -> verify -> contract` | Historical assignment uses `postedAt`, money/postings remain unchanged, verification blocks bad linkage, final linkage is mandatory, current + next coverage exists | Dedicated backfill and contract migration suites | Migration / PostgreSQL Integration | `tests/integration/accounting-period-backfill.integration.spec.ts`; `tests/integration/accounting-period-contract.integration.spec.ts`; `docs/implementation/accounting-period-contract-rollout.md`; CI dedicated migration test steps |
+| Ticket 08/Accounting Period authorization decisions | AUDITOR is read-only; ADMIN Custom self-approval is denied; different ADMIN approval succeeds; SUPER_ADMIN Custom self-approval is allowed; close remains maker-checker for all roles | Positive and negative Admin API authorization/re-auth scenarios | Security / PostgreSQL Integration | `tests/integration/admin-accounting-period-api.integration.spec.ts` |
+| CLOSED is terminal and corrections preserve lineage | CLOSED history remains unchanged; later correction is a new current-OPEN-period transaction linked to the original transaction and original period | Close/finality tests plus reporting integration that posts correction after original period is CLOSED and exposes both period identities | PostgreSQL Integration | `tests/integration/admin-accounting-period-api.integration.spec.ts`; `tests/integration/accounting-period-reporting.integration.spec.ts`; `src/contexts/reporting/accounting-period-financial-report.service.ts` |
+| Ticket 16 completeness gate | Accounting Period cannot be called complete while a required acceptance/evidence cell is missing or failed | Reconcile every Issue #10 criterion against this matrix and an immutable CI run before closing the issue | Release evidence review | This document plus the final Issue #10 acceptance comment containing commit SHA, CI run ID/result, and execution timestamp |
+
+## Completion rule
+
+Issue #10 remains open until every matrix row has passing evidence against the same implementation
+candidate. A green build or unit suite alone is insufficient. Production deployment is not part of
+this acceptance work package and remains subject to the separate release GO/NO-GO process.

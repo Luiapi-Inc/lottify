@@ -1,4 +1,5 @@
 import type {
+  AccountingPeriodCloseEvidenceView,
   AccountingPeriodGenerationKind,
   AccountingPeriodMode,
   AccountingPeriodReplacementPreview,
@@ -15,6 +16,7 @@ export interface AccountingPeriodRecord {
   version: number;
   reason: string | null;
   createdByAdminId: string | null;
+  activationApprovalId: string | null;
   cancellationRequestedByAdminId: string | null;
   cancellationReason: string | null;
   cancellationRequestedAt: Date | null;
@@ -28,8 +30,28 @@ export interface AccountingPeriodRecord {
     discrepancyReference: string;
     exceptionReference: string;
   }[] | null;
+  closeEvidence: AccountingPeriodCloseEvidenceView | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface AccountingPeriodListCursor {
+  effectiveStart: Date;
+  id: string;
+}
+
+export interface AccountingPeriodListQuery {
+  limit: number;
+  cursor?: AccountingPeriodListCursor;
+  state?: AccountingPeriodState;
+  mode?: AccountingPeriodMode;
+  effectiveFrom?: Date;
+  effectiveTo?: Date;
+}
+
+export interface AccountingPeriodListResult {
+  items: readonly AccountingPeriodRecord[];
+  nextCursor: AccountingPeriodListCursor | null;
 }
 
 export interface AccountingPeriodCustomCommandRecord {
@@ -39,7 +61,7 @@ export interface AccountingPeriodCustomCommandRecord {
 
 export interface AccountingPeriodRepository {
   getById(id: string): Promise<AccountingPeriodRecord | null>;
-  list(): Promise<readonly AccountingPeriodRecord[]>;
+  list(query: AccountingPeriodListQuery): Promise<AccountingPeriodListResult>;
   ensureAutomaticCoverage(): Promise<void>;
   createCustom(input: {
     effectiveStart: Date;

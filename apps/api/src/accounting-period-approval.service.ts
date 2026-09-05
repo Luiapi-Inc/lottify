@@ -137,6 +137,10 @@ export class AccountingPeriodApprovalService {
             approvedAt: instant,
           },
         });
+        await tx.accountingPeriod.update({
+          where: { id: candidate.id },
+          data: { activationApprovalId: approval.id },
+        });
         await createAuditRecord(tx, {
           actor: input.actor,
           resourceId: candidate.id,
@@ -149,7 +153,10 @@ export class AccountingPeriodApprovalService {
         });
 
         const body = serializeJson(
-          accountingPeriodCommandResponse(schedule.period, schedule.replacementPreview),
+          accountingPeriodCommandResponse(
+            { ...schedule.period, activationApprovalId: approval.id },
+            schedule.replacementPreview,
+          ),
         );
         await completeIdempotencyRecord(
           tx,
@@ -561,7 +568,10 @@ export class AccountingPeriodApprovalService {
             correlationId: input.correlationId,
             outcome: "REQUESTED",
           });
-          const period = await tx.accountingPeriod.findUniqueOrThrow({ where: { id: candidate.id } });
+          const period = await tx.accountingPeriod.findUniqueOrThrow({
+            where: { id: candidate.id },
+            include: { closeEvidence: true },
+          });
           const body = serializeJson(accountingPeriodCloseResponse(period));
           await completeIdempotencyRecord(
             tx,
@@ -676,7 +686,10 @@ export class AccountingPeriodApprovalService {
             "Accounting Period changed while close approval was being applied",
           );
         }
-        const period = await tx.accountingPeriod.findUniqueOrThrow({ where: { id: candidate.id } });
+        const period = await tx.accountingPeriod.findUniqueOrThrow({
+          where: { id: candidate.id },
+          include: { closeEvidence: true },
+        });
         const body = serializeJson(accountingPeriodCloseResponse(period));
         await completeIdempotencyRecord(
           tx,
@@ -1226,6 +1239,7 @@ function accountingPeriodCloseResponse(period: {
   version: number;
   reason: string | null;
   createdByAdminId: string | null;
+  activationApprovalId: string | null;
   cancellationRequestedByAdminId: string | null;
   cancellationReason: string | null;
   cancellationRequestedAt: Date | null;
@@ -1236,12 +1250,23 @@ function accountingPeriodCloseResponse(period: {
   closeCheckpointReferences: Prisma.JsonValue | null;
   closeBlockingDiscrepancyReferences: Prisma.JsonValue | null;
   closeAcceptedExceptionReferences: Prisma.JsonValue | null;
+  closeEvidence: {
+    closedAt: Date;
+    approvalId: string;
+    reconciliationReferences: Prisma.JsonValue;
+    checkpointReferences: Prisma.JsonValue;
+    blockingDiscrepancyReferences: Prisma.JsonValue;
+    acceptedExceptionReferences: Prisma.JsonValue;
+    actorAdminId: string;
+    auditRecordId: string;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
+  const { closeEvidence, ...periodFields } = period;
   return {
     period: {
-      ...period,
+      ...periodFields,
       closeReconciliationReferences:
         period.closeReconciliationReferences === null
           ? null
@@ -1261,6 +1286,30 @@ function accountingPeriodCloseResponse(period: {
         period.closeAcceptedExceptionReferences === null
           ? null
           : jsonAcceptedExceptions(period.closeAcceptedExceptionReferences),
+      closeEvidence:
+        closeEvidence === null
+          ? null
+          : {
+              closedAt: closeEvidence.closedAt,
+              approvalId: closeEvidence.approvalId,
+              reconciliationReferences: jsonStringArray(
+                closeEvidence.reconciliationReferences,
+                "closeEvidence.reconciliationReferences",
+              ),
+              checkpointReferences: jsonStringArray(
+                closeEvidence.checkpointReferences,
+                "closeEvidence.checkpointReferences",
+              ),
+              blockingDiscrepancyReferences: jsonStringArray(
+                closeEvidence.blockingDiscrepancyReferences,
+                "closeEvidence.blockingDiscrepancyReferences",
+              ),
+              acceptedExceptionReferences: jsonAcceptedExceptions(
+                closeEvidence.acceptedExceptionReferences,
+              ),
+              actorAdminId: closeEvidence.actorAdminId,
+              auditRecordId: closeEvidence.auditRecordId,
+            },
       accountingTimezone: ACCOUNTING_TIME_ZONE,
       allowedActions: [],
     },

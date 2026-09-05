@@ -13,6 +13,8 @@ import {
 } from "../domain/accounting-period";
 import type {
   AccountingPeriodCustomCommandRecord,
+  AccountingPeriodListQuery,
+  AccountingPeriodListResult,
   AccountingPeriodRecord,
   AccountingPeriodRepository,
 } from "../domain/accounting-period.repository";
@@ -65,15 +67,44 @@ export class PrismaAccountingPeriodRepository implements AccountingPeriodReposit
   async getById(id: string): Promise<AccountingPeriodRecord | null> {
     const period = await this.prisma.accountingPeriod.findUnique({
       where: { id },
+      include: { closeEvidence: true },
     });
     return period ? mapRecord(period) : null;
   }
 
-  async list(): Promise<readonly AccountingPeriodRecord[]> {
+  async list(query: AccountingPeriodListQuery): Promise<AccountingPeriodListResult> {
+    const filters: Prisma.AccountingPeriodWhereInput[] = [];
+    if (query.state) filters.push({ state: query.state });
+    if (query.mode) filters.push({ mode: query.mode });
+    if (query.effectiveFrom) filters.push({ effectiveEnd: { gt: query.effectiveFrom } });
+    if (query.effectiveTo) filters.push({ effectiveStart: { lt: query.effectiveTo } });
+    if (query.cursor) {
+      filters.push({
+        OR: [
+          { effectiveStart: { lt: query.cursor.effectiveStart } },
+          {
+            effectiveStart: query.cursor.effectiveStart,
+            id: { lt: query.cursor.id },
+          },
+        ],
+      });
+    }
     const periods = await this.prisma.accountingPeriod.findMany({
+      where: filters.length === 0 ? undefined : { AND: filters },
       orderBy: [{ effectiveStart: "desc" }, { id: "desc" }],
+      take: query.limit + 1,
+      include: { closeEvidence: true },
     });
-    return periods.map(mapRecord);
+    const hasMore = periods.length > query.limit;
+    const page = hasMore ? periods.slice(0, query.limit) : periods;
+    const last = page.at(-1);
+    return {
+      items: page.map(mapRecord),
+      nextCursor:
+        hasMore && last
+          ? { effectiveStart: last.effectiveStart, id: last.id }
+          : null,
+    };
   }
 
   async ensureAutomaticCoverage(): Promise<void> {
@@ -719,6 +750,7 @@ function mapRecord(period: {
   version: number;
   reason: string | null;
   createdByAdminId: string | null;
+  activationApprovalId?: string | null;
   cancellationRequestedByAdminId: string | null;
   cancellationReason: string | null;
   cancellationRequestedAt: Date | null;
@@ -729,6 +761,16 @@ function mapRecord(period: {
   closeCheckpointReferences: Prisma.JsonValue | null;
   closeBlockingDiscrepancyReferences: Prisma.JsonValue | null;
   closeAcceptedExceptionReferences: Prisma.JsonValue | null;
+  closeEvidence?: {
+    closedAt: Date;
+    approvalId: string;
+    reconciliationReferences: Prisma.JsonValue;
+    checkpointReferences: Prisma.JsonValue;
+    blockingDiscrepancyReferences: Prisma.JsonValue;
+    acceptedExceptionReferences: Prisma.JsonValue;
+    actorAdminId: string;
+    auditRecordId: string;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }): AccountingPeriodRecord {
@@ -742,6 +784,7 @@ function mapRecord(period: {
     version: period.version,
     reason: period.reason,
     createdByAdminId: period.createdByAdminId,
+    activationApprovalId: period.activationApprovalId ?? null,
     cancellationRequestedByAdminId: period.cancellationRequestedByAdminId,
     cancellationReason: period.cancellationReason,
     cancellationRequestedAt: period.cancellationRequestedAt,
@@ -756,6 +799,22 @@ function mapRecord(period: {
     closeAcceptedExceptionReferences: acceptedExceptionsFromJson(
       period.closeAcceptedExceptionReferences,
     ),
+    closeEvidence: period.closeEvidence
+      ? {
+          closedAt: period.closeEvidence.closedAt,
+          approvalId: period.closeEvidence.approvalId,
+          reconciliationReferences:
+            stringArrayFromJson(period.closeEvidence.reconciliationReferences) ?? [],
+          checkpointReferences:
+            stringArrayFromJson(period.closeEvidence.checkpointReferences) ?? [],
+          blockingDiscrepancyReferences:
+            stringArrayFromJson(period.closeEvidence.blockingDiscrepancyReferences) ?? [],
+          acceptedExceptionReferences:
+            acceptedExceptionsFromJson(period.closeEvidence.acceptedExceptionReferences) ?? [],
+          actorAdminId: period.closeEvidence.actorAdminId,
+          auditRecordId: period.closeEvidence.auditRecordId,
+        }
+      : null,
     createdAt: period.createdAt,
     updatedAt: period.updatedAt,
   };

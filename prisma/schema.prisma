@@ -112,6 +112,7 @@ model AdminApprovalEvidence {
   reauthEvidence    AdminReauthEvidence @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
   auditRecords      AuditRecord[]
   accountingPeriodCloseEvidence AccountingPeriodCloseEvidence?
+  activatedAccountingPeriod AccountingPeriod? @relation("AccountingPeriodActivationApproval")
 
   @@unique([action, resourceId])
   @@index([requesterAdminId, createdAt])
@@ -241,6 +242,7 @@ model AccountingPeriod {
   version               Int                    @default(1)
   reason                String?
   createdByAdminId      String?                @map("created_by_admin_id") @db.Uuid
+  activationApprovalId  String?                @unique @map("activation_approval_id") @db.Uuid
   cancellationRequestedByAdminId String?       @map("cancellation_requested_by_admin_id") @db.Uuid
   cancellationReason    String?                @map("cancellation_reason")
   cancellationRequestedAt DateTime?            @map("cancellation_requested_at")
@@ -255,6 +257,7 @@ model AccountingPeriod {
   updatedAt             DateTime               @updatedAt @map("updated_at")
   financialTransactions FinancialTransaction[]
   createdByAdmin        AdminUser?             @relation("AccountingPeriodCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  activationApproval    AdminApprovalEvidence? @relation("AccountingPeriodActivationApproval", fields: [activationApprovalId], references: [id], onDelete: Restrict)
   cancellationRequestedBy AdminUser?           @relation("AccountingPeriodCancellationRequestedBy", fields: [cancellationRequestedByAdminId], references: [id], onDelete: Restrict)
   closeRequestedBy      AdminUser?             @relation("AccountingPeriodCloseRequestedBy", fields: [closeRequestedByAdminId], references: [id], onDelete: Restrict)
   closeEvidence         AccountingPeriodCloseEvidence?

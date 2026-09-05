@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:accounting-period-backfill": "RUN_ACCOUNTING_PERIOD_BACKFILL_TEST=1 RUN_INTEGRATION_TESTS=0 vitest run tests/integration/accounting-period-backfill.integration.spec.ts",
     "test:accounting-period-contract": "RUN_ACCOUNTING_PERIOD_CONTRACT_TEST=1 RUN_INTEGRATION_TESTS=0 vitest run tests/integration/accounting-period-contract.integration.spec.ts",
+    "test:accounting-period-reporting": "RUN_ACCOUNTING_PERIOD_REPORTING_TEST=1 RUN_INTEGRATION_TESTS=0 vitest run tests/integration/accounting-period-reporting.integration.spec.ts",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",

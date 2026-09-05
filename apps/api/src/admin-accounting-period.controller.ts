@@ -9,6 +9,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -25,6 +26,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiProperty,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
@@ -45,8 +47,11 @@ import {
   ACCOUNTING_TIME_ZONE,
   AccountingPeriodRuleError,
   type AccountingPeriodCommandResult,
+  type AccountingPeriodMode,
+  type AccountingPeriodState,
   type AccountingPeriodView,
 } from "../../../src/contexts/wallet-ledger/domain/accounting-period";
+import type { AccountingPeriodListQuery } from "../../../src/contexts/wallet-ledger/domain/accounting-period.repository";
 import { IdempotencyService } from "../../../src/platform/idempotency/idempotency.service";
 import { currentCorrelationId } from "./correlation";
 import {
@@ -59,6 +64,40 @@ import {
 } from "./admin-capability.guard";
 
 const IDEMPOTENCY_CONTRACT_EXPIRY = new Date("9999-12-31T23:59:59.999Z");
+
+class AccountingPeriodAcceptedExceptionReferenceResponse {
+  @ApiProperty({ type: String })
+  discrepancyReference!: string;
+
+  @ApiProperty({ type: String })
+  exceptionReference!: string;
+}
+
+class AccountingPeriodCloseEvidenceResponse {
+  @ApiProperty({ type: String, format: "date-time" })
+  closedAt!: Date;
+
+  @ApiProperty({ type: String })
+  approvalId!: string;
+
+  @ApiProperty({ type: [String] })
+  reconciliationReferences!: readonly string[];
+
+  @ApiProperty({ type: [String] })
+  checkpointReferences!: readonly string[];
+
+  @ApiProperty({ type: [String] })
+  blockingDiscrepancyReferences!: readonly string[];
+
+  @ApiProperty({ type: [AccountingPeriodAcceptedExceptionReferenceResponse] })
+  acceptedExceptionReferences!: readonly AccountingPeriodAcceptedExceptionReferenceResponse[];
+
+  @ApiProperty({ type: String })
+  actorAdminId!: string;
+
+  @ApiProperty({ type: String })
+  auditRecordId!: string;
+}
 
 class AccountingPeriodResponse {
   @ApiProperty({ type: String, description: "Opaque immutable Accounting Period identity" })
@@ -94,6 +133,13 @@ class AccountingPeriodResponse {
     description: "Admin actor that created the Custom proposal",
   })
   createdByAdminId!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Immutable Approval evidence reference for Custom activation",
+  })
+  activationApprovalId!: string | null;
 
   @ApiProperty({
     type: String,
@@ -140,6 +186,9 @@ class AccountingPeriodResponse {
     exceptionReference: string;
   }[] | null;
 
+  @ApiProperty({ type: AccountingPeriodCloseEvidenceResponse, nullable: true })
+  closeEvidence!: AccountingPeriodView["closeEvidence"];
+
   @ApiProperty({ type: String, format: "date-time" })
   createdAt!: Date;
 
@@ -148,6 +197,14 @@ class AccountingPeriodResponse {
 
   @ApiProperty({ type: [String], description: "Currently permitted explicit commands" })
   allowedActions!: readonly string[];
+}
+
+class AccountingPeriodListResponse {
+  @ApiProperty({ type: [AccountingPeriodResponse] })
+  items!: readonly AccountingPeriodResponse[];
+
+  @ApiProperty({ type: String, nullable: true, description: "Opaque cursor for the next page" })
+  nextCursor!: string | null;
 }
 
 class AccountingPeriodPreviewPeriodResponse {
@@ -304,11 +361,34 @@ export class AdminAccountingPeriodController {
 
   @Get()
   @ApiOperation({ summary: "List authoritative Accounting Periods" })
-  @ApiOkResponse({ type: [AccountingPeriodResponse] })
+  @ApiQuery({ name: "limit", required: false, type: Number, example: 50 })
+  @ApiQuery({ name: "cursor", required: false, type: String })
+  @ApiQuery({ name: "state", required: false, enum: [...ACCOUNTING_PERIOD_STATES] })
+  @ApiQuery({ name: "mode", required: false, enum: [...ACCOUNTING_PERIOD_MODES] })
+  @ApiQuery({ name: "effectiveFrom", required: false, type: String, format: "date-time" })
+  @ApiQuery({ name: "effectiveTo", required: false, type: String, format: "date-time" })
+  @ApiOkResponse({ type: AccountingPeriodListResponse })
+  @ApiBadRequestResponse({ type: ApiErrorResponse })
   @ApiUnauthorizedResponse({ type: ApiErrorResponse })
   @ApiForbiddenResponse({ type: ApiErrorResponse })
-  list(@Req() request: AdminAuthenticatedRequest): Promise<readonly AccountingPeriodView[]> {
-    return this.accountingPeriods.list(viewOptions(request));
+  async list(
+    @Query()
+    query: {
+      limit?: string;
+      cursor?: string;
+      state?: string;
+      mode?: string;
+      effectiveFrom?: string;
+      effectiveTo?: string;
+    },
+    @Req() request: AdminAuthenticatedRequest,
+  ): Promise<{ items: readonly AccountingPeriodView[]; nextCursor: string | null }> {
+    const parsed = parseListQuery(query, request);
+    const result = await this.accountingPeriods.list(parsed, viewOptions(request));
+    return {
+      items: result.items,
+      nextCursor: result.nextCursor ? encodeAccountingPeriodCursor(result.nextCursor) : null,
+    };
   }
 
   @Get(":id")
@@ -849,6 +929,131 @@ function requiredAdmin(request: AdminAuthenticatedRequest) {
     );
   }
   return admin;
+}
+
+function parseListQuery(
+  query: {
+    limit?: string;
+    cursor?: string;
+    state?: string;
+    mode?: string;
+    effectiveFrom?: string;
+    effectiveTo?: string;
+  },
+  request: AdminAuthenticatedRequest,
+): AccountingPeriodListQuery {
+  const limit = query.limit === undefined ? 50 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "limit must be an integer from 1 to 100",
+      { field: "limit" },
+    );
+  }
+
+  const state = query.state as AccountingPeriodState | undefined;
+  if (state !== undefined && !ACCOUNTING_PERIOD_STATES.includes(state)) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "state is not a supported Accounting Period state",
+      { field: "state" },
+    );
+  }
+
+  const mode = query.mode as AccountingPeriodMode | undefined;
+  if (mode !== undefined && !ACCOUNTING_PERIOD_MODES.includes(mode)) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "mode is not a supported Accounting Period mode",
+      { field: "mode" },
+    );
+  }
+
+  const effectiveFrom = parseListInstant(query.effectiveFrom, "effectiveFrom", request);
+  const effectiveTo = parseListInstant(query.effectiveTo, "effectiveTo", request);
+  if (effectiveFrom && effectiveTo && effectiveTo.getTime() <= effectiveFrom.getTime()) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "effectiveTo must be after effectiveFrom",
+      { field: "effectiveTo" },
+    );
+  }
+
+  return {
+    limit,
+    ...(query.cursor ? { cursor: decodeAccountingPeriodCursor(query.cursor, request) } : {}),
+    ...(state ? { state } : {}),
+    ...(mode ? { mode } : {}),
+    ...(effectiveFrom ? { effectiveFrom } : {}),
+    ...(effectiveTo ? { effectiveTo } : {}),
+  };
+}
+
+function parseListInstant(
+  value: string | undefined,
+  field: "effectiveFrom" | "effectiveTo",
+  request: AdminAuthenticatedRequest,
+): Date | undefined {
+  if (value === undefined) return undefined;
+  const instant = new Date(value);
+  if (!value.trim() || Number.isNaN(instant.getTime())) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      `${field} must be an RFC 3339 timestamp`,
+      { field },
+    );
+  }
+  return instant;
+}
+
+function encodeAccountingPeriodCursor(cursor: { effectiveStart: Date; id: string }): string {
+  return Buffer.from(
+    JSON.stringify({ effectiveStart: cursor.effectiveStart.toISOString(), id: cursor.id }),
+    "utf8",
+  ).toString("base64url");
+}
+
+function decodeAccountingPeriodCursor(
+  value: string,
+  request: AdminAuthenticatedRequest,
+): { effectiveStart: Date; id: string } {
+  try {
+    const decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      effectiveStart?: unknown;
+      id?: unknown;
+    };
+    if (typeof decoded.effectiveStart !== "string" || typeof decoded.id !== "string") {
+      throw new Error("cursor fields are missing");
+    }
+    const effectiveStart = new Date(decoded.effectiveStart);
+    if (
+      Number.isNaN(effectiveStart.getTime()) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        decoded.id,
+      )
+    ) {
+      throw new Error("cursor fields are invalid");
+    }
+    return { effectiveStart, id: decoded.id };
+  } catch {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "cursor is invalid",
+      { field: "cursor" },
+    );
+  }
 }
 
 function parseCreateCustomBody(

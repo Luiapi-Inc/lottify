@@ -37,6 +37,17 @@ export interface AccountingPeriodBounds {
   end: Date;
 }
 
+export interface AccountingPeriodCloseEvidenceView {
+  closedAt: Date;
+  approvalId: string;
+  reconciliationReferences: readonly string[];
+  checkpointReferences: readonly string[];
+  blockingDiscrepancyReferences: readonly string[];
+  acceptedExceptionReferences: readonly AccountingPeriodAcceptedExceptionReference[];
+  actorAdminId: string;
+  auditRecordId: string;
+}
+
 export interface AccountingPeriodView {
   id: string;
   mode: AccountingPeriodMode;
@@ -48,6 +59,7 @@ export interface AccountingPeriodView {
   version: number;
   reason: string | null;
   createdByAdminId: string | null;
+  activationApprovalId: string | null;
   cancellationRequestedByAdminId: string | null;
   cancellationReason: string | null;
   cancellationRequestedAt: Date | null;
@@ -58,6 +70,7 @@ export interface AccountingPeriodView {
   closeCheckpointReferences: readonly string[] | null;
   closeBlockingDiscrepancyReferences: readonly string[] | null;
   closeAcceptedExceptionReferences: readonly AccountingPeriodAcceptedExceptionReference[] | null;
+  closeEvidence: AccountingPeriodCloseEvidenceView | null;
   createdAt: Date;
   updatedAt: Date;
   allowedActions: readonly AccountingPeriodAllowedAction[];

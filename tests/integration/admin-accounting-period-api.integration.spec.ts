@@ -188,8 +188,11 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       headers: authHeaders(auditorToken),
     });
     expect(response.status).toBe(200);
-    const periods = (await response.json()) as Array<Record<string, unknown>>;
-    const fixture = periods.find((period) => period.id === fixturePeriodId);
+    const page = (await response.json()) as {
+      items: Array<Record<string, unknown>>;
+      nextCursor: string | null;
+    };
+    const fixture = page.items.find((period) => period.id === fixturePeriodId);
     expect(fixture).toEqual({
       id: fixturePeriodId,
       mode: "AUTOMATIC_WEEKLY",
@@ -201,6 +204,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       version: 1,
       reason: null,
       createdByAdminId: null,
+      activationApprovalId: null,
       cancellationRequestedByAdminId: null,
       cancellationReason: null,
       cancellationRequestedAt: null,
@@ -211,6 +215,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       closeCheckpointReferences: null,
       closeBlockingDiscrepancyReferences: null,
       closeAcceptedExceptionReferences: null,
+      closeEvidence: null,
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
       allowedActions: [],
@@ -234,6 +239,72 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     await expect(denied.json()).resolves.toMatchObject({
       code: "ACCESS_DENIED",
       details: { required: ["accounting-period.create-custom"] },
+      correlationId: expect.any(String),
+    });
+  });
+
+  it("paginates Accounting Period reads with allowlisted state, mode, and effective-range filters", async () => {
+    const createdByAdminId = await adminIdForToken(adminToken);
+    const fixtures = await Promise.all(
+      [
+        ["2199-09-02T17:00:00.000Z", "2199-09-04T17:00:00.000Z"],
+        ["2199-09-09T17:00:00.000Z", "2199-09-11T17:00:00.000Z"],
+        ["2199-09-16T17:00:00.000Z", "2199-09-18T17:00:00.000Z"],
+      ].map(([effectiveStart, effectiveEnd]) =>
+        prisma.accountingPeriod.create({
+          data: {
+            mode: "CUSTOM",
+            generationKind: "CUSTOM",
+            effectiveStart: new Date(effectiveStart!),
+            effectiveEnd: new Date(effectiveEnd!),
+            state: "DRAFT",
+            reason: "Pagination filter fixture",
+            createdByAdminId,
+          },
+        }),
+      ),
+    );
+
+    const query = new URLSearchParams({
+      limit: "2",
+      state: "DRAFT",
+      mode: "CUSTOM",
+      effectiveFrom: "2199-09-01T17:00:00.000Z",
+      effectiveTo: "2199-10-01T17:00:00.000Z",
+    });
+    const firstResponse = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods?${query}`,
+      { headers: authHeaders(auditorToken) },
+    );
+    expect(firstResponse.status).toBe(200);
+    const first = (await firstResponse.json()) as {
+      items: Array<{ id: string; state: string; mode: string }>;
+      nextCursor: string | null;
+    };
+    expect(first.items.map((period) => period.id)).toEqual([fixtures[2]!.id, fixtures[1]!.id]);
+    expect(first.items.every((period) => period.state === "DRAFT" && period.mode === "CUSTOM")).toBe(
+      true,
+    );
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    query.set("cursor", first.nextCursor!);
+    const secondResponse = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods?${query}`,
+      { headers: authHeaders(auditorToken) },
+    );
+    expect(secondResponse.status).toBe(200);
+    await expect(secondResponse.json()).resolves.toMatchObject({
+      items: [{ id: fixtures[0]!.id }],
+      nextCursor: null,
+    });
+
+    const invalidResponse = await fetch(`${baseUrl}/api/v1/admin/accounting-periods?limit=0`, {
+      headers: authHeaders(auditorToken),
+    });
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { field: "limit" },
       correlationId: expect.any(String),
     });
   });
@@ -659,6 +730,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
         id: periodId,
         state: "SCHEDULED",
         version: 3,
+        activationApprovalId: expect.any(String),
         allowedActions: [],
       },
       replacementPreview: {
@@ -732,6 +804,26 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       requestedVersion: 2,
       policyVersion: "accounting-period-custom-activation-v1",
       correlationId: expect.any(String),
+    });
+    expect(approved.body.period.activationApprovalId).toBe(evidence.id);
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: periodId } }),
+    ).resolves.toMatchObject({ activationApprovalId: evidence.id });
+    await expect(
+      prisma.accountingPeriod.update({
+        where: { id: periodId },
+        data: { activationApprovalId: null },
+      }),
+    ).rejects.toThrow("Accounting Period activation Approval reference is immutable");
+    const approvedReadResponse = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${periodId}`,
+      { headers: authHeaders(auditorToken) },
+    );
+    expect(approvedReadResponse.status).toBe(200);
+    await expect(approvedReadResponse.json()).resolves.toMatchObject({
+      id: periodId,
+      state: "SCHEDULED",
+      activationApprovalId: evidence.id,
     });
     expect(evidence.payloadHash).toMatch(/^[a-f0-9]{64}$/);
     const audit = await prisma.auditRecord.findFirstOrThrow({
@@ -1954,7 +2046,22 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     );
     expect(approved.response.status).toBe(200);
     expect(approved.body).toMatchObject({
-      period: { id: period.id, state: "CLOSED", version: 3, allowedActions: [] },
+      period: {
+        id: period.id,
+        state: "CLOSED",
+        version: 3,
+        closeEvidence: {
+          closedAt: expect.any(String),
+          approvalId: expect.any(String),
+          reconciliationReferences: requestPayload.reconciliationReferences,
+          checkpointReferences: requestPayload.checkpointReferences,
+          blockingDiscrepancyReferences: requestPayload.blockingDiscrepancyReferences,
+          acceptedExceptionReferences: requestPayload.acceptedExceptionReferences,
+          actorAdminId: approverAdminId,
+          auditRecordId: expect.any(String),
+        },
+        allowedActions: [],
+      },
     });
 
     const evidence = await prisma.accountingPeriodCloseEvidence.findUniqueOrThrow({
@@ -1985,6 +2092,26 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       outcome: "APPROVED",
     });
     expect(evidence.closedAt.getTime()).toBe(evidence.approval.approvedAt.getTime());
+
+    const closedReadResponse = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${period.id}`,
+      { headers: authHeaders(auditorToken) },
+    );
+    expect(closedReadResponse.status).toBe(200);
+    await expect(closedReadResponse.json()).resolves.toMatchObject({
+      id: period.id,
+      state: "CLOSED",
+      closeEvidence: {
+        closedAt: evidence.closedAt.toISOString(),
+        approvalId: evidence.approvalId,
+        reconciliationReferences: requestPayload.reconciliationReferences,
+        checkpointReferences: requestPayload.checkpointReferences,
+        blockingDiscrepancyReferences: requestPayload.blockingDiscrepancyReferences,
+        acceptedExceptionReferences: requestPayload.acceptedExceptionReferences,
+        actorAdminId: approverAdminId,
+        auditRecordId: evidence.auditRecordId,
+      },
+    });
 
     const replay = await command(
       `/api/v1/admin/accounting-periods/${period.id}/close`,
@@ -2176,6 +2303,20 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     expect(approve?.post?.security).toEqual([{ bearer: [] }]);
     expect(cancel?.post?.security).toEqual([{ bearer: [] }]);
     expect(close?.post?.security).toEqual([{ bearer: [] }]);
+    expect(collection?.get?.parameters).toEqual(
+      expect.arrayContaining(
+        ["limit", "cursor", "state", "mode", "effectiveFrom", "effectiveTo"].map((name) =>
+          expect.objectContaining({ name, in: "query", required: false }),
+        ),
+      ),
+    );
+    expect(collection?.get?.responses?.["200"]).toMatchObject({
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/AccountingPeriodListResponse" },
+        },
+      },
+    });
     expect(createCustom?.post?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true }),

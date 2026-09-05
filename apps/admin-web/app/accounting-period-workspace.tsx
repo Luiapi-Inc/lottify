@@ -93,9 +93,18 @@ export default function AccountingPeriodWorkspace() {
   );
 
   const loadPeriods = useCallback(async () => {
-    const response = await authorizedFetch("/api/v1/admin/accounting-periods");
-    if (!response.ok) throw await readApiError(response);
-    setPeriods((await response.json()) as AccountingPeriod[]);
+    const loaded: AccountingPeriod[] = [];
+    let cursor: string | null = null;
+    do {
+      const params = new URLSearchParams({ limit: "100" });
+      if (cursor) params.set("cursor", cursor);
+      const response = await authorizedFetch(`/api/v1/admin/accounting-periods?${params}`);
+      if (!response.ok) throw await readApiError(response);
+      const page = (await response.json()) as components["schemas"]["AccountingPeriodListResponse"];
+      loaded.push(...page.items);
+      cursor = page.nextCursor ?? null;
+    } while (cursor);
+    setPeriods(loaded);
   }, [authorizedFetch]);
 
   const initializeSession = useCallback(async () => {

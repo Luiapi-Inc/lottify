@@ -9,6 +9,8 @@ import {
 } from "../domain/accounting-period";
 import {
   ACCOUNTING_PERIOD_REPOSITORY,
+  type AccountingPeriodListQuery,
+  type AccountingPeriodListResult,
   type AccountingPeriodRecord,
   type AccountingPeriodRepository,
 } from "../domain/accounting-period.repository";
@@ -20,6 +22,11 @@ interface AccountingPeriodViewOptions {
   canClose?: boolean;
   actorAdminId?: string;
   canSelfApprove?: boolean;
+}
+
+export interface AccountingPeriodListViewResult {
+  items: readonly AccountingPeriodView[];
+  nextCursor: AccountingPeriodListResult["nextCursor"];
 }
 
 @Injectable()
@@ -38,9 +45,15 @@ export class AccountingPeriodService {
     return toView(period, options);
   }
 
-  async list(options: AccountingPeriodViewOptions = {}): Promise<readonly AccountingPeriodView[]> {
-    const periods = await this.repository.list();
-    return periods.map((period) => toView(period, options));
+  async list(
+    query: AccountingPeriodListQuery,
+    options: AccountingPeriodViewOptions = {},
+  ): Promise<AccountingPeriodListViewResult> {
+    const result = await this.repository.list(query);
+    return {
+      items: result.items.map((period) => toView(period, options)),
+      nextCursor: result.nextCursor,
+    };
   }
 
   async ensureAutomaticCoverage(): Promise<void> {
