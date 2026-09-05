@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   FINANCIAL_LEDGER_REPOSITORY,
+  type ConsumeReservationAndPostInput,
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReserveFundsInput,
@@ -39,6 +40,10 @@ export class FinancialLedgerService {
 
   releaseReservation(reservationId: string): Promise<Date> {
     return this.repository.releaseReservation(reservationId);
+  }
+
+  consumeReservationAndPost(input: ConsumeReservationAndPostInput): Promise<string> {
+    return this.repository.consumeReservationAndPost(input);
   }
 
   getAvailableMinorUnits(accountId: string): Promise<bigint> {

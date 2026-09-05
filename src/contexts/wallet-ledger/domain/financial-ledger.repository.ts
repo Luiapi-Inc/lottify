@@ -53,6 +53,23 @@ export interface ReserveFundsInput {
   allocations: readonly ReservationAllocationRequest[];
 }
 
+export interface ReservationConsumptionDestinationRequest {
+  accountId: string;
+  amountMinor: bigint;
+}
+
+export interface ConsumeReservationAndPostInput {
+  reservationId: string;
+  businessTransactionId: string;
+  operationType: string;
+  correlationId: string;
+  idempotency: FinancialIdempotencyIdentity;
+  domainReferences: Readonly<Record<string, string>>;
+  currency: FinancialCurrency;
+  effectiveAt: Date;
+  destinations: readonly ReservationConsumptionDestinationRequest[];
+}
+
 export interface FinancialLedgerRepository {
   ensureMemberAccount(input: {
     memberId: string;
@@ -66,6 +83,7 @@ export interface FinancialLedgerRepository {
   post(input: PostFinancialTransactionInput): Promise<string>;
   reserve(input: ReserveFundsInput): Promise<string>;
   releaseReservation(reservationId: string): Promise<Date>;
+  consumeReservationAndPost(input: ConsumeReservationAndPostInput): Promise<string>;
   getAvailableMinorUnits(accountId: string): Promise<bigint>;
 }
 

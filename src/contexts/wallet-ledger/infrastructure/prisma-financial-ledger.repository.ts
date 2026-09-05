@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
 import {
+  type ConsumeReservationAndPostInput,
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReserveFundsInput,
@@ -244,6 +245,172 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
     });
   }
 
+  async consumeReservationAndPost(input: ConsumeReservationAndPostInput): Promise<string> {
+    validateReservationConsumptionInput(input);
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await lockReservation(tx, input.reservationId);
+        const reservation = await tx.reservation.findUnique({
+          where: { id: input.reservationId },
+          select: {
+            id: true,
+            memberId: true,
+            currency: true,
+            amountMinor: true,
+            releasedAt: true,
+            consumedAt: true,
+            consumingTransactionId: true,
+            allocations: {
+              select: {
+                accountId: true,
+                amountMinor: true,
+              },
+            },
+          },
+        });
+        if (!reservation) throw new Error("Reservation not found");
+
+        if (reservation.consumedAt) {
+          if (!reservation.consumingTransactionId) {
+            throw new Error("Consumed Reservation is missing its financial transaction");
+          }
+          return assertReplayableConsumption(
+            tx,
+            input,
+            reservation.consumingTransactionId,
+          );
+        }
+        if (reservation.releasedAt) {
+          throw new Error("Released Reservation cannot be consumed");
+        }
+        if (reservation.currency !== input.currency) {
+          throw new Error("Reservation consumption currency must match the Reservation currency");
+        }
+
+        const existingTransaction = await tx.financialTransaction.findUnique({
+          where: {
+            idempotencyScope_idempotencyKey: {
+              idempotencyScope: input.idempotency.scope,
+              idempotencyKey: input.idempotency.key,
+            },
+          },
+          select: { id: true, fingerprint: true },
+        });
+        if (existingTransaction) {
+          throw new Error(
+            existingTransaction.fingerprint === input.idempotency.fingerprint
+              ? "Financial transaction idempotency identity is already bound to another effect"
+              : "Financial transaction idempotency conflict",
+          );
+        }
+
+        const sourceAccountIds = reservation.allocations.map((allocation) => allocation.accountId);
+        const destinationAccountIds = input.destinations.map((destination) => destination.accountId);
+        const accountIds = uniqueSorted([...sourceAccountIds, ...destinationAccountIds]);
+        await lockAccounts(tx, accountIds);
+
+        const accounts = await tx.ledgerAccount.findMany({
+          where: { id: { in: accountIds } },
+          select: { id: true, kind: true, memberId: true, currency: true },
+        });
+        if (accounts.length !== accountIds.length) {
+          throw new Error("Reservation consumption references an unknown Ledger account");
+        }
+
+        const accountById = new Map(accounts.map((account) => [account.id, account]));
+        let allocatedMinor = 0n;
+        for (const allocation of reservation.allocations) {
+          const account = accountById.get(allocation.accountId);
+          if (!account || account.kind !== "MEMBER" || account.memberId !== reservation.memberId) {
+            throw new Error("Reservation source allocation must remain on the owning Member Ledger account");
+          }
+          if (account.currency !== input.currency) {
+            throw new Error("Reservation source allocation currency mismatch");
+          }
+          if (allocation.amountMinor <= 0n) {
+            throw new Error("Reservation source allocation must be positive integer minor units");
+          }
+          allocatedMinor += allocation.amountMinor;
+        }
+        if (allocatedMinor !== reservation.amountMinor) {
+          throw new Error("Reservation source allocations must equal the Reservation amount");
+        }
+
+        for (const destination of input.destinations) {
+          const account = accountById.get(destination.accountId);
+          if (!account || account.kind !== "SYSTEM") {
+            throw new Error("Reservation consumption destination must be a system/counterparty Ledger account");
+          }
+          if (account.currency !== input.currency) {
+            throw new Error("Reservation consumption destination currency mismatch");
+          }
+        }
+
+        const postings = [
+          ...reservation.allocations.map((allocation) => ({
+            accountId: allocation.accountId,
+            side: "DEBIT" as const,
+            amountMinor: allocation.amountMinor,
+          })),
+          ...input.destinations.map((destination) => ({
+            accountId: destination.accountId,
+            side: "CREDIT" as const,
+            amountMinor: destination.amountMinor,
+          })),
+        ];
+        assertBalancedLedgerPostings(
+          postings.map((posting) => ({
+            side: posting.side,
+            amountMinor: posting.amountMinor,
+            currency: input.currency,
+          })),
+        );
+
+        const created = await tx.financialTransaction.create({
+          data: {
+            businessTransactionId: input.businessTransactionId,
+            operationType: input.operationType,
+            correlationId: input.correlationId,
+            idempotencyScope: input.idempotency.scope,
+            idempotencyKey: input.idempotency.key,
+            fingerprint: input.idempotency.fingerprint,
+            domainReferences: { ...input.domainReferences, reservationId: input.reservationId },
+            currency: input.currency,
+            effectiveAt: input.effectiveAt,
+            postings: {
+              create: postings,
+            },
+          },
+          select: { id: true },
+        });
+
+        await tx.reservation.update({
+          where: { id: input.reservationId },
+          data: {
+            consumedAt: new Date(),
+            consumingTransactionId: created.id,
+          },
+        });
+        return created.id;
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+      const reservation = await this.prisma.reservation.findUnique({
+        where: { id: input.reservationId },
+        select: { consumingTransactionId: true },
+      });
+      if (reservation?.consumingTransactionId) {
+        return assertReplayableConsumption(
+          this.prisma,
+          input,
+          reservation.consumingTransactionId,
+        );
+      }
+      throw new Error("Financial transaction idempotency conflict");
+    }
+  }
+
   async getAvailableMinorUnits(accountId: string): Promise<bigint> {
     const account = await this.prisma.ledgerAccount.findUnique({
       where: { id: accountId },
@@ -317,6 +484,60 @@ function validateReservationInput(input: ReserveFundsInput): void {
   if (allocatedMinor !== input.amountMinor) {
     throw new Error("Reservation allocations must equal the Reservation amount");
   }
+}
+
+function validateReservationConsumptionInput(input: ConsumeReservationAndPostInput): void {
+  if (input.destinations.length === 0) {
+    throw new Error("Reservation consumption requires at least one destination posting");
+  }
+
+  const accountIds = input.destinations.map((destination) => destination.accountId);
+  if (new Set(accountIds).size !== accountIds.length) {
+    throw new Error("Reservation consumption destinations must use unique Ledger accounts");
+  }
+
+  for (const destination of input.destinations) {
+    if (destination.amountMinor <= 0n) {
+      throw new Error("Reservation consumption destination must be positive integer minor units");
+    }
+  }
+}
+
+async function assertReplayableConsumption(
+  tx: Pick<TransactionClient, "financialTransaction">,
+  input: ConsumeReservationAndPostInput,
+  consumingTransactionId: string,
+): Promise<string> {
+  const transaction = await tx.financialTransaction.findUnique({
+    where: { id: consumingTransactionId },
+    select: {
+      id: true,
+      idempotencyScope: true,
+      idempotencyKey: true,
+      fingerprint: true,
+      consumedReservations: {
+        where: { id: input.reservationId },
+        select: { id: true },
+      },
+    },
+  });
+  if (!transaction || transaction.consumedReservations.length !== 1) {
+    throw new Error("Consumed Reservation financial transaction linkage is invalid");
+  }
+  if (
+    transaction.idempotencyScope === input.idempotency.scope &&
+    transaction.idempotencyKey === input.idempotency.key &&
+    transaction.fingerprint === input.idempotency.fingerprint
+  ) {
+    return transaction.id;
+  }
+  if (
+    transaction.idempotencyScope === input.idempotency.scope &&
+    transaction.idempotencyKey === input.idempotency.key
+  ) {
+    throw new Error("Financial transaction idempotency conflict");
+  }
+  throw new Error("Reservation already consumed by another financial transaction");
 }
 
 async function assertPostingAccounts(
