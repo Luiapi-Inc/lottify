@@ -29,6 +29,6 @@ import { WalletLedgerModule } from "./wallet-ledger/wallet-ledger.module";
     AuditModule,
     ReportingModule,
   ],
-  exports: [IdentityAccessModule],
+  exports: [IdentityAccessModule, WalletLedgerModule],
 })
 export class ContextsModule {}

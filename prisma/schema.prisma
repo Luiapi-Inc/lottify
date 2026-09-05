@@ -87,10 +87,12 @@ model FinancialTransaction {
   currency               String                 @default("THB")
   effectiveAt            DateTime               @map("effective_at")
   postedAt               DateTime               @default(now()) @map("posted_at")
+  accountingPeriodId     String?                @map("accounting_period_id") @db.Uuid
   correctionKind         String?                @map("correction_kind")
   correctsTransactionId  String?                @map("corrects_transaction_id") @db.Uuid
   createdAt              DateTime               @default(now()) @map("created_at")
   postings               LedgerPosting[]
+  accountingPeriod       AccountingPeriod?      @relation(fields: [accountingPeriodId], references: [id], onDelete: Restrict)
   correctsTransaction    FinancialTransaction?  @relation("FinancialCorrection", fields: [correctsTransactionId], references: [id], onDelete: Restrict)
   correctionTransactions FinancialTransaction[] @relation("FinancialCorrection")
   consumedReservations   Reservation[]          @relation("ReservationConsumption")
@@ -98,8 +100,26 @@ model FinancialTransaction {
   @@unique([idempotencyScope, idempotencyKey])
   @@index([businessTransactionId])
   @@index([correlationId])
+  @@index([accountingPeriodId])
   @@index([correctsTransactionId])
   @@map("financial_transactions")
+}
+
+model AccountingPeriod {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  mode                  String
+  generationKind        String                 @map("generation_kind")
+  effectiveStart        DateTime               @map("effective_start")
+  effectiveEnd          DateTime               @map("effective_end")
+  state                 String
+  version               Int                    @default(1)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  financialTransactions FinancialTransaction[]
+
+  @@unique([effectiveStart, effectiveEnd])
+  @@index([state, effectiveStart, effectiveEnd])
+  @@map("accounting_periods")
 }
 
 model LedgerPosting {

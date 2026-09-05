@@ -114,6 +114,9 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const replay = await findReplayableFinancialPost(tx, input);
+        if (replay) return replay;
+
         const accountIds = uniqueSorted(input.postings.map((posting) => posting.accountId));
         await lockAccounts(tx, accountIds);
         const accounts = await assertPostingAccounts(tx, accountIds, input.currency);
@@ -125,6 +128,7 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             input.currency,
           );
         }
+        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(tx);
 
         const created = await tx.financialTransaction.create({
           data: {
@@ -137,6 +141,8 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             domainReferences: { ...input.domainReferences },
             currency: input.currency,
             effectiveAt: input.effectiveAt,
+            postedAt: accountingPeriod.postedAt,
+            accountingPeriodId: accountingPeriod.id,
             correctionKind: input.correction?.kind,
             correctsTransactionId: input.correction?.correctsTransactionId,
             postings: {
@@ -153,26 +159,8 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
       });
     } catch (error) {
       if (!isUniqueConstraintError(error)) throw error;
-      const existing = await this.prisma.financialTransaction.findUnique({
-        where: {
-          idempotencyScope_idempotencyKey: {
-            idempotencyScope: input.idempotency.scope,
-            idempotencyKey: input.idempotency.key,
-          },
-        },
-        select: {
-          id: true,
-          fingerprint: true,
-          correctionKind: true,
-          correctsTransactionId: true,
-        },
-      });
-      if (
-        existing?.fingerprint === input.idempotency.fingerprint &&
-        correctionIdentityMatches(existing, input.correction)
-      ) {
-        return existing.id;
-      }
+      const replay = await findReplayableFinancialPost(this.prisma, input);
+      if (replay) return replay;
       throw new Error("Financial transaction idempotency conflict");
     }
   }
@@ -250,6 +238,7 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
         const accountIds = uniqueSorted(postings.map((posting) => posting.accountId));
         await lockAccounts(tx, accountIds);
         await assertPostingAccounts(tx, accountIds, "THB");
+        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(tx);
 
         const created = await tx.financialTransaction.create({
           data: {
@@ -262,6 +251,8 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             domainReferences: { ...input.domainReferences },
             currency: "THB",
             effectiveAt: input.effectiveAt,
+            postedAt: accountingPeriod.postedAt,
+            accountingPeriodId: accountingPeriod.id,
             correctionKind: "REVERSAL",
             correctsTransactionId: input.originalTransactionId,
             postings: { create: postings },
@@ -550,6 +541,7 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             currency: input.currency,
           })),
         );
+        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(tx);
 
         const created = await tx.financialTransaction.create({
           data: {
@@ -562,6 +554,8 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             domainReferences: { ...input.domainReferences, reservationId: input.reservationId },
             currency: input.currency,
             effectiveAt: input.effectiveAt,
+            postedAt: accountingPeriod.postedAt,
+            accountingPeriodId: accountingPeriod.id,
             postings: {
               create: postings,
             },
@@ -881,6 +875,66 @@ function correctionIdentityMatches(
     existing.correctionKind === correction.kind &&
     existing.correctsTransactionId === correction.correctsTransactionId
   );
+}
+
+async function findReplayableFinancialPost(
+  tx: Pick<TransactionClient, "financialTransaction">,
+  input: PostFinancialTransactionInput,
+): Promise<string | null> {
+  const existing = await tx.financialTransaction.findUnique({
+    where: {
+      idempotencyScope_idempotencyKey: {
+        idempotencyScope: input.idempotency.scope,
+        idempotencyKey: input.idempotency.key,
+      },
+    },
+    select: {
+      id: true,
+      fingerprint: true,
+      correctionKind: true,
+      correctsTransactionId: true,
+    },
+  });
+  if (!existing) return null;
+  if (
+    existing.fingerprint === input.idempotency.fingerprint &&
+    correctionIdentityMatches(existing, input.correction)
+  ) {
+    return existing.id;
+  }
+  throw new Error("Financial transaction idempotency conflict");
+}
+
+async function resolveAuthoritativeAccountingPeriodForPosting(
+  tx: TransactionClient,
+): Promise<{ id: string; postedAt: Date }> {
+  const clocks = await tx.$queryRaw<Array<{ postedAt: Date }>>(
+    Prisma.sql`SELECT transaction_timestamp() AS "postedAt"`,
+  );
+  const postedAt = clocks[0]?.postedAt;
+  if (!postedAt) {
+    throw new Error("Authoritative financial posting time is unavailable");
+  }
+
+  const periods = await tx.accountingPeriod.findMany({
+    where: {
+      state: "OPEN",
+      effectiveStart: { lte: postedAt },
+      effectiveEnd: { gt: postedAt },
+    },
+    orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
+    take: 2,
+    select: { id: true },
+  });
+
+  if (periods.length === 0) {
+    throw new Error("No OPEN Accounting Period covers authoritative postedAt");
+  }
+  if (periods.length > 1) {
+    throw new Error("Accounting Period coverage conflict for authoritative postedAt");
+  }
+
+  return { id: periods[0]!.id, postedAt };
 }
 
 async function getAccountAvailability(

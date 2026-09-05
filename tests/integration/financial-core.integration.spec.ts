@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { AccountingPeriodService } from "../../src/contexts/wallet-ledger/application/accounting-period.service";
 import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/application/financial-ledger.service";
+import { automaticWeeklyAccountingPeriodBounds } from "../../src/contexts/wallet-ledger/domain/accounting-period";
+import { PrismaAccountingPeriodRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-accounting-period.repository";
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
@@ -9,12 +12,38 @@ const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 describe.runIf(runIntegration)("financial core integration", () => {
   let prisma: PrismaService;
   let ledger: FinancialLedgerService;
+  let accountingPeriods: AccountingPeriodService;
 
   beforeAll(async () => {
     prisma = new PrismaService();
     ledger = new FinancialLedgerService(new PrismaFinancialLedgerRepository(prisma));
+    accountingPeriods = new AccountingPeriodService(new PrismaAccountingPeriodRepository(prisma));
     await prisma.$connect();
   });
+
+  async function expectAuthoritativeAccountingPeriodLink(transactionId: string): Promise<void> {
+    const transaction = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: transactionId },
+      select: {
+        postedAt: true,
+        accountingPeriodId: true,
+        accountingPeriod: {
+          select: {
+            mode: true,
+            effectiveStart: true,
+            effectiveEnd: true,
+            state: true,
+          },
+        },
+      },
+    });
+    expect(transaction.accountingPeriodId).not.toBeNull();
+    expect(transaction.accountingPeriod?.mode).toBe("AUTOMATIC_WEEKLY");
+    expect(transaction.accountingPeriod?.state).toBe("OPEN");
+    const expectedBounds = automaticWeeklyAccountingPeriodBounds(transaction.postedAt);
+    expect(transaction.accountingPeriod?.effectiveStart).toEqual(expectedBounds.start);
+    expect(transaction.accountingPeriod?.effectiveEnd).toEqual(expectedBounds.end);
+  }
 
   afterAll(async () => {
     await prisma.reservationAllocation.deleteMany();
@@ -23,6 +52,83 @@ describe.runIf(runIntegration)("financial core integration", () => {
     await prisma.financialTransaction.deleteMany();
     await prisma.ledgerAccount.deleteMany();
     await prisma.$disconnect();
+  });
+
+  it("assigns a live Financial Transaction to the authoritative Automatic Accounting Period from postedAt", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const providerAccountId = await ledger.ensureSystemAccount(`provider:${randomUUID()}`);
+    const historicalEffectiveAt = new Date("2020-01-01T00:00:00.000Z");
+
+    const transactionId = await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "DEPOSIT_CREDIT",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.accounting-period",
+        key: randomUUID(),
+        fingerprint: "deposit:accounting-period:2500",
+      },
+      domainReferences: { test: "accounting-period-assignment" },
+      currency: "THB",
+      effectiveAt: historicalEffectiveAt,
+      postings: [
+        { accountId: providerAccountId, side: "DEBIT", amountMinor: 2_500n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 2_500n },
+      ],
+    });
+
+    const transaction = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: transactionId },
+      select: {
+        effectiveAt: true,
+        postedAt: true,
+        accountingPeriodId: true,
+        accountingPeriod: {
+          select: {
+            mode: true,
+            generationKind: true,
+            effectiveStart: true,
+            effectiveEnd: true,
+            state: true,
+          },
+        },
+      },
+    });
+
+    expect(transaction.effectiveAt).toEqual(historicalEffectiveAt);
+    expect(transaction.accountingPeriodId).not.toBeNull();
+    expect(transaction.accountingPeriod).not.toBeNull();
+    expect(transaction.accountingPeriod?.mode).toBe("AUTOMATIC_WEEKLY");
+    expect(transaction.accountingPeriod?.generationKind).toBe("NOMINAL_WEEK");
+    expect(transaction.accountingPeriod?.state).toBe("OPEN");
+    const expectedBounds = automaticWeeklyAccountingPeriodBounds(transaction.postedAt);
+    expect(transaction.accountingPeriod?.effectiveStart).toEqual(expectedBounds.start);
+    expect(transaction.accountingPeriod?.effectiveEnd).toEqual(expectedBounds.end);
+    expect(transaction.accountingPeriod!.effectiveStart.getTime()).toBeLessThanOrEqual(
+      transaction.postedAt.getTime(),
+    );
+    expect(transaction.postedAt.getTime()).toBeLessThan(
+      transaction.accountingPeriod!.effectiveEnd.getTime(),
+    );
+    expect(transaction.effectiveAt.getTime()).toBeLessThan(
+      transaction.accountingPeriod!.effectiveStart.getTime(),
+    );
+
+    const period = await accountingPeriods.getById(transaction.accountingPeriodId!);
+    expect(period).toMatchObject({
+      id: transaction.accountingPeriodId,
+      mode: "AUTOMATIC_WEEKLY",
+      generationKind: "NOMINAL_WEEK",
+      accountingTimezone: "Asia/Bangkok",
+      state: "OPEN",
+      version: 1,
+      allowedActions: [],
+    });
+    expect(period.effectiveStart).toEqual(transaction.accountingPeriod!.effectiveStart);
+    expect(period.effectiveEnd).toEqual(transaction.accountingPeriod!.effectiveEnd);
+    expect(period.createdAt).toBeInstanceOf(Date);
+    expect(period.updatedAt).toBeInstanceOf(Date);
   });
 
   it("posts a balanced financial transaction once and replays the same idempotent result", async () => {
@@ -49,7 +155,28 @@ describe.runIf(runIntegration)("financial core integration", () => {
     };
 
     const first = await ledger.post(input);
-    const replay = await ledger.post(input);
+    const persisted = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: first },
+      select: { accountingPeriodId: true },
+    });
+    expect(persisted.accountingPeriodId).not.toBeNull();
+    if (!persisted.accountingPeriodId) {
+      throw new Error("Financial Transaction did not persist an Accounting Period");
+    }
+
+    await prisma.accountingPeriod.update({
+      where: { id: persisted.accountingPeriodId },
+      data: { state: "CLOSING" },
+    });
+    let replay: string;
+    try {
+      replay = await ledger.post(input);
+    } finally {
+      await prisma.accountingPeriod.update({
+        where: { id: persisted.accountingPeriodId },
+        data: { state: "OPEN" },
+      });
+    }
 
     expect(replay).toBe(first);
     expect(await ledger.getAvailableMinorUnits(cashAccountId)).toBe(10_000n);
@@ -130,6 +257,7 @@ describe.runIf(runIntegration)("financial core integration", () => {
       prisma.financialTransaction.findUniqueOrThrow({
         where: { id: originalTransactionId },
         select: {
+          accountingPeriodId: true,
           correctionKind: true,
           correctsTransactionId: true,
           postings: { select: { accountId: true, side: true, amountMinor: true } },
@@ -138,6 +266,7 @@ describe.runIf(runIntegration)("financial core integration", () => {
       prisma.financialTransaction.findUniqueOrThrow({
         where: { id: reversalId },
         select: {
+          accountingPeriodId: true,
           correctionKind: true,
           correctsTransactionId: true,
           postings: { select: { accountId: true, side: true, amountMinor: true } },
@@ -146,8 +275,11 @@ describe.runIf(runIntegration)("financial core integration", () => {
     ]);
     expect(original.correctionKind).toBeNull();
     expect(original.correctsTransactionId).toBeNull();
+    expect(original.accountingPeriodId).not.toBeNull();
     expect(reversal.correctionKind).toBe("REVERSAL");
     expect(reversal.correctsTransactionId).toBe(originalTransactionId);
+    expect(reversal.accountingPeriodId).not.toBeNull();
+    await expectAuthoritativeAccountingPeriodLink(reversalId);
 
     const normalizedOriginal = original.postings
       .map((posting) => `${posting.accountId}:${posting.side}:${posting.amountMinor}`)
@@ -288,10 +420,12 @@ describe.runIf(runIntegration)("financial core integration", () => {
 
     const compensation = await prisma.financialTransaction.findUniqueOrThrow({
       where: { id: compensationId },
-      select: { correctionKind: true, correctsTransactionId: true },
+      select: { accountingPeriodId: true, correctionKind: true, correctsTransactionId: true },
     });
+    expect(compensation.accountingPeriodId).not.toBeNull();
     expect(compensation.correctionKind).toBe("COMPENSATION");
     expect(compensation.correctsTransactionId).toBe(originalTransactionId);
+    await expectAuthoritativeAccountingPeriodLink(compensationId);
     expect(await ledger.getAvailableMinorUnits(cashAccountId)).toBe(3_800n);
   });
 
@@ -629,6 +763,13 @@ describe.runIf(runIntegration)("financial core integration", () => {
     expect(reservation.consumedAt).not.toBeNull();
     expect(reservation.releasedAt).toBeNull();
     expect(reservation.consumingTransactionId).toBe(transactionId);
+
+    const consumedTransaction = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: transactionId },
+      select: { accountingPeriodId: true },
+    });
+    expect(consumedTransaction.accountingPeriodId).not.toBeNull();
+    await expectAuthoritativeAccountingPeriodLink(transactionId);
 
     const postings = await prisma.ledgerPosting.findMany({
       where: { transactionId },
