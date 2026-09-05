@@ -61,9 +61,16 @@ export async function ensureAutomaticAccountingPeriodCoverage(
 }
 
 async function lockAccountingCalendar(tx: TransactionClient): Promise<void> {
-  await tx.$queryRaw(
-    Prisma.sql`SELECT pg_advisory_xact_lock(19002026, 1)`,
-  );
+  const acquired = await tx.$queryRaw<Array<{ locked: number }>>(Prisma.sql`
+    WITH calendar_lock AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(19002026, 1)
+    )
+    SELECT 1::int AS "locked"
+    FROM calendar_lock
+  `);
+  if (acquired[0]?.locked !== 1) {
+    throw new Error("Accounting Period calendar serialization lock was not acquired");
+  }
 }
 
 async function ensureNominalAutomaticPeriod(
