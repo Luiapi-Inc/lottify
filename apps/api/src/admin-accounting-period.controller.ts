@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Inject,
   Param,
   UseGuards,
 } from "@nestjs/common";
@@ -70,7 +71,10 @@ class AccountingPeriodResponse {
 @RequireAdminCapabilities("accounting-period.read")
 @Controller("api/v1/admin/accounting-periods")
 export class AdminAccountingPeriodController {
-  constructor(private readonly accountingPeriods: AccountingPeriodService) {}
+  constructor(
+    @Inject(AccountingPeriodService)
+    private readonly accountingPeriods: AccountingPeriodService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List authoritative Accounting Periods" })

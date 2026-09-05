@@ -1,11 +1,14 @@
 import "reflect-metadata";
-import type { INestApplication } from "@nestjs/common";
+import { Module, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ApiModule } from "../../apps/api/src/app.module";
+import { AdminAccountingPeriodController } from "../../apps/api/src/admin-accounting-period.controller";
+import { AdminAuthGuard } from "../../apps/api/src/admin-auth.guard";
+import { AdminCapabilityGuard } from "../../apps/api/src/admin-capability.guard";
 import { AdminAuthService } from "../../src/contexts/identity-access/application/admin-auth.service";
 import { hashAdminPassword } from "../../src/contexts/identity-access/domain/admin-password";
 import { encryptAdminSecret } from "../../src/contexts/identity-access/domain/admin-secret-crypto";
@@ -18,6 +21,9 @@ import {
   getEnvironment,
   resetEnvironmentForTests,
 } from "../../src/platform/config/env";
+import { AccountingPeriodService } from "../../src/contexts/wallet-ledger/application/accounting-period.service";
+import { PrismaAccountingPeriodRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-accounting-period.repository";
+import { PrismaAdminAuthRepository } from "../../src/contexts/identity-access/infrastructure/prisma-admin-auth.repository";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
@@ -32,12 +38,35 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
 
   beforeAll(async () => {
     resetEnvironmentForTests();
-    app = await NestFactory.create(ApiModule, { logger: false });
-    await app.init();
+    prisma = new PrismaService();
+    await prisma.$connect();
+    adminAuth = new AdminAuthService(
+      new PrismaAdminAuthRepository(prisma),
+      new JwtService(),
+    );
+    const accountingPeriods = new AccountingPeriodService(
+      new PrismaAccountingPeriodRepository(prisma),
+    );
+    const reflector = new Reflector();
+
+    @Module({
+      controllers: [AdminAccountingPeriodController],
+      providers: [
+        { provide: AccountingPeriodService, useValue: accountingPeriods },
+        { provide: AdminAuthGuard, useValue: new AdminAuthGuard(adminAuth) },
+        {
+          provide: AdminCapabilityGuard,
+          useValue: new AdminCapabilityGuard(reflector),
+        },
+      ],
+    })
+    class AdminAccountingPeriodContractTestModule {}
+
+    app = await NestFactory.create(AdminAccountingPeriodContractTestModule, {
+      logger: false,
+    });
     await app.listen(0, "127.0.0.1");
     baseUrl = await app.getUrl();
-    prisma = app.get(PrismaService);
-    adminAuth = app.get(AdminAuthService);
 
     const password = "Accounting period integration password 123!";
     const secret = generateTotpSecret();
@@ -81,6 +110,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       where: { email: { startsWith: emailPrefix } },
     });
     await app.close();
+    await prisma.$disconnect();
   });
 
   it("rejects unauthenticated and Member-token requests", async () => {
