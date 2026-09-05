@@ -6,6 +6,7 @@ import {
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReserveFundsInput,
+  type ReverseFinancialTransactionInput,
   type WalletProjection,
 } from "../domain/financial-ledger.repository";
 import {
@@ -115,6 +116,13 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
         const accountIds = uniqueSorted(input.postings.map((posting) => posting.accountId));
         await lockAccounts(tx, accountIds);
         await assertPostingAccounts(tx, accountIds, input.currency);
+        if (input.correction) {
+          await assertCompensationTarget(
+            tx,
+            input.correction.correctsTransactionId,
+            input.currency,
+          );
+        }
 
         const created = await tx.financialTransaction.create({
           data: {
@@ -150,9 +158,149 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             idempotencyKey: input.idempotency.key,
           },
         },
-        select: { id: true, fingerprint: true },
+        select: {
+          id: true,
+          fingerprint: true,
+          correctionKind: true,
+          correctsTransactionId: true,
+        },
       });
-      if (existing?.fingerprint === input.idempotency.fingerprint) return existing.id;
+      if (
+        existing?.fingerprint === input.idempotency.fingerprint &&
+        correctionIdentityMatches(existing, input.correction)
+      ) {
+        return existing.id;
+      }
+      throw new Error("Financial transaction idempotency conflict");
+    }
+  }
+
+  async reverseTransaction(input: ReverseFinancialTransactionInput): Promise<string> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const replay = await tx.financialTransaction.findUnique({
+          where: {
+            idempotencyScope_idempotencyKey: {
+              idempotencyScope: input.idempotency.scope,
+              idempotencyKey: input.idempotency.key,
+            },
+          },
+          select: {
+            id: true,
+            fingerprint: true,
+            correctionKind: true,
+            correctsTransactionId: true,
+          },
+        });
+        if (replay) {
+          if (
+            replay.fingerprint === input.idempotency.fingerprint &&
+            replay.correctionKind === "REVERSAL" &&
+            replay.correctsTransactionId === input.originalTransactionId
+          ) {
+            return replay.id;
+          }
+          throw new Error("Financial transaction idempotency conflict");
+        }
+
+        await lockFinancialTransaction(tx, input.originalTransactionId);
+        const original = await tx.financialTransaction.findUnique({
+          where: { id: input.originalTransactionId },
+          select: {
+            id: true,
+            currency: true,
+            postings: {
+              select: { accountId: true, side: true, amountMinor: true },
+              orderBy: { id: "asc" },
+            },
+          },
+        });
+        if (!original) throw new Error("Financial transaction to reverse not found");
+
+        const existingReversal = await tx.financialTransaction.findFirst({
+          where: {
+            correctionKind: "REVERSAL",
+            correctsTransactionId: input.originalTransactionId,
+          },
+          select: { id: true },
+        });
+        if (existingReversal) {
+          throw new Error("Financial transaction already reversed");
+        }
+
+        if (original.currency !== "THB") {
+          throw new Error("Financial reversal currency is unsupported");
+        }
+
+        const postings = original.postings.map((posting) => ({
+          accountId: posting.accountId,
+          side: posting.side === "DEBIT" ? ("CREDIT" as const) : ("DEBIT" as const),
+          amountMinor: posting.amountMinor,
+        }));
+        assertBalancedLedgerPostings(
+          postings.map((posting) => ({
+            side: posting.side,
+            amountMinor: posting.amountMinor,
+            currency: "THB" as const,
+          })),
+        );
+
+        const accountIds = uniqueSorted(postings.map((posting) => posting.accountId));
+        await lockAccounts(tx, accountIds);
+        await assertPostingAccounts(tx, accountIds, "THB");
+
+        const created = await tx.financialTransaction.create({
+          data: {
+            businessTransactionId: input.businessTransactionId,
+            operationType: input.operationType,
+            correlationId: input.correlationId,
+            idempotencyScope: input.idempotency.scope,
+            idempotencyKey: input.idempotency.key,
+            fingerprint: input.idempotency.fingerprint,
+            domainReferences: { ...input.domainReferences },
+            currency: "THB",
+            effectiveAt: input.effectiveAt,
+            correctionKind: "REVERSAL",
+            correctsTransactionId: input.originalTransactionId,
+            postings: { create: postings },
+          },
+          select: { id: true },
+        });
+        return created.id;
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+
+      const replay = await this.prisma.financialTransaction.findUnique({
+        where: {
+          idempotencyScope_idempotencyKey: {
+            idempotencyScope: input.idempotency.scope,
+            idempotencyKey: input.idempotency.key,
+          },
+        },
+        select: {
+          id: true,
+          fingerprint: true,
+          correctionKind: true,
+          correctsTransactionId: true,
+        },
+      });
+      if (
+        replay?.fingerprint === input.idempotency.fingerprint &&
+        replay.correctionKind === "REVERSAL" &&
+        replay.correctsTransactionId === input.originalTransactionId
+      ) {
+        return replay.id;
+      }
+
+      const existingReversal = await this.prisma.financialTransaction.findFirst({
+        where: {
+          correctionKind: "REVERSAL",
+          correctsTransactionId: input.originalTransactionId,
+        },
+        select: { id: true },
+      });
+      if (existingReversal) throw new Error("Financial transaction already reversed");
       throw new Error("Financial transaction idempotency conflict");
     }
   }
@@ -609,6 +757,34 @@ async function assertPostingAccounts(
   }
 }
 
+async function assertCompensationTarget(
+  tx: Pick<TransactionClient, "financialTransaction">,
+  transactionId: string,
+  currency: "THB",
+): Promise<void> {
+  const target = await tx.financialTransaction.findUnique({
+    where: { id: transactionId },
+    select: { currency: true },
+  });
+  if (!target) throw new Error("Financial compensation target not found");
+  if (target.currency !== currency) {
+    throw new Error("Financial compensation must use the corrected transaction currency");
+  }
+}
+
+function correctionIdentityMatches(
+  existing: { correctionKind: string | null; correctsTransactionId: string | null },
+  correction: PostFinancialTransactionInput["correction"],
+): boolean {
+  if (!correction) {
+    return existing.correctionKind === null && existing.correctsTransactionId === null;
+  }
+  return (
+    existing.correctionKind === correction.kind &&
+    existing.correctsTransactionId === correction.correctsTransactionId
+  );
+}
+
 async function getAccountAvailability(
   tx: Pick<TransactionClient, "ledgerPosting" | "reservationAllocation">,
   accountId: string,
@@ -650,6 +826,15 @@ async function lockAccounts(tx: TransactionClient, accountIds: readonly string[]
 async function lockReservation(tx: TransactionClient, reservationId: string): Promise<void> {
   await tx.$queryRaw(
     Prisma.sql`SELECT "id" FROM "reservations" WHERE "id" = ${reservationId}::uuid FOR UPDATE`,
+  );
+}
+
+async function lockFinancialTransaction(
+  tx: TransactionClient,
+  transactionId: string,
+): Promise<void> {
+  await tx.$queryRaw(
+    Prisma.sql`SELECT "id" FROM "financial_transactions" WHERE "id" = ${transactionId}::uuid FOR UPDATE`,
   );
 }
 

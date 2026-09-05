@@ -5,6 +5,7 @@ import {
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReserveFundsInput,
+  type ReverseFinancialTransactionInput,
   type WalletProjection,
 } from "../domain/financial-ledger.repository";
 import type { FinancialCurrency, MemberLedgerBucket } from "../domain/financial-invariants";
@@ -33,6 +34,10 @@ export class FinancialLedgerService {
 
   post(input: PostFinancialTransactionInput): Promise<string> {
     return this.repository.post(input);
+  }
+
+  reverseTransaction(input: ReverseFinancialTransactionInput): Promise<string> {
+    return this.repository.reverseTransaction(input);
   }
 
   reserve(input: ReserveFundsInput): Promise<string> {

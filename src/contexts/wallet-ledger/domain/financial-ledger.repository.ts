@@ -31,10 +31,20 @@ export interface PostFinancialTransactionInput {
   currency: FinancialCurrency;
   effectiveAt: Date;
   correction?: {
-    kind: FinancialCorrectionKind;
+    kind: "COMPENSATION";
     correctsTransactionId: string;
   };
   postings: readonly FinancialPostingRequest[];
+}
+
+export interface ReverseFinancialTransactionInput {
+  originalTransactionId: string;
+  businessTransactionId: string;
+  operationType: string;
+  correlationId: string;
+  idempotency: FinancialIdempotencyIdentity;
+  domainReferences: Readonly<Record<string, string>>;
+  effectiveAt: Date;
 }
 
 export interface ReservationAllocationRequest {
@@ -95,6 +105,7 @@ export interface FinancialLedgerRepository {
     currency: FinancialCurrency;
   }): Promise<string>;
   post(input: PostFinancialTransactionInput): Promise<string>;
+  reverseTransaction(input: ReverseFinancialTransactionInput): Promise<string>;
   reserve(input: ReserveFundsInput): Promise<string>;
   releaseReservation(reservationId: string): Promise<Date>;
   consumeReservationAndPost(input: ConsumeReservationAndPostInput): Promise<string>;

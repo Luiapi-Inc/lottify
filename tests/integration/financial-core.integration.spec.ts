@@ -61,6 +61,214 @@ describe.runIf(runIntegration)("financial core integration", () => {
     ).rejects.toThrow("idempotency conflict");
   });
 
+  it("reverses an immutable financial transaction with exact inverse postings once", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const providerAccountId = await ledger.ensureSystemAccount(`provider:${randomUUID()}`);
+    const originalTransactionId = await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "DEPOSIT_CREDIT",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.reversal.seed",
+        key: randomUUID(),
+        fingerprint: "deposit:10000",
+      },
+      domainReferences: { test: "exact-reversal" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: providerAccountId, side: "DEBIT", amountMinor: 10_000n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 10_000n },
+      ],
+    });
+
+    const reverseInput = {
+      originalTransactionId,
+      businessTransactionId: randomUUID(),
+      operationType: "DEPOSIT_REVERSAL",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.reversal",
+        key: randomUUID(),
+        fingerprint: "reverse:deposit:10000",
+      },
+      domainReferences: { test: "exact-reversal" },
+      effectiveAt: new Date(),
+    };
+
+    const reversalId = await ledger.reverseTransaction(reverseInput);
+    expect(await ledger.reverseTransaction(reverseInput)).toBe(reversalId);
+
+    const [original, reversal] = await Promise.all([
+      prisma.financialTransaction.findUniqueOrThrow({
+        where: { id: originalTransactionId },
+        select: {
+          correctionKind: true,
+          correctsTransactionId: true,
+          postings: { select: { accountId: true, side: true, amountMinor: true } },
+        },
+      }),
+      prisma.financialTransaction.findUniqueOrThrow({
+        where: { id: reversalId },
+        select: {
+          correctionKind: true,
+          correctsTransactionId: true,
+          postings: { select: { accountId: true, side: true, amountMinor: true } },
+        },
+      }),
+    ]);
+    expect(original.correctionKind).toBeNull();
+    expect(original.correctsTransactionId).toBeNull();
+    expect(reversal.correctionKind).toBe("REVERSAL");
+    expect(reversal.correctsTransactionId).toBe(originalTransactionId);
+
+    const normalizedOriginal = original.postings
+      .map((posting) => `${posting.accountId}:${posting.side}:${posting.amountMinor}`)
+      .sort();
+    const normalizedReversal = reversal.postings
+      .map(
+        (posting) =>
+          `${posting.accountId}:${posting.side === "DEBIT" ? "CREDIT" : "DEBIT"}:${posting.amountMinor}`,
+      )
+      .sort();
+    expect(normalizedReversal).toEqual(normalizedOriginal);
+    expect(await ledger.getAvailableMinorUnits(cashAccountId)).toBe(0n);
+
+    await expect(
+      ledger.reverseTransaction({
+        ...reverseInput,
+        businessTransactionId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.reversal.second",
+          key: randomUUID(),
+          fingerprint: "reverse:deposit:10000:second",
+        },
+      }),
+    ).rejects.toThrow("Financial transaction already reversed");
+  });
+
+  it("serializes concurrent reversal attempts so only one reversal can post", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const providerAccountId = await ledger.ensureSystemAccount(`provider:${randomUUID()}`);
+    const originalTransactionId = await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "DEPOSIT_CREDIT",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.reversal.concurrent.seed",
+        key: randomUUID(),
+        fingerprint: "deposit:6000",
+      },
+      domainReferences: { test: "concurrent-reversal" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: providerAccountId, side: "DEBIT", amountMinor: 6_000n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 6_000n },
+      ],
+    });
+
+    const reverse = (suffix: string) =>
+      ledger.reverseTransaction({
+        originalTransactionId,
+        businessTransactionId: randomUUID(),
+        operationType: "DEPOSIT_REVERSAL",
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: `financial.integration.reversal.concurrent.${suffix}`,
+          key: randomUUID(),
+          fingerprint: `reverse:deposit:6000:${suffix}`,
+        },
+        domainReferences: { test: "concurrent-reversal" },
+        effectiveAt: new Date(),
+      });
+
+    const results = await Promise.allSettled([reverse("a"), reverse("b")]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(
+      await prisma.financialTransaction.count({
+        where: { correctionKind: "REVERSAL", correctsTransactionId: originalTransactionId },
+      }),
+    ).toBe(1);
+    expect(await ledger.getAvailableMinorUnits(cashAccountId)).toBe(0n);
+  });
+
+  it("posts business-semantic compensation only against a real linked transaction", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const providerAccountId = await ledger.ensureSystemAccount(`provider:${randomUUID()}`);
+    const originalTransactionId = await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "DEPOSIT_CREDIT",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.compensation.seed",
+        key: randomUUID(),
+        fingerprint: "deposit:5000",
+      },
+      domainReferences: { test: "compensation" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: providerAccountId, side: "DEBIT", amountMinor: 5_000n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 5_000n },
+      ],
+    });
+
+    await expect(
+      ledger.post({
+        businessTransactionId: randomUUID(),
+        operationType: "DEPOSIT_COMPENSATION",
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.compensation.missing",
+          key: randomUUID(),
+          fingerprint: "compensation:missing:1200",
+        },
+        domainReferences: { test: "compensation-missing-target" },
+        currency: "THB",
+        effectiveAt: new Date(),
+        correction: { kind: "COMPENSATION", correctsTransactionId: randomUUID() },
+        postings: [
+          { accountId: cashAccountId, side: "DEBIT", amountMinor: 1_200n },
+          { accountId: providerAccountId, side: "CREDIT", amountMinor: 1_200n },
+        ],
+      }),
+    ).rejects.toThrow("Financial compensation target not found");
+
+    const compensationInput = {
+      businessTransactionId: randomUUID(),
+      operationType: "DEPOSIT_COMPENSATION",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.compensation",
+        key: randomUUID(),
+        fingerprint: "compensation:deposit:1200",
+      },
+      domainReferences: { test: "compensation" },
+      currency: "THB" as const,
+      effectiveAt: new Date(),
+      correction: { kind: "COMPENSATION" as const, correctsTransactionId: originalTransactionId },
+      postings: [
+        { accountId: cashAccountId, side: "DEBIT" as const, amountMinor: 1_200n },
+        { accountId: providerAccountId, side: "CREDIT" as const, amountMinor: 1_200n },
+      ],
+    };
+    const compensationId = await ledger.post(compensationInput);
+    expect(await ledger.post(compensationInput)).toBe(compensationId);
+
+    const compensation = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: compensationId },
+      select: { correctionKind: true, correctsTransactionId: true },
+    });
+    expect(compensation.correctionKind).toBe("COMPENSATION");
+    expect(compensation.correctsTransactionId).toBe(originalTransactionId);
+    expect(await ledger.getAvailableMinorUnits(cashAccountId)).toBe(3_800n);
+  });
+
   it("serializes concurrent reservations so available balance cannot be over-reserved", async () => {
     const memberId = randomUUID();
     const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
