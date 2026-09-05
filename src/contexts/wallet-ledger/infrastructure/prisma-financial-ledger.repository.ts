@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
 import {
@@ -16,12 +16,22 @@ import {
   calculateAvailableMinorUnits,
   isDebtRecoveryRestricted,
 } from "../domain/financial-invariants";
+import {
+  type AccountingPeriodTransactionClock,
+  DatabaseAccountingPeriodTransactionClock,
+  ensureAutomaticAccountingPeriodCoverage,
+} from "./accounting-period-runtime";
 
 type TransactionClient = Prisma.TransactionClient;
 
 @Injectable()
 export class PrismaFinancialLedgerRepository implements FinancialLedgerRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService)
+    private readonly prisma: PrismaService,
+    @Inject(DatabaseAccountingPeriodTransactionClock)
+    private readonly accountingPeriodClock: AccountingPeriodTransactionClock,
+  ) {}
 
   async ensureMemberAccount(input: {
     memberId: string;
@@ -128,7 +138,10 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             input.currency,
           );
         }
-        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(tx);
+        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(
+          tx,
+          this.accountingPeriodClock,
+        );
 
         const created = await tx.financialTransaction.create({
           data: {
@@ -238,7 +251,10 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
         const accountIds = uniqueSorted(postings.map((posting) => posting.accountId));
         await lockAccounts(tx, accountIds);
         await assertPostingAccounts(tx, accountIds, "THB");
-        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(tx);
+        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(
+          tx,
+          this.accountingPeriodClock,
+        );
 
         const created = await tx.financialTransaction.create({
           data: {
@@ -541,7 +557,10 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             currency: input.currency,
           })),
         );
-        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(tx);
+        const accountingPeriod = await resolveAuthoritativeAccountingPeriodForPosting(
+          tx,
+          this.accountingPeriodClock,
+        );
 
         const created = await tx.financialTransaction.create({
           data: {
@@ -907,34 +926,11 @@ async function findReplayableFinancialPost(
 
 async function resolveAuthoritativeAccountingPeriodForPosting(
   tx: TransactionClient,
+  clock: AccountingPeriodTransactionClock,
 ): Promise<{ id: string; postedAt: Date }> {
-  const clocks = await tx.$queryRaw<Array<{ postedAt: Date }>>(
-    Prisma.sql`SELECT transaction_timestamp() AS "postedAt"`,
-  );
-  const postedAt = clocks[0]?.postedAt;
-  if (!postedAt) {
-    throw new Error("Authoritative financial posting time is unavailable");
-  }
-
-  const periods = await tx.accountingPeriod.findMany({
-    where: {
-      state: "OPEN",
-      effectiveStart: { lte: postedAt },
-      effectiveEnd: { gt: postedAt },
-    },
-    orderBy: [{ effectiveStart: "asc" }, { id: "asc" }],
-    take: 2,
-    select: { id: true },
-  });
-
-  if (periods.length === 0) {
-    throw new Error("No OPEN Accounting Period covers authoritative postedAt");
-  }
-  if (periods.length > 1) {
-    throw new Error("Accounting Period coverage conflict for authoritative postedAt");
-  }
-
-  return { id: periods[0]!.id, postedAt };
+  const postedAt = await clock.now(tx);
+  const coverage = await ensureAutomaticAccountingPeriodCoverage(tx, postedAt);
+  return { id: coverage.current.id, postedAt };
 }
 
 async function getAccountAvailability(

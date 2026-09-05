@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
 import type {
   AccountingPeriodGenerationKind,
@@ -9,10 +9,20 @@ import type {
   AccountingPeriodRecord,
   AccountingPeriodRepository,
 } from "../domain/accounting-period.repository";
+import {
+  type AccountingPeriodTransactionClock,
+  DatabaseAccountingPeriodTransactionClock,
+  ensureAutomaticAccountingPeriodCoverage,
+} from "./accounting-period-runtime";
 
 @Injectable()
 export class PrismaAccountingPeriodRepository implements AccountingPeriodRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService)
+    private readonly prisma: PrismaService,
+    @Inject(DatabaseAccountingPeriodTransactionClock)
+    private readonly clock: AccountingPeriodTransactionClock,
+  ) {}
 
   async getById(id: string): Promise<AccountingPeriodRecord | null> {
     const period = await this.prisma.accountingPeriod.findUnique({
@@ -26,6 +36,13 @@ export class PrismaAccountingPeriodRepository implements AccountingPeriodReposit
       orderBy: [{ effectiveStart: "desc" }, { id: "desc" }],
     });
     return periods.map(mapRecord);
+  }
+
+  async ensureAutomaticCoverage(): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const instant = await this.clock.now(tx);
+      await ensureAutomaticAccountingPeriodCoverage(tx, instant);
+    });
   }
 }
 

@@ -26,6 +26,10 @@ export class AccountingPeriodService {
     const periods = await this.repository.list();
     return periods.map(toView);
   }
+
+  async ensureAutomaticCoverage(): Promise<void> {
+    await this.repository.ensureAutomaticCoverage();
+  }
 }
 
 function toView(period: AccountingPeriodRecord): AccountingPeriodView {

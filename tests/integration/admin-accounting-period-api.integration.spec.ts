@@ -23,6 +23,7 @@ import {
 } from "../../src/platform/config/env";
 import { AccountingPeriodService } from "../../src/contexts/wallet-ledger/application/accounting-period.service";
 import { PrismaAccountingPeriodRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-accounting-period.repository";
+import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
 import { PrismaAdminAuthRepository } from "../../src/contexts/identity-access/infrastructure/prisma-admin-auth.repository";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
@@ -46,7 +47,10 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       new JwtService(),
     );
     const accountingPeriods = new AccountingPeriodService(
-      new PrismaAccountingPeriodRepository(prisma),
+      new PrismaAccountingPeriodRepository(
+        prisma,
+        new DatabaseAccountingPeriodTransactionClock(),
+      ),
     );
     const reflector = new Reflector();
 

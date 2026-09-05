@@ -19,6 +19,7 @@ export interface AccountingPeriodRecord {
 export interface AccountingPeriodRepository {
   getById(id: string): Promise<AccountingPeriodRecord | null>;
   list(): Promise<readonly AccountingPeriodRecord[]>;
+  ensureAutomaticCoverage(): Promise<void>;
 }
 
 export const ACCOUNTING_PERIOD_REPOSITORY = Symbol("ACCOUNTING_PERIOD_REPOSITORY");

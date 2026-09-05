@@ -5,9 +5,11 @@ import { ACCOUNTING_PERIOD_REPOSITORY } from "./domain/accounting-period.reposit
 import { FINANCIAL_LEDGER_REPOSITORY } from "./domain/financial-ledger.repository";
 import { PrismaAccountingPeriodRepository } from "./infrastructure/prisma-accounting-period.repository";
 import { PrismaFinancialLedgerRepository } from "./infrastructure/prisma-financial-ledger.repository";
+import { DatabaseAccountingPeriodTransactionClock } from "./infrastructure/accounting-period-runtime";
 
 @Module({
   providers: [
+    DatabaseAccountingPeriodTransactionClock,
     PrismaAccountingPeriodRepository,
     {
       provide: ACCOUNTING_PERIOD_REPOSITORY,

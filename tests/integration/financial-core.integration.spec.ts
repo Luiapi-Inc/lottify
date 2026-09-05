@@ -4,20 +4,74 @@ import { AccountingPeriodService } from "../../src/contexts/wallet-ledger/applic
 import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/application/financial-ledger.service";
 import { automaticWeeklyAccountingPeriodBounds } from "../../src/contexts/wallet-ledger/domain/accounting-period";
 import { PrismaAccountingPeriodRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-accounting-period.repository";
+import {
+  type AccountingPeriodTransactionClock,
+  DatabaseAccountingPeriodTransactionClock,
+} from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
+const boundaryScenarioAnchor = new Date("2018-05-16T12:00:00.000Z");
+const boundaryScenarioBounds = automaticWeeklyAccountingPeriodBounds(boundaryScenarioAnchor);
+const boundaryScenarioBoundary = boundaryScenarioBounds.end;
+const schedulerRaceInstant = new Date("2019-08-15T12:00:00.000Z");
+
+class FixedAccountingPeriodClock implements AccountingPeriodTransactionClock {
+  constructor(private readonly instant: Date) {}
+
+  async now(): Promise<Date> {
+    return new Date(this.instant);
+  }
+}
 
 describe.runIf(runIntegration)("financial core integration", () => {
   let prisma: PrismaService;
   let ledger: FinancialLedgerService;
   let accountingPeriods: AccountingPeriodService;
 
+  function ledgerAt(instant: Date): FinancialLedgerService {
+    return new FinancialLedgerService(
+      new PrismaFinancialLedgerRepository(prisma, new FixedAccountingPeriodClock(instant)),
+    );
+  }
+
+  function accountingPeriodsAt(instant: Date): AccountingPeriodService {
+    const clock = new FixedAccountingPeriodClock(instant);
+    return new AccountingPeriodService(new PrismaAccountingPeriodRepository(prisma, clock));
+  }
+
+  async function postBalancedAt(instant: Date, label: string): Promise<string> {
+    const fixedLedger = ledgerAt(instant);
+    const memberId = randomUUID();
+    const cashAccountId = await fixedLedger.ensureMemberAccount(memberId, "CASH");
+    const providerAccountId = await fixedLedger.ensureSystemAccount(`provider:${label}:${randomUUID()}`);
+    return fixedLedger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "DEPOSIT_CREDIT",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: `financial.integration.accounting-period-runtime.${label}`,
+        key: randomUUID(),
+        fingerprint: `${label}:1000`,
+      },
+      domainReferences: { test: label },
+      currency: "THB",
+      effectiveAt: new Date("2020-01-01T00:00:00.000Z"),
+      postings: [
+        { accountId: providerAccountId, side: "DEBIT", amountMinor: 1_000n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 1_000n },
+      ],
+    });
+  }
+
   beforeAll(async () => {
     prisma = new PrismaService();
-    ledger = new FinancialLedgerService(new PrismaFinancialLedgerRepository(prisma));
-    accountingPeriods = new AccountingPeriodService(new PrismaAccountingPeriodRepository(prisma));
+    const clock = new DatabaseAccountingPeriodTransactionClock();
+    ledger = new FinancialLedgerService(new PrismaFinancialLedgerRepository(prisma, clock));
+    accountingPeriods = new AccountingPeriodService(
+      new PrismaAccountingPeriodRepository(prisma, clock),
+    );
     await prisma.$connect();
   });
 
@@ -51,6 +105,16 @@ describe.runIf(runIntegration)("financial core integration", () => {
     await prisma.ledgerPosting.deleteMany();
     await prisma.financialTransaction.deleteMany();
     await prisma.ledgerAccount.deleteMany();
+    const runtimeStarts = [
+      boundaryScenarioBounds.start,
+      boundaryScenarioBoundary,
+      automaticWeeklyAccountingPeriodBounds(boundaryScenarioBoundary).end,
+      automaticWeeklyAccountingPeriodBounds(schedulerRaceInstant).start,
+      automaticWeeklyAccountingPeriodBounds(schedulerRaceInstant).end,
+    ];
+    await prisma.accountingPeriod.deleteMany({
+      where: { effectiveStart: { in: runtimeStarts } },
+    });
     await prisma.$disconnect();
   });
 
@@ -129,6 +193,118 @@ describe.runIf(runIntegration)("financial core integration", () => {
     expect(period.effectiveEnd).toEqual(transaction.accountingPeriod!.effectiveEnd);
     expect(period.createdAt).toBeInstanceOf(Date);
     expect(period.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("prepares current and next Automatic coverage idempotently while racing posting-path repair", async () => {
+    const scheduler = accountingPeriodsAt(schedulerRaceInstant);
+    const transactionPromise = postBalancedAt(
+      schedulerRaceInstant,
+      "scheduler-posting-repair-race",
+    );
+
+    await Promise.all([
+      scheduler.ensureAutomaticCoverage(),
+      scheduler.ensureAutomaticCoverage(),
+      transactionPromise,
+    ]);
+    const transactionId = await transactionPromise;
+    const bounds = automaticWeeklyAccountingPeriodBounds(schedulerRaceInstant);
+    const nextBounds = automaticWeeklyAccountingPeriodBounds(bounds.end);
+    const periods = await prisma.accountingPeriod.findMany({
+      where: {
+        effectiveStart: { in: [bounds.start, nextBounds.start] },
+      },
+      orderBy: { effectiveStart: "asc" },
+      select: { id: true, effectiveStart: true, effectiveEnd: true, state: true },
+    });
+
+    expect(periods).toHaveLength(2);
+    expect(periods[0]).toMatchObject({
+      effectiveStart: bounds.start,
+      effectiveEnd: bounds.end,
+      state: "OPEN",
+    });
+    expect(periods[1]).toMatchObject({
+      effectiveStart: nextBounds.start,
+      effectiveEnd: nextBounds.end,
+      state: "SCHEDULED",
+    });
+    expect(periods[0]!.effectiveEnd).toEqual(periods[1]!.effectiveStart);
+
+    const transaction = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: transactionId },
+      select: { postedAt: true, accountingPeriodId: true },
+    });
+    expect(transaction.postedAt).toEqual(schedulerRaceInstant);
+    expect(transaction.accountingPeriodId).toBe(periods[0]!.id);
+  });
+
+  it("turns over exactly at the Bangkok boundary and assigns concurrent postings to the successor", async () => {
+    const preBoundary = new Date(boundaryScenarioBoundary.getTime() - 1);
+    const postBoundary = new Date(boundaryScenarioBoundary.getTime() + 1);
+    const predecessorTransactionId = await postBalancedAt(preBoundary, "pre-boundary");
+
+    const exactTransactionIds = await Promise.all(
+      Array.from({ length: 4 }, (_, index) =>
+        postBalancedAt(boundaryScenarioBoundary, `exact-boundary-${index}`),
+      ),
+    );
+    const postTransactionId = await postBalancedAt(postBoundary, "post-boundary");
+
+    const successorBounds = automaticWeeklyAccountingPeriodBounds(boundaryScenarioBoundary);
+    const followingBounds = automaticWeeklyAccountingPeriodBounds(successorBounds.end);
+    const periods = await prisma.accountingPeriod.findMany({
+      where: {
+        effectiveStart: {
+          in: [boundaryScenarioBounds.start, successorBounds.start, followingBounds.start],
+        },
+      },
+      orderBy: { effectiveStart: "asc" },
+      select: { id: true, effectiveStart: true, effectiveEnd: true, state: true },
+    });
+
+    expect(periods).toHaveLength(3);
+    expect(periods[0]).toMatchObject({
+      effectiveStart: boundaryScenarioBounds.start,
+      effectiveEnd: boundaryScenarioBounds.end,
+      state: "CLOSING",
+    });
+    expect(periods[1]).toMatchObject({
+      effectiveStart: successorBounds.start,
+      effectiveEnd: successorBounds.end,
+      state: "OPEN",
+    });
+    expect(periods[2]).toMatchObject({
+      effectiveStart: followingBounds.start,
+      effectiveEnd: followingBounds.end,
+      state: "SCHEDULED",
+    });
+    expect(periods[0]!.effectiveEnd).toEqual(periods[1]!.effectiveStart);
+    expect(periods[1]!.effectiveEnd).toEqual(periods[2]!.effectiveStart);
+
+    const transactions = await prisma.financialTransaction.findMany({
+      where: {
+        id: {
+          in: [predecessorTransactionId, ...exactTransactionIds, postTransactionId],
+        },
+      },
+      select: { id: true, postedAt: true, accountingPeriodId: true },
+    });
+    const byId = new Map(transactions.map((transaction) => [transaction.id, transaction]));
+    expect(byId.get(predecessorTransactionId)).toMatchObject({
+      postedAt: preBoundary,
+      accountingPeriodId: periods[0]!.id,
+    });
+    for (const transactionId of exactTransactionIds) {
+      expect(byId.get(transactionId)).toMatchObject({
+        postedAt: boundaryScenarioBoundary,
+        accountingPeriodId: periods[1]!.id,
+      });
+    }
+    expect(byId.get(postTransactionId)).toMatchObject({
+      postedAt: postBoundary,
+      accountingPeriodId: periods[1]!.id,
+    });
   });
 
   it("posts a balanced financial transaction once and replays the same idempotent result", async () => {
