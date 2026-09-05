@@ -147,12 +147,12 @@ model FinancialTransaction {
   currency               String                 @default("THB")
   effectiveAt            DateTime               @map("effective_at")
   postedAt               DateTime               @default(now()) @map("posted_at")
-  accountingPeriodId     String?                @map("accounting_period_id") @db.Uuid
+  accountingPeriodId     String                 @map("accounting_period_id") @db.Uuid
   correctionKind         String?                @map("correction_kind")
   correctsTransactionId  String?                @map("corrects_transaction_id") @db.Uuid
   createdAt              DateTime               @default(now()) @map("created_at")
   postings               LedgerPosting[]
-  accountingPeriod       AccountingPeriod?      @relation(fields: [accountingPeriodId], references: [id], onDelete: Restrict)
+  accountingPeriod       AccountingPeriod       @relation(fields: [accountingPeriodId], references: [id], onDelete: Restrict)
   correctsTransaction    FinancialTransaction?  @relation("FinancialCorrection", fields: [correctsTransactionId], references: [id], onDelete: Restrict)
   correctionTransactions FinancialTransaction[] @relation("FinancialCorrection")
   consumedReservations   Reservation[]          @relation("ReservationConsumption")

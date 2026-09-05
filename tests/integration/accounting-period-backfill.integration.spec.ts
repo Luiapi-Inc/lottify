@@ -58,43 +58,63 @@ describe.runIf(runBackfillMigration)("Accounting Period historical backfill migr
     correctsTransactionId?: string;
     accountingPeriodId?: string;
   }): Promise<string> {
-    const transaction = await prisma.financialTransaction.create({
-      data: {
-        businessTransactionId: `${scopePrefix}.business.${input.label}`,
-        operationType: input.correctionKind ?? "DEPOSIT_CREDIT",
-        correlationId: `${scopePrefix}.correlation.${input.label}`,
-        idempotencyScope: `${scopePrefix}.${input.label}`,
-        idempotencyKey: randomUUID(),
-        fingerprint: `${input.label}:${input.amountMinor}`,
-        domainReferences: { migrationTest: input.label },
-        currency: "THB",
-        effectiveAt: input.effectiveAt,
-        postedAt: input.postedAt,
-        correctionKind: input.correctionKind,
-        correctsTransactionId: input.correctsTransactionId,
-        accountingPeriodId: input.accountingPeriodId,
-        postings: {
-          create: [
-            {
-              accountId: input.debitAccountId,
-              side: "DEBIT",
-              amountMinor: input.amountMinor,
-              createdAt: input.postedAt,
-            },
-            {
-              accountId: input.creditAccountId,
-              side: "CREDIT",
-              amountMinor: input.amountMinor,
-              createdAt: input.postedAt,
-            },
-          ],
+    const transactionId = randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO "financial_transactions" (
+        "id",
+        "business_transaction_id",
+        "operation_type",
+        "correlation_id",
+        "idempotency_scope",
+        "idempotency_key",
+        "fingerprint",
+        "domain_references",
+        "currency",
+        "effective_at",
+        "posted_at",
+        "accounting_period_id",
+        "correction_kind",
+        "corrects_transaction_id",
+        "created_at"
+      ) VALUES (
+        ${transactionId}::uuid,
+        ${`${scopePrefix}.business.${input.label}`},
+        ${input.correctionKind ?? "DEPOSIT_CREDIT"},
+        ${`${scopePrefix}.correlation.${input.label}`},
+        ${`${scopePrefix}.${input.label}`},
+        ${randomUUID()},
+        ${`${input.label}:${input.amountMinor}`},
+        ${JSON.stringify({ migrationTest: input.label })}::jsonb,
+        'THB',
+        ${input.effectiveAt},
+        ${input.postedAt},
+        ${input.accountingPeriodId ?? null}::uuid,
+        ${input.correctionKind ?? null},
+        ${input.correctsTransactionId ?? null}::uuid,
+        ${input.postedAt}
+      )
+    `;
+    await prisma.ledgerPosting.createMany({
+      data: [
+        {
+          transactionId,
+          accountId: input.debitAccountId,
+          side: "DEBIT",
+          amountMinor: input.amountMinor,
+          createdAt: input.postedAt,
         },
-      },
-      select: { id: true },
+        {
+          transactionId,
+          accountId: input.creditAccountId,
+          side: "CREDIT",
+          amountMinor: input.amountMinor,
+          createdAt: input.postedAt,
+        },
+      ],
     });
     const bounds = automaticWeeklyAccountingPeriodBounds(input.postedAt);
     periodStartsToClean.add(bounds.start.getTime());
-    return transaction.id;
+    return transactionId;
   }
 
   async function transactionSnapshot() {
@@ -138,6 +158,12 @@ describe.runIf(runBackfillMigration)("Accounting Period historical backfill migr
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "financial_transactions" ALTER COLUMN "accounting_period_id" DROP NOT NULL',
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "financial_transactions" DISABLE TRIGGER "financial_transactions_accounting_period_membership"',
+    );
   });
 
   afterAll(async () => {
@@ -157,6 +183,12 @@ describe.runIf(runBackfillMigration)("Accounting Period historical backfill migr
     if (starts.length > 0) {
       await prisma.accountingPeriod.deleteMany({ where: { effectiveStart: { in: starts } } });
     }
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "financial_transactions" ENABLE TRIGGER "financial_transactions_accounting_period_membership"',
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "financial_transactions" ALTER COLUMN "accounting_period_id" SET NOT NULL',
+    );
     await prisma.$disconnect();
   });
 
