@@ -34,6 +34,12 @@ What exact double-entry account model, posting rules, balance-bucket semantics, 
 - Bonus accounting: Promotion grants, expiry, and BONUS-to-CASH conversion are separate balanced Ledger transactions linked to `promotionEntitlementId`; source provenance remains traceable across entitlements.
 - Source-bucket allocation: mixed-bucket Bet funding is snapshotted at acceptance and that same allocation is reused for refund, settlement, turnover, and correction instead of being recomputed from the current Wallet.
 
+### Financial round 4 — accounting-period cadence change request approved
+
+- Accounting Period cadence for v1 is **monthly**.
+- This decision changes only the cadence. It does not yet define the accounting timezone, exact month-boundary instant, period creation/ownership, overlap/gap enforcement, bootstrap/backfill treatment for existing Financial Transactions, period close metadata/workflow, or reconciliation-exception control semantics.
+- Implementation must not infer those remaining controls from the monthly cadence decision alone.
+
 ## Answer
 
 Lottify v1 uses a balanced operational double-entry subledger as the financial source of truth. Wallet values are derived from immutable Ledger postings plus active Reservations; no other domain owns an authoritative mutable balance.
@@ -45,7 +51,7 @@ Lottify v1 uses a balanced operational double-entry subledger as the financial s
 5. Deposit, Withdrawal, Bet, Win, Refund, Bonus, fee, Adjustment, Chargeback, and recovery effects use explicit traceable double-entry postings rather than hidden balance changes.
 6. Refund and correction preserve the accepted source-bucket allocation. Posted history is never edited: open-period mistakes use reversals; later or closed-period corrections use compensating transactions.
 7. Debt/recovery may create a negative net position, but spendable betting/withdrawal availability is zero until policy resolves it.
-8. Closed accounting periods cannot be backdated or mutated; later corrections post in a current open period and reference the originating transaction/period.
+8. Accounting periods use a monthly cadence in v1. Closed periods cannot be backdated or mutated; later corrections post in a current open period and reference the originating transaction/period. The remaining timezone, ownership, boundary, backfill, and close-control semantics require their own approved decisions before implementation.
 9. Wallet is a projection of Ledger + Reservations. On disagreement, Ledger is authoritative and the projection is rebuilt/reconciled.
 10. Reconciliation covers Ledger/Wallet, Payments/Provider, Betting-Settlement/Ledger, and Promotion Entitlement/bonus postings. Mismatches become durable auditable Discrepancies.
 11. Manual discrepancy resolution that changes money creates an approved Adjustment/Compensation transaction with reason, evidence, and audit; balances are not edited directly.
