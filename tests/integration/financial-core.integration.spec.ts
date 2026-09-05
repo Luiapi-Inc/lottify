@@ -433,6 +433,94 @@ describe.runIf(runIntegration)("financial core integration", () => {
     expect(await ledger.getAvailableMinorUnits(lockedAccountId)).toBe(0n);
   });
 
+  it("blocks betting and withdrawal availability while Member CASH remains negative", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const bonusAccountId = await ledger.ensureMemberAccount(memberId, "BONUS");
+    const fundingAccountId = await ledger.ensureSystemAccount(`funding:${randomUUID()}`);
+    const recoveryAccountId = await ledger.ensureSystemAccount(`recovery:${randomUUID()}`);
+
+    await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "TEST_SEED_RECOVERY_POSITION",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.recovery.seed",
+        key: randomUUID(),
+        fingerprint: "seed:cash:2000:bonus:3000",
+      },
+      domainReferences: { test: "recovery-debt" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: fundingAccountId, side: "DEBIT", amountMinor: 5_000n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 2_000n },
+        { accountId: bonusAccountId, side: "CREDIT", amountMinor: 3_000n },
+      ],
+    });
+
+    await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "TEST_RECOVERY_CHARGEBACK",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.recovery.chargeback",
+        key: randomUUID(),
+        fingerprint: "chargeback:cash:3000",
+      },
+      domainReferences: { test: "recovery-debt" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: cashAccountId, side: "DEBIT", amountMinor: 3_000n },
+        { accountId: recoveryAccountId, side: "CREDIT", amountMinor: 3_000n },
+      ],
+    });
+
+    const projection = await ledger.getWalletProjection(memberId);
+    expect(projection.buckets).toEqual([
+      { bucket: "CASH", postedMinor: -1_000n, reservedMinor: 0n, availableMinor: 0n },
+      { bucket: "BONUS", postedMinor: 3_000n, reservedMinor: 0n, availableMinor: 0n },
+      { bucket: "LOCKED", postedMinor: 0n, reservedMinor: 0n, availableMinor: 0n },
+    ]);
+    expect(await ledger.getAvailableMinorUnits(cashAccountId)).toBe(0n);
+    expect(await ledger.getAvailableMinorUnits(bonusAccountId)).toBe(0n);
+
+    await expect(
+      ledger.reserve({
+        purpose: "BET",
+        businessReference: `bet:${randomUUID()}`,
+        memberId,
+        currency: "THB",
+        amountMinor: 1_000n,
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.recovery.bet",
+          key: randomUUID(),
+          fingerprint: "bet:bonus:1000",
+        },
+        allocations: [{ accountId: bonusAccountId, amountMinor: 1_000n }],
+      }),
+    ).rejects.toThrow("Member debt blocks betting and withdrawal availability");
+
+    await expect(
+      ledger.reserve({
+        purpose: "WITHDRAWAL",
+        businessReference: `withdrawal:${randomUUID()}`,
+        memberId,
+        currency: "THB",
+        amountMinor: 1n,
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.recovery.withdrawal",
+          key: randomUUID(),
+          fingerprint: "withdrawal:cash:1",
+        },
+        allocations: [{ accountId: cashAccountId, amountMinor: 1n }],
+      }),
+    ).rejects.toThrow("Member debt blocks betting and withdrawal availability");
+  });
+
   it("atomically consumes the persisted Reservation allocation into one balanced Ledger transaction", async () => {
     const memberId = randomUUID();
     const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");

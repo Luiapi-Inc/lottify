@@ -14,6 +14,7 @@ import {
   assertBalancedLedgerPostings,
   assertReservationCanBeCreated,
   calculateAvailableMinorUnits,
+  isDebtRecoveryRestricted,
 } from "../domain/financial-invariants";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -313,15 +314,37 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const accountIds = uniqueSorted(input.allocations.map((allocation) => allocation.accountId));
-        await lockAccounts(tx, accountIds);
+        const allocationAccountIds = uniqueSorted(
+          input.allocations.map((allocation) => allocation.accountId),
+        );
+        const cashAccount = await tx.ledgerAccount.findFirst({
+          where: {
+            kind: "MEMBER",
+            memberId: input.memberId,
+            bucket: "CASH",
+            currency: input.currency,
+          },
+          select: { id: true },
+        });
+        const lockedAccountIds = uniqueSorted([
+          ...allocationAccountIds,
+          ...(cashAccount ? [cashAccount.id] : []),
+        ]);
+        await lockAccounts(tx, lockedAccountIds);
 
         const accounts = await tx.ledgerAccount.findMany({
-          where: { id: { in: accountIds } },
+          where: { id: { in: allocationAccountIds } },
           select: { id: true, kind: true, memberId: true, bucket: true, currency: true },
         });
-        if (accounts.length !== accountIds.length) {
+        if (accounts.length !== allocationAccountIds.length) {
           throw new Error("Reservation references an unknown Ledger account");
+        }
+
+        if (cashAccount) {
+          const postedCashMinor = await getAccountPostedMinor(tx, cashAccount.id);
+          if (isDebtRecoveryRestricted(postedCashMinor)) {
+            throw new Error("Member debt blocks betting and withdrawal availability");
+          }
         }
 
         const accountById = new Map(accounts.map((account) => [account.id, account]));
@@ -569,21 +592,42 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
   }
 
   async getAvailableMinorUnits(accountId: string): Promise<bigint> {
-    const account = await this.prisma.ledgerAccount.findUnique({
-      where: { id: accountId },
-      select: { kind: true, bucket: true },
-    });
-    if (!account || account.kind !== "MEMBER") {
-      throw new Error("Wallet availability requires a Member Ledger account");
-    }
-    if (account.bucket === "LOCKED") return 0n;
+    return this.prisma.$transaction(
+      async (tx) => {
+        const account = await tx.ledgerAccount.findUnique({
+          where: { id: accountId },
+          select: { kind: true, bucket: true, memberId: true, currency: true },
+        });
+        if (!account || account.kind !== "MEMBER" || !account.memberId) {
+          throw new Error("Wallet availability requires a Member Ledger account");
+        }
+        if (account.bucket === "LOCKED") return 0n;
 
-    const availability = await getAccountAvailability(this.prisma, accountId);
-    const availableMinor = calculateAvailableMinorUnits(
-      availability.postedMinor,
-      availability.activeReservationAmountsMinor,
+        const cashAccount = await tx.ledgerAccount.findFirst({
+          where: {
+            kind: "MEMBER",
+            memberId: account.memberId,
+            bucket: "CASH",
+            currency: account.currency,
+          },
+          select: { id: true },
+        });
+        if (
+          cashAccount &&
+          isDebtRecoveryRestricted(await getAccountPostedMinor(tx, cashAccount.id))
+        ) {
+          return 0n;
+        }
+
+        const availability = await getAccountAvailability(tx, accountId);
+        const availableMinor = calculateAvailableMinorUnits(
+          availability.postedMinor,
+          availability.activeReservationAmountsMinor,
+        );
+        return availableMinor > 0n ? availableMinor : 0n;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
-    return availableMinor > 0n ? availableMinor : 0n;
   }
 
   async getWalletProjection(memberId: string, currency: "THB"): Promise<WalletProjection> {
@@ -622,7 +666,13 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
           }),
         );
 
-        return { memberId, currency, dataAsOf, buckets };
+        const postedCashMinor =
+          buckets.find((bucket) => bucket.bucket === "CASH")?.postedMinor ?? 0n;
+        const projectedBuckets = isDebtRecoveryRestricted(postedCashMinor)
+          ? buckets.map((bucket) => ({ ...bucket, availableMinor: 0n }))
+          : buckets;
+
+        return { memberId, currency, dataAsOf, buckets: projectedBuckets };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
@@ -803,15 +853,32 @@ async function getAccountAvailability(
     }),
   ]);
 
-  const postedMinor = postings.reduce(
-    (balance, posting) =>
-      posting.side === "CREDIT" ? balance + posting.amountMinor : balance - posting.amountMinor,
-    0n,
-  );
+  const postedMinor = calculatePostedMinor(postings);
   return {
     postedMinor,
     activeReservationAmountsMinor: activeAllocations.map((allocation) => allocation.amountMinor),
   };
+}
+
+async function getAccountPostedMinor(
+  tx: Pick<TransactionClient, "ledgerPosting">,
+  accountId: string,
+): Promise<bigint> {
+  const postings = await tx.ledgerPosting.findMany({
+    where: { accountId },
+    select: { side: true, amountMinor: true },
+  });
+  return calculatePostedMinor(postings);
+}
+
+function calculatePostedMinor(
+  postings: readonly { side: string; amountMinor: bigint }[],
+): bigint {
+  return postings.reduce(
+    (balance, posting) =>
+      posting.side === "CREDIT" ? balance + posting.amountMinor : balance - posting.amountMinor,
+    0n,
+  );
 }
 
 async function lockAccounts(tx: TransactionClient, accountIds: readonly string[]): Promise<void> {

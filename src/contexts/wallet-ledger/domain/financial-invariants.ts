@@ -59,6 +59,10 @@ export function calculateAvailableMinorUnits(
   return postedSpendableBalanceMinor - reservedMinor;
 }
 
+export function isDebtRecoveryRestricted(postedCashMinor: bigint): boolean {
+  return postedCashMinor < 0n;
+}
+
 export function assertReservationCanBeCreated(
   postedSpendableBalanceMinor: bigint,
   activeReservationAmountsMinor: readonly bigint[],

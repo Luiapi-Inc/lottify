@@ -4,6 +4,7 @@ import {
   assertBalancedLedgerPostings,
   assertReservationCanBeCreated,
   calculateAvailableMinorUnits,
+  isDebtRecoveryRestricted,
 } from "../../src/contexts/wallet-ledger/domain/financial-invariants";
 
 describe("financial core invariants", () => {
@@ -68,5 +69,11 @@ describe("financial core invariants", () => {
     expect(() =>
       assertReservationCanBeCreated(10_000n, [2_000n, 1_500n], 6_501n),
     ).toThrow("would exceed available spendable balance");
+  });
+
+  it("blocks betting and withdrawal availability while Member CASH remains negative", () => {
+    expect(isDebtRecoveryRestricted(-1n)).toBe(true);
+    expect(isDebtRecoveryRestricted(0n)).toBe(false);
+    expect(isDebtRecoveryRestricted(1n)).toBe(false);
   });
 });
