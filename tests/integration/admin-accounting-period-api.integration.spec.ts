@@ -3,6 +3,7 @@ import { Module, type INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import type { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AdminAccountingPeriodController } from "../../apps/api/src/admin-accounting-period.controller";
@@ -130,24 +131,20 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       where: { operationType: "TEST_ACCOUNTING_PERIOD_APPROVAL_BLOCKER" },
     });
     if (adminIds.length > 0) {
-      await prisma.accountingPeriod.deleteMany({
-        where: { createdByAdminId: { in: adminIds } },
-      });
+      await deleteAccountingPeriodFixtures({ createdByAdminId: { in: adminIds } });
       await prisma.idempotencyRecord.deleteMany({
         where: {
           OR: adminIds.map((adminId) => ({ scope: { startsWith: `admin:${adminId}:` } })),
         },
       });
     }
-    await prisma.accountingPeriod.deleteMany({
-      where: {
-        effectiveStart: {
-          gte: new Date("2199-02-03T17:00:00.000Z"),
-          lt: new Date("2199-08-01T17:00:00.000Z"),
-        },
+    await deleteAccountingPeriodFixtures({
+      effectiveStart: {
+        gte: new Date("2199-02-03T17:00:00.000Z"),
+        lt: new Date("2199-08-01T17:00:00.000Z"),
       },
     });
-    await prisma.accountingPeriod.deleteMany({ where: { id: fixturePeriodId } });
+    await deleteAccountingPeriodFixtures({ id: fixturePeriodId });
     await prisma.adminReauthEvidence.deleteMany({
       where: { adminUser: { email: { startsWith: emailPrefix } } },
     });
@@ -207,6 +204,13 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       cancellationRequestedByAdminId: null,
       cancellationReason: null,
       cancellationRequestedAt: null,
+      closeRequestedByAdminId: null,
+      closeReason: null,
+      closeRequestedAt: null,
+      closeReconciliationReferences: null,
+      closeCheckpointReferences: null,
+      closeBlockingDiscrepancyReferences: null,
+      closeAcceptedExceptionReferences: null,
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
       allowedActions: [],
@@ -936,19 +940,12 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       { expectedVersion: 1 },
     );
     const postedAt = new Date("2199-05-21T00:00:00.000Z");
-    await prisma.financialTransaction.create({
-      data: {
-        businessTransactionId: randomUUID(),
-        operationType: "TEST_ACCOUNTING_PERIOD_APPROVAL_BLOCKER",
-        correlationId: randomUUID(),
-        idempotencyScope: `test.accounting-period-approval.${periodId}`,
-        idempotencyKey: randomUUID(),
-        fingerprint: "referenced-automatic-period",
-        domainReferences: { accountingPeriodApprovalFixture: periodId },
-        effectiveAt: postedAt,
-        postedAt,
-        accountingPeriodId: automatic.id,
-      },
+    await createReferencedFinancialTransactionFixture({
+      idempotencyScope: `test.accounting-period-approval.${periodId}`,
+      fingerprint: "referenced-automatic-period",
+      domainReferences: { accountingPeriodApprovalFixture: periodId },
+      postedAt,
+      accountingPeriodId: automatic.id,
     });
 
     const approverId = await adminIdForToken(approverAdminToken);
@@ -1583,19 +1580,12 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
       },
     });
     const postedAt = new Date("2199-06-19T00:00:00.000Z");
-    await prisma.financialTransaction.create({
-      data: {
-        businessTransactionId: randomUUID(),
-        operationType: "TEST_ACCOUNTING_PERIOD_APPROVAL_BLOCKER",
-        correlationId: randomUUID(),
-        idempotencyScope: `test.accounting-period-cancellation.${referenced.id}`,
-        idempotencyKey: randomUUID(),
-        fingerprint: "referenced-custom-period",
-        domainReferences: { accountingPeriodCancellationFixture: referenced.id },
-        effectiveAt: postedAt,
-        postedAt,
-        accountingPeriodId: referenced.id,
-      },
+    await createReferencedFinancialTransactionFixture({
+      idempotencyScope: `test.accounting-period-cancellation.${referenced.id}`,
+      fingerprint: "referenced-custom-period",
+      domainReferences: { accountingPeriodCancellationFixture: referenced.id },
+      postedAt,
+      accountingPeriodId: referenced.id,
     });
     await freshCancellationReauth(adminToken, adminSecret);
     const rejectedReferenced = await command(
@@ -2349,6 +2339,44 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
         effectiveEnd: new Date(effectiveEnd),
         state: "CLOSING",
       },
+    });
+  }
+
+  async function createReferencedFinancialTransactionFixture(input: {
+    idempotencyScope: string;
+    fingerprint: string;
+    domainReferences: Record<string, string>;
+    postedAt: Date;
+    accountingPeriodId: string;
+  }): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      // These two legacy-protection tests intentionally model pre-existing anomalous
+      // references. Normal production posting is required to target OPEN only.
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+      await tx.financialTransaction.create({
+        data: {
+          businessTransactionId: randomUUID(),
+          operationType: "TEST_ACCOUNTING_PERIOD_APPROVAL_BLOCKER",
+          correlationId: randomUUID(),
+          idempotencyScope: input.idempotencyScope,
+          idempotencyKey: randomUUID(),
+          fingerprint: input.fingerprint,
+          domainReferences: input.domainReferences,
+          effectiveAt: input.postedAt,
+          postedAt: input.postedAt,
+          accountingPeriodId: input.accountingPeriodId,
+        },
+      });
+    });
+  }
+
+  async function deleteAccountingPeriodFixtures(
+    where: Prisma.AccountingPeriodWhereInput,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      // Test-only cleanup may remove terminal CLOSED fixtures; production has no such path.
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+      await tx.accountingPeriod.deleteMany({ where });
     });
   }
 
