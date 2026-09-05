@@ -17,17 +17,10 @@ RUN APP_ENV=test \
     pnpm build:backend && \
     pnpm prune --prod
 
-FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS runtime
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:774b7d020b24214835769e24c3544835526cd0288f0b094eae48e8b2c2429a79 AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
-RUN rm -rf \
-    /usr/local/lib/node_modules/npm \
-    /usr/local/lib/node_modules/corepack \
-    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
-    /usr/local/bin/pnpm /usr/local/bin/pnpx \
-    /usr/local/bin/yarn /usr/local/bin/yarnpkg \
-    /opt/yarn-*
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
+COPY --from=build --chown=65532:65532 /app/node_modules ./node_modules
+COPY --from=build --chown=65532:65532 /app/dist ./dist
 EXPOSE 3000
-CMD ["node", "dist/apps/api/src/main.js"]
+CMD ["dist/apps/api/src/main.js"]
