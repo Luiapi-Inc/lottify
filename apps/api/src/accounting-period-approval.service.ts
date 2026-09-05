@@ -96,7 +96,7 @@ export class AccountingPeriodApprovalService {
             reason: candidate.reason,
             reauthEvidenceId: input.reauthEvidence.id,
             correlationId: input.correlationId,
-            outcome: "ACCOUNTING_PERIOD_START_ELAPSED",
+            outcome: "ELAPSED_START",
           });
           await completeIdempotencyRecord(
             tx,
