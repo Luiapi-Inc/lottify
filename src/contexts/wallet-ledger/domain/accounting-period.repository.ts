@@ -18,6 +18,16 @@ export interface AccountingPeriodRecord {
   cancellationRequestedByAdminId: string | null;
   cancellationReason: string | null;
   cancellationRequestedAt: Date | null;
+  closeRequestedByAdminId: string | null;
+  closeReason: string | null;
+  closeRequestedAt: Date | null;
+  closeReconciliationReferences: readonly string[] | null;
+  closeCheckpointReferences: readonly string[] | null;
+  closeBlockingDiscrepancyReferences: readonly string[] | null;
+  closeAcceptedExceptionReferences: readonly {
+    discrepancyReference: string;
+    exceptionReference: string;
+  }[] | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -11,6 +11,7 @@ const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
     "accounting-period.submit",
     "accounting-period.approve",
     "accounting-period.cancel",
+    "accounting-period.close",
   ],
   ADMIN: [
     "accounting-period.read",
@@ -18,6 +19,7 @@ const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
     "accounting-period.submit",
     "accounting-period.approve",
     "accounting-period.cancel",
+    "accounting-period.close",
   ],
   AUDITOR: ["accounting-period.read"],
 };

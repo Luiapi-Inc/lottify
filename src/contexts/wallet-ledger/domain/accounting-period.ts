@@ -20,7 +20,12 @@ export type AccountingPeriodMode = (typeof ACCOUNTING_PERIOD_MODES)[number];
 export type AccountingPeriodGenerationKind =
   (typeof ACCOUNTING_PERIOD_GENERATION_KINDS)[number];
 export type AccountingPeriodState = (typeof ACCOUNTING_PERIOD_STATES)[number];
-export const ACCOUNTING_PERIOD_ALLOWED_ACTIONS = ["submit", "approve", "cancel"] as const;
+export const ACCOUNTING_PERIOD_ALLOWED_ACTIONS = [
+  "submit",
+  "approve",
+  "cancel",
+  "close",
+] as const;
 export type AccountingPeriodAllowedAction =
   (typeof ACCOUNTING_PERIOD_ALLOWED_ACTIONS)[number];
 
@@ -46,6 +51,13 @@ export interface AccountingPeriodView {
   cancellationRequestedByAdminId: string | null;
   cancellationReason: string | null;
   cancellationRequestedAt: Date | null;
+  closeRequestedByAdminId: string | null;
+  closeReason: string | null;
+  closeRequestedAt: Date | null;
+  closeReconciliationReferences: readonly string[] | null;
+  closeCheckpointReferences: readonly string[] | null;
+  closeBlockingDiscrepancyReferences: readonly string[] | null;
+  closeAcceptedExceptionReferences: readonly AccountingPeriodAcceptedExceptionReference[] | null;
   createdAt: Date;
   updatedAt: Date;
   allowedActions: readonly AccountingPeriodAllowedAction[];
@@ -75,6 +87,11 @@ export interface AccountingPeriodCommandResult {
   replacementPreview: AccountingPeriodReplacementPreview;
 }
 
+export interface AccountingPeriodAcceptedExceptionReference {
+  discrepancyReference: string;
+  exceptionReference: string;
+}
+
 export type AccountingPeriodRuleErrorCode =
   | "VALIDATION_ERROR"
   | "ACCOUNTING_PERIOD_NOT_FOUND"
@@ -83,6 +100,7 @@ export type AccountingPeriodRuleErrorCode =
   | "ACCOUNTING_PERIOD_STATE_CONFLICT"
   | "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN"
   | "ACCOUNTING_PERIOD_CANCELLATION_FORBIDDEN"
+  | "ACCOUNTING_PERIOD_CLOSE_BLOCKED"
   | "ACCOUNTING_PERIOD_START_ELAPSED"
   | "VERSION_CONFLICT";
 

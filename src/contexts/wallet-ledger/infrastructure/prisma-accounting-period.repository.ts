@@ -722,6 +722,13 @@ function mapRecord(period: {
   cancellationRequestedByAdminId: string | null;
   cancellationReason: string | null;
   cancellationRequestedAt: Date | null;
+  closeRequestedByAdminId: string | null;
+  closeReason: string | null;
+  closeRequestedAt: Date | null;
+  closeReconciliationReferences: Prisma.JsonValue | null;
+  closeCheckpointReferences: Prisma.JsonValue | null;
+  closeBlockingDiscrepancyReferences: Prisma.JsonValue | null;
+  closeAcceptedExceptionReferences: Prisma.JsonValue | null;
   createdAt: Date;
   updatedAt: Date;
 }): AccountingPeriodRecord {
@@ -738,7 +745,50 @@ function mapRecord(period: {
     cancellationRequestedByAdminId: period.cancellationRequestedByAdminId,
     cancellationReason: period.cancellationReason,
     cancellationRequestedAt: period.cancellationRequestedAt,
+    closeRequestedByAdminId: period.closeRequestedByAdminId,
+    closeReason: period.closeReason,
+    closeRequestedAt: period.closeRequestedAt,
+    closeReconciliationReferences: stringArrayFromJson(period.closeReconciliationReferences),
+    closeCheckpointReferences: stringArrayFromJson(period.closeCheckpointReferences),
+    closeBlockingDiscrepancyReferences: stringArrayFromJson(
+      period.closeBlockingDiscrepancyReferences,
+    ),
+    closeAcceptedExceptionReferences: acceptedExceptionsFromJson(
+      period.closeAcceptedExceptionReferences,
+    ),
     createdAt: period.createdAt,
     updatedAt: period.updatedAt,
   };
+}
+
+function stringArrayFromJson(value: Prisma.JsonValue | null): readonly string[] | null {
+  if (value === null) return null;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error("Accounting Period close evidence reference array is invalid");
+  }
+  return value as string[];
+}
+
+function acceptedExceptionsFromJson(
+  value: Prisma.JsonValue | null,
+): readonly { discrepancyReference: string; exceptionReference: string }[] | null {
+  if (value === null) return null;
+  if (!Array.isArray(value)) {
+    throw new Error("Accounting Period accepted exception references are invalid");
+  }
+  return value.map((item) => {
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      Array.isArray(item) ||
+      typeof item.discrepancyReference !== "string" ||
+      typeof item.exceptionReference !== "string"
+    ) {
+      throw new Error("Accounting Period accepted exception reference is invalid");
+    }
+    return {
+      discrepancyReference: item.discrepancyReference,
+      exceptionReference: item.exceptionReference,
+    };
+  });
 }

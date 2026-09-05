@@ -35,10 +35,17 @@ describe.runIf(runContractMigration)("Accounting Period contract migration", () 
       if (replaySql === historicalSql) {
         throw new Error("Historical Accounting Period backfill conflict clause was not found");
       }
+      const historicalInvariantSql = replaySql.replace(
+        "BEGIN;",
+        "BEGIN;\nSET LOCAL session_replication_role = replica;",
+      );
+      if (historicalInvariantSql === replaySql) {
+        throw new Error("Historical Accounting Period backfill transaction boundary was not found");
+      }
       execFileSync("pnpm", ["exec", "prisma", "db", "execute", "--stdin"], {
         cwd: process.cwd(),
         env: process.env,
-        input: replaySql,
+        input: historicalInvariantSql,
         stdio: "pipe",
       });
       return;

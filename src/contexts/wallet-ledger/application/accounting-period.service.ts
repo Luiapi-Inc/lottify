@@ -17,6 +17,7 @@ interface AccountingPeriodViewOptions {
   canSubmit?: boolean;
   canApprove?: boolean;
   canCancel?: boolean;
+  canClose?: boolean;
   actorAdminId?: string;
   canSelfApprove?: boolean;
 }
@@ -127,6 +128,13 @@ function toView(
           period.cancellationRequestedByAdminId !== options.actorAdminId))
   ) {
     allowedActions.push("cancel");
+  }
+  if (
+    options.canClose === true &&
+    period.state === "CLOSING" &&
+    (period.closeRequestedByAdminId === null || period.closeRequestedByAdminId !== options.actorAdminId)
+  ) {
+    allowedActions.push("close");
   }
   return {
     ...period,

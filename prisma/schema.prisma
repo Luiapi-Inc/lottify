@@ -43,6 +43,8 @@ model AdminUser {
   approvalDecisions   AdminApprovalEvidence[] @relation("AdminApprovalApprover")
   auditRecords        AuditRecord[]
   accountingPeriodCancellationRequests AccountingPeriod[] @relation("AccountingPeriodCancellationRequestedBy")
+  accountingPeriodCloseRequests AccountingPeriod[] @relation("AccountingPeriodCloseRequestedBy")
+  accountingPeriodCloseEvidence AccountingPeriodCloseEvidence[] @relation("AccountingPeriodClosedBy")
 
   @@index([status, role])
   @@map("admin_users")
@@ -109,6 +111,7 @@ model AdminApprovalEvidence {
   approver          AdminUser           @relation("AdminApprovalApprover", fields: [approverAdminId], references: [id], onDelete: Restrict)
   reauthEvidence    AdminReauthEvidence @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
   auditRecords      AuditRecord[]
+  accountingPeriodCloseEvidence AccountingPeriodCloseEvidence?
 
   @@unique([action, resourceId])
   @@index([requesterAdminId, createdAt])
@@ -136,6 +139,7 @@ model AuditRecord {
   session          AdminAuthSession        @relation(fields: [sessionId], references: [id], onDelete: Restrict)
   reauthEvidence   AdminReauthEvidence?    @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
   approval         AdminApprovalEvidence? @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  accountingPeriodCloseEvidence AccountingPeriodCloseEvidence?
 
   @@index([resourceType, resourceId, createdAt])
   @@index([actorAdminId, createdAt])
@@ -240,16 +244,47 @@ model AccountingPeriod {
   cancellationRequestedByAdminId String?       @map("cancellation_requested_by_admin_id") @db.Uuid
   cancellationReason    String?                @map("cancellation_reason")
   cancellationRequestedAt DateTime?            @map("cancellation_requested_at")
+  closeRequestedByAdminId String?              @map("close_requested_by_admin_id") @db.Uuid
+  closeReason            String?               @map("close_reason")
+  closeRequestedAt       DateTime?             @map("close_requested_at")
+  closeReconciliationReferences Json?          @map("close_reconciliation_references")
+  closeCheckpointReferences Json?              @map("close_checkpoint_references")
+  closeBlockingDiscrepancyReferences Json?     @map("close_blocking_discrepancy_references")
+  closeAcceptedExceptionReferences Json?       @map("close_accepted_exception_references")
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
   financialTransactions FinancialTransaction[]
   createdByAdmin        AdminUser?             @relation("AccountingPeriodCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   cancellationRequestedBy AdminUser?           @relation("AccountingPeriodCancellationRequestedBy", fields: [cancellationRequestedByAdminId], references: [id], onDelete: Restrict)
+  closeRequestedBy      AdminUser?             @relation("AccountingPeriodCloseRequestedBy", fields: [closeRequestedByAdminId], references: [id], onDelete: Restrict)
+  closeEvidence         AccountingPeriodCloseEvidence?
 
   @@index([state, effectiveStart, effectiveEnd])
   @@index([createdByAdminId, createdAt])
   @@index([cancellationRequestedByAdminId, cancellationRequestedAt])
+  @@index([closeRequestedByAdminId, closeRequestedAt])
   @@map("accounting_periods")
+}
+
+model AccountingPeriodCloseEvidence {
+  id                            String                @id @default(uuid()) @db.Uuid
+  accountingPeriodId            String                @unique @map("accounting_period_id") @db.Uuid
+  closedAt                      DateTime              @map("closed_at")
+  approvalId                    String                @unique @map("approval_id") @db.Uuid
+  reconciliationReferences      Json                  @map("reconciliation_references")
+  checkpointReferences          Json                  @map("checkpoint_references")
+  blockingDiscrepancyReferences Json                  @map("blocking_discrepancy_references")
+  acceptedExceptionReferences   Json                  @map("accepted_exception_references")
+  actorAdminId                  String                @map("actor_admin_id") @db.Uuid
+  auditRecordId                 String                @unique @map("audit_record_id") @db.Uuid
+  createdAt                     DateTime              @default(now()) @map("created_at")
+  accountingPeriod              AccountingPeriod      @relation(fields: [accountingPeriodId], references: [id], onDelete: Restrict)
+  approval                      AdminApprovalEvidence @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  actor                         AdminUser             @relation("AccountingPeriodClosedBy", fields: [actorAdminId], references: [id], onDelete: Restrict)
+  auditRecord                   AuditRecord           @relation(fields: [auditRecordId], references: [id], onDelete: Restrict)
+
+  @@index([actorAdminId, closedAt])
+  @@map("accounting_period_close_evidence")
 }
 
 model LedgerPosting {

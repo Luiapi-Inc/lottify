@@ -34,6 +34,7 @@ import { AccountingPeriodService } from "../../../src/contexts/wallet-ledger/app
 import {
   ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
   ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
+  ACCOUNTING_PERIOD_CLOSE_ACTION_CLASS,
   AccountingPeriodApprovalService,
 } from "./accounting-period-approval.service";
 import { AdminAuthService } from "../../../src/contexts/identity-access/application/admin-auth.service";
@@ -110,6 +111,34 @@ class AccountingPeriodResponse {
 
   @ApiProperty({ type: String, format: "date-time", nullable: true })
   cancellationRequestedAt!: Date | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Admin actor that initiated governed CLOSING period close",
+  })
+  closeRequestedByAdminId!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  closeReason!: string | null;
+
+  @ApiProperty({ type: String, format: "date-time", nullable: true })
+  closeRequestedAt!: Date | null;
+
+  @ApiProperty({ type: [String], nullable: true })
+  closeReconciliationReferences!: readonly string[] | null;
+
+  @ApiProperty({ type: [String], nullable: true })
+  closeCheckpointReferences!: readonly string[] | null;
+
+  @ApiProperty({ type: [String], nullable: true })
+  closeBlockingDiscrepancyReferences!: readonly string[] | null;
+
+  @ApiProperty({ type: [Object], nullable: true })
+  closeAcceptedExceptionReferences!: readonly {
+    discrepancyReference: string;
+    exceptionReference: string;
+  }[] | null;
 
   @ApiProperty({ type: String, format: "date-time" })
   createdAt!: Date;
@@ -205,6 +234,39 @@ class CancelAccountingPeriodBody {
 }
 
 class AccountingPeriodCancellationResponse {
+  @ApiProperty({ type: AccountingPeriodResponse })
+  period!: AccountingPeriodResponse;
+}
+
+class AccountingPeriodAcceptedExceptionReferenceBody {
+  @ApiProperty({ type: String, example: "discrepancy:ledger-wallet:2026-W36:001" })
+  discrepancyReference!: string;
+
+  @ApiProperty({ type: String, example: "accepted-exception:approval:001" })
+  exceptionReference!: string;
+}
+
+class CloseAccountingPeriodBody {
+  @ApiProperty({ type: Number, minimum: 1, example: 4 })
+  expectedVersion!: number;
+
+  @ApiProperty({ type: String, example: "Weekly close after reconciliation completed" })
+  reason!: string;
+
+  @ApiProperty({ type: [String], example: ["reconciliation-run:2026-W36"] })
+  reconciliationReferences!: string[];
+
+  @ApiProperty({ type: [String], example: ["ledger-checkpoint:2026-W36:end"] })
+  checkpointReferences!: string[];
+
+  @ApiProperty({ type: [String], example: [] })
+  blockingDiscrepancyReferences!: string[];
+
+  @ApiProperty({ type: [AccountingPeriodAcceptedExceptionReferenceBody], example: [] })
+  acceptedExceptionReferences!: AccountingPeriodAcceptedExceptionReferenceBody[];
+}
+
+class AccountingPeriodCloseResponse {
   @ApiProperty({ type: AccountingPeriodResponse })
   period!: AccountingPeriodResponse;
 }
@@ -562,6 +624,116 @@ export class AdminAccountingPeriodController {
     return approvalResultOrThrow(result);
   }
 
+  @Post(":id/close")
+  @HttpCode(HttpStatus.OK)
+  @RequireAdminCapabilities("accounting-period.close")
+  @ApiOperation({
+    summary: "Request or approve governed close for a CLOSING Accounting Period",
+  })
+  @ApiParam({ name: "id", type: String, description: "Opaque Accounting Period identity" })
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  @ApiBody({ type: CloseAccountingPeriodBody })
+  @ApiOkResponse({ type: AccountingPeriodCloseResponse })
+  @ApiBadRequestResponse({ type: ApiErrorResponse })
+  @ApiNotFoundResponse({ type: ApiErrorResponse })
+  @ApiConflictResponse({ type: ApiErrorResponse })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponse })
+  @ApiForbiddenResponse({ type: ApiErrorResponse })
+  async close(
+    @Param("id") id: string,
+    @Body() body: CloseAccountingPeriodBody,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Req() request: AdminAuthenticatedRequest,
+  ): Promise<Prisma.JsonValue> {
+    const admin = requiredAdmin(request);
+    const parsed = parseCloseBody(body, request);
+    const key = idempotencyKey?.trim();
+    if (!key) {
+      throw apiError(
+        request,
+        HttpStatus.BAD_REQUEST,
+        "VALIDATION_ERROR",
+        "Idempotency-Key header is required",
+        { header: "Idempotency-Key" },
+      );
+    }
+    const correlationId = correlationIdFor(request);
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify({ id, ...parsed }), "utf8")
+      .digest("hex");
+    const claim = await this.idempotency.claim({
+      scope: `admin:${admin.adminId}:accounting-period:${id}:close`,
+      key,
+      fingerprint,
+      expiresAt: IDEMPOTENCY_CONTRACT_EXPIRY,
+    });
+
+    if (claim.kind === "existing") {
+      if (claim.fingerprint !== fingerprint) {
+        throw apiError(
+          request,
+          HttpStatus.CONFLICT,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different payload",
+          {},
+        );
+      }
+      if (
+        claim.status === "COMPLETED" &&
+        claim.responseCode !== null &&
+        claim.responseBody !== null
+      ) {
+        return approvalResultOrThrow({
+          statusCode: claim.responseCode,
+          body: claim.responseBody,
+        });
+      }
+      if (claim.status !== "IN_PROGRESS") {
+        throw apiError(
+          request,
+          HttpStatus.CONFLICT,
+          "IDEMPOTENCY_IN_PROGRESS",
+          "The idempotent command cannot be resumed from its current status",
+          { status: claim.status },
+        );
+      }
+    }
+
+    let currentPeriod: AccountingPeriodView | undefined;
+    try {
+      currentPeriod = await this.accountingPeriods.getById(id, viewOptions(request));
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.NOT_FOUND) {
+        currentPeriod = undefined;
+      } else {
+        throw error;
+      }
+    }
+
+    let reauthEvidence;
+    if (currentPeriod?.state === "CLOSING" && currentPeriod.closeRequestedByAdminId !== null) {
+      try {
+        reauthEvidence = await this.adminAuth.requireFreshMfa(
+          admin,
+          ACCOUNTING_PERIOD_CLOSE_ACTION_CLASS,
+        );
+      } catch {
+        reauthEvidence = undefined;
+      }
+    }
+
+    const result = await this.approvals.closePeriod({
+      id,
+      ...parsed,
+      actor: admin,
+      reauthEvidence,
+      correlationId,
+      idempotencyRecordId: claim.recordId,
+      fingerprint,
+    });
+    return approvalResultOrThrow(result);
+  }
+
   private async executeIdempotent(input: {
     request: AdminAuthenticatedRequest;
     key: string | undefined;
@@ -649,12 +821,17 @@ function canCancel(request: AdminAuthenticatedRequest): boolean {
   return request.adminAuth?.capabilities.includes("accounting-period.cancel") === true;
 }
 
+function canClose(request: AdminAuthenticatedRequest): boolean {
+  return request.adminAuth?.capabilities.includes("accounting-period.close") === true;
+}
+
 function viewOptions(request: AdminAuthenticatedRequest) {
   const admin = request.adminAuth;
   return {
     canSubmit: canSubmit(request),
     canApprove: canApprove(request),
     canCancel: canCancel(request),
+    canClose: canClose(request),
     actorAdminId: admin?.adminId,
     canSelfApprove: admin?.role === "SUPER_ADMIN",
   };
@@ -745,6 +922,44 @@ function parseCancelBody(
     );
   }
   return { expectedVersion: body.expectedVersion, reason: body.reason };
+}
+
+function parseCloseBody(
+  body: CloseAccountingPeriodBody,
+  request: AdminAuthenticatedRequest,
+): {
+  expectedVersion: number;
+  reason: string;
+  reconciliationReferences: string[];
+  checkpointReferences: string[];
+  blockingDiscrepancyReferences: string[];
+  acceptedExceptionReferences: AccountingPeriodAcceptedExceptionReferenceBody[];
+} {
+  if (
+    !body ||
+    typeof body.expectedVersion !== "number" ||
+    typeof body.reason !== "string" ||
+    !Array.isArray(body.reconciliationReferences) ||
+    !Array.isArray(body.checkpointReferences) ||
+    !Array.isArray(body.blockingDiscrepancyReferences) ||
+    !Array.isArray(body.acceptedExceptionReferences)
+  ) {
+    throw apiError(
+      request,
+      HttpStatus.BAD_REQUEST,
+      "VALIDATION_ERROR",
+      "expectedVersion, reason and close evidence reference arrays are required",
+      {},
+    );
+  }
+  return {
+    expectedVersion: body.expectedVersion,
+    reason: body.reason,
+    reconciliationReferences: body.reconciliationReferences,
+    checkpointReferences: body.checkpointReferences,
+    blockingDiscrepancyReferences: body.blockingDiscrepancyReferences,
+    acceptedExceptionReferences: body.acceptedExceptionReferences,
+  };
 }
 
 function mapCommandError(request: AdminAuthenticatedRequest, error: unknown): unknown {

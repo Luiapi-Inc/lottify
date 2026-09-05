@@ -168,6 +168,15 @@ describe.runIf(runBackfillMigration)("Accounting Period historical backfill migr
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
+    // This suite replays the historical backfill migration against the current
+    // schema. Temporarily disable only the later close-finality guards so the
+    // migration is evaluated under the invariants that existed when it shipped.
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "accounting_periods" DISABLE TRIGGER "accounting_periods_close_transition_guard"',
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "accounting_periods" DISABLE TRIGGER "accounting_periods_closed_finality_guard"',
+    );
     await prisma.$executeRawUnsafe(
       'ALTER TABLE "financial_transactions" ALTER COLUMN "accounting_period_id" DROP NOT NULL',
     );
@@ -193,6 +202,12 @@ describe.runIf(runBackfillMigration)("Accounting Period historical backfill migr
     if (starts.length > 0) {
       await prisma.accountingPeriod.deleteMany({ where: { effectiveStart: { in: starts } } });
     }
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "accounting_periods" ENABLE TRIGGER "accounting_periods_closed_finality_guard"',
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "accounting_periods" ENABLE TRIGGER "accounting_periods_close_transition_guard"',
+    );
     await prisma.$executeRawUnsafe(
       'ALTER TABLE "financial_transactions" ENABLE TRIGGER "financial_transactions_accounting_period_membership"',
     );

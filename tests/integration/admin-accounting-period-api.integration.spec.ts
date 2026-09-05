@@ -11,6 +11,7 @@ import { AdminCapabilityGuard } from "../../apps/api/src/admin-capability.guard"
 import {
   ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
   ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
+  ACCOUNTING_PERIOD_CLOSE_ACTION_CLASS,
   AccountingPeriodApprovalService,
 } from "../../apps/api/src/accounting-period-approval.service";
 import { AdminAuthService } from "../../src/contexts/identity-access/application/admin-auth.service";
@@ -1803,7 +1804,369 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     ).toBe(1);
   });
 
-  it("publishes explicit create-custom/submit/approve/cancel OpenAPI operations and no generic PATCH", () => {
+  it("blocks close outside CLOSING and when reconciliation/checkpoint/discrepancy gates are incomplete", async () => {
+    const wrongState = await command(
+      `/api/v1/admin/accounting-periods/${fixturePeriodId}/close`,
+      adminToken,
+      randomUUID(),
+      closePayload(1),
+    );
+    expect(wrongState.response.status).toBe(409);
+    expect(wrongState.body).toMatchObject({ code: "ACCOUNTING_PERIOD_STATE_CONFLICT" });
+
+    const period = await createClosingPeriod(
+      "2199-07-14T17:00:00.000Z",
+      "2199-07-15T17:00:00.000Z",
+    );
+    const missingReconciliation = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      adminToken,
+      randomUUID(),
+      closePayload(1, { reconciliationReferences: [] }),
+    );
+    expect(missingReconciliation.response.status).toBe(409);
+    expect(missingReconciliation.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_CLOSE_BLOCKED",
+      details: { missingEvidence: ["reconciliation"] },
+    });
+
+    const missingCheckpoint = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      adminToken,
+      randomUUID(),
+      closePayload(1, { checkpointReferences: [] }),
+    );
+    expect(missingCheckpoint.response.status).toBe(409);
+    expect(missingCheckpoint.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_CLOSE_BLOCKED",
+      details: { missingEvidence: ["checkpoint"] },
+    });
+
+    const blockingDiscrepancy = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      adminToken,
+      randomUUID(),
+      closePayload(1, { blockingDiscrepancyReferences: ["discrepancy:blocking:001"] }),
+    );
+    expect(blockingDiscrepancy.response.status).toBe(409);
+    expect(blockingDiscrepancy.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_CLOSE_BLOCKED",
+      details: { blockingDiscrepancyReferences: ["discrepancy:blocking:001"] },
+    });
+
+    const acceptedException = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      adminToken,
+      randomUUID(),
+      closePayload(1, {
+        blockingDiscrepancyReferences: ["discrepancy:blocking:001"],
+        acceptedExceptionReferences: [
+          {
+            discrepancyReference: "discrepancy:blocking:001",
+            exceptionReference: "accepted-exception:001",
+          },
+        ],
+      }),
+    );
+    expect(acceptedException.response.status).toBe(200);
+    expect(acceptedException.body).toMatchObject({
+      period: {
+        id: period.id,
+        state: "CLOSING",
+        version: 2,
+        closeRequestedByAdminId: await adminIdForToken(adminToken),
+      },
+    });
+  });
+
+  it("closes with maker-checker approval, immutable evidence, idempotent replay and CLOSED finality", async () => {
+    const requesterAdminId = await adminIdForToken(adminToken);
+    const approverAdminId = await adminIdForToken(approverAdminToken);
+    const period = await createClosingPeriod(
+      "2199-07-15T17:00:00.000Z",
+      "2199-07-16T17:00:00.000Z",
+    );
+    const requestPayload = closePayload(1, {
+      blockingDiscrepancyReferences: ["discrepancy:accepted:001"],
+      acceptedExceptionReferences: [
+        {
+          discrepancyReference: "discrepancy:accepted:001",
+          exceptionReference: "accepted-exception:001",
+        },
+      ],
+    });
+    const approvalPayload = { ...requestPayload, expectedVersion: 2 };
+    const requested = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      adminToken,
+      randomUUID(),
+      requestPayload,
+    );
+    expect(requested.response.status).toBe(200);
+    expect(requested.body).toMatchObject({
+      period: {
+        id: period.id,
+        state: "CLOSING",
+        version: 2,
+        closeRequestedByAdminId: requesterAdminId,
+        closeReason: requestPayload.reason,
+        closeReconciliationReferences: requestPayload.reconciliationReferences,
+        closeCheckpointReferences: requestPayload.checkpointReferences,
+        allowedActions: [],
+      },
+    });
+
+    const requesterViewResponse = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${period.id}`,
+      { headers: authHeaders(adminToken) },
+    );
+    const requesterView = (await requesterViewResponse.json()) as { allowedActions: string[] };
+    expect(requesterView.allowedActions).not.toContain("close");
+
+    const approverViewResponse = await fetch(
+      `${baseUrl}/api/v1/admin/accounting-periods/${period.id}`,
+      { headers: authHeaders(approverAdminToken) },
+    );
+    const approverView = (await approverViewResponse.json()) as { allowedActions: string[] };
+    expect(approverView.allowedActions).toContain("close");
+
+    await freshCloseReauth(adminToken, adminSecret);
+    const selfApproval = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      adminToken,
+      randomUUID(),
+      approvalPayload,
+    );
+    expect(selfApproval.response.status).toBe(403);
+    expect(selfApproval.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN",
+    });
+
+    const missingMfa = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      approverAdminToken,
+      randomUUID(),
+      approvalPayload,
+    );
+    expect(missingMfa.response.status).toBe(403);
+    expect(missingMfa.body).toMatchObject({
+      code: "REAUTH_REQUIRED",
+      details: { actionClass: ACCOUNTING_PERIOD_CLOSE_ACTION_CLASS },
+    });
+
+    await freshCloseReauth(approverAdminToken, approverAdminSecret);
+    const approvalKey = randomUUID();
+    const approved = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      approverAdminToken,
+      approvalKey,
+      approvalPayload,
+    );
+    expect(approved.response.status).toBe(200);
+    expect(approved.body).toMatchObject({
+      period: { id: period.id, state: "CLOSED", version: 3, allowedActions: [] },
+    });
+
+    const evidence = await prisma.accountingPeriodCloseEvidence.findUniqueOrThrow({
+      where: { accountingPeriodId: period.id },
+      include: { approval: true, auditRecord: true },
+    });
+    expect(evidence.actorAdminId).toBe(approverAdminId);
+    expect(evidence.reconciliationReferences).toEqual(requestPayload.reconciliationReferences);
+    expect(evidence.checkpointReferences).toEqual(requestPayload.checkpointReferences);
+    expect(evidence.blockingDiscrepancyReferences).toEqual(
+      requestPayload.blockingDiscrepancyReferences,
+    );
+    expect(evidence.acceptedExceptionReferences).toEqual(
+      requestPayload.acceptedExceptionReferences,
+    );
+    expect(evidence.approval).toMatchObject({
+      action: "ACCOUNTING_PERIOD_CLOSE",
+      requesterAdminId,
+      approverAdminId,
+      requestedVersion: 2,
+      policyVersion: "accounting-period-close-v1",
+    });
+    expect(evidence.approval.requesterAdminId).not.toBe(evidence.approval.approverAdminId);
+    expect(evidence.auditRecord).toMatchObject({
+      action: "ACCOUNTING_PERIOD_CLOSE",
+      actorAdminId: approverAdminId,
+      approvalId: evidence.approvalId,
+      outcome: "APPROVED",
+    });
+    expect(evidence.closedAt.getTime()).toBe(evidence.approval.approvedAt.getTime());
+
+    const replay = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      approverAdminToken,
+      approvalKey,
+      approvalPayload,
+    );
+    expect(replay.response.status).toBe(200);
+    expect(replay.body).toEqual(approved.body);
+    expect(
+      await prisma.accountingPeriodCloseEvidence.count({
+        where: { accountingPeriodId: period.id },
+      }),
+    ).toBe(1);
+
+    await expect(
+      prisma.accountingPeriodCloseEvidence.update({
+        where: { accountingPeriodId: period.id },
+        data: { closedAt: new Date("2199-07-16T18:00:00.000Z") },
+      }),
+    ).rejects.toThrow(/Immutable Accounting Period close evidence/);
+    await expect(
+      prisma.accountingPeriod.update({
+        where: { id: period.id },
+        data: { effectiveEnd: new Date("2199-07-16T18:00:00.000Z") },
+      }),
+    ).rejects.toThrow(/CLOSED Accounting Period is terminal/);
+    await expect(
+      prisma.accountingPeriod.update({
+        where: { id: period.id },
+        data: { state: "OPEN" },
+      }),
+    ).rejects.toThrow(/CLOSED Accounting Period is terminal/);
+
+    const cancellation = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/cancel`,
+      adminToken,
+      randomUUID(),
+      { expectedVersion: 3, reason: "Closed history must remain final" },
+    );
+    expect(cancellation.response.status).toBe(409);
+    expect(cancellation.body).toMatchObject({ code: "ACCOUNTING_PERIOD_STATE_CONFLICT" });
+
+    const override = await command(
+      "/api/v1/admin/accounting-periods/create-custom",
+      adminToken,
+      randomUUID(),
+      {
+        startDate: "2199-07-16",
+        endDate: "2199-07-17",
+        reason: "Attempt to override CLOSED period",
+      },
+    );
+    expect(override.response.status).toBe(409);
+    expect(override.body).toMatchObject({ code: "ACCOUNTING_PERIOD_COVERAGE_CONFLICT" });
+
+    await expect(
+      prisma.financialTransaction.create({
+        data: {
+          id: randomUUID(),
+          businessTransactionId: `closed-post-${randomUUID()}`,
+          operationType: "TEST_CLOSED_PERIOD_POST",
+          correlationId: randomUUID(),
+          idempotencyScope: "test.accounting-period.closed-post",
+          idempotencyKey: randomUUID(),
+          fingerprint: createHash("sha256").update(randomUUID()).digest("hex"),
+          domainReferences: { source: "accounting-period-close-test" },
+          currency: "THB",
+          effectiveAt: new Date("2199-07-16T00:00:00.000Z"),
+          postedAt: new Date("2199-07-16T00:00:00.000Z"),
+          accountingPeriodId: period.id,
+        },
+      }),
+    ).rejects.toThrow(/authoritative OPEN Accounting Period/);
+  });
+
+  it("forbids SUPER_ADMIN from approving their own close request", async () => {
+    const superAdminId = await adminIdForToken(superAdminToken);
+    const period = await createClosingPeriod(
+      "2199-07-16T17:00:00.000Z",
+      "2199-07-17T17:00:00.000Z",
+    );
+    const requested = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      superAdminToken,
+      randomUUID(),
+      closePayload(1),
+    );
+    expect(requested.response.status).toBe(200);
+    expect(requested.body).toMatchObject({
+      period: {
+        id: period.id,
+        state: "CLOSING",
+        version: 2,
+        closeRequestedByAdminId: superAdminId,
+      },
+    });
+
+    await freshCloseReauth(superAdminToken, superAdminSecret);
+    const selfApproval = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      superAdminToken,
+      randomUUID(),
+      closePayload(2),
+    );
+    expect(selfApproval.response.status).toBe(403);
+    expect(selfApproval.body).toMatchObject({
+      code: "ACCOUNTING_PERIOD_SELF_APPROVAL_FORBIDDEN",
+      details: { requesterAdminId: superAdminId },
+    });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: period.id } }),
+    ).resolves.toMatchObject({ state: "CLOSING", version: 2 });
+    expect(
+      await prisma.accountingPeriodCloseEvidence.count({ where: { accountingPeriodId: period.id } }),
+    ).toBe(0);
+  });
+
+  it("serializes concurrent close approvals and rejects stale close versions", async () => {
+    const period = await createClosingPeriod(
+      "2199-07-17T17:00:00.000Z",
+      "2199-07-18T17:00:00.000Z",
+    );
+    const requested = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      adminToken,
+      randomUUID(),
+      closePayload(1),
+    );
+    expect(requested.response.status).toBe(200);
+
+    const stale = await command(
+      `/api/v1/admin/accounting-periods/${period.id}/close`,
+      approverAdminToken,
+      randomUUID(),
+      closePayload(1),
+    );
+    expect(stale.response.status).toBe(409);
+    expect(stale.body).toMatchObject({
+      code: "VERSION_CONFLICT",
+      details: { expectedVersion: 1, currentVersion: 2 },
+    });
+
+    await freshCloseReauth(approverAdminToken, approverAdminSecret);
+    await freshCloseReauth(superAdminToken, superAdminSecret);
+    const [first, second] = await Promise.all([
+      command(
+        `/api/v1/admin/accounting-periods/${period.id}/close`,
+        approverAdminToken,
+        randomUUID(),
+        closePayload(2),
+      ),
+      command(
+        `/api/v1/admin/accounting-periods/${period.id}/close`,
+        superAdminToken,
+        randomUUID(),
+        closePayload(2),
+      ),
+    ]);
+    const statuses = [first.response.status, second.response.status].sort();
+    expect(statuses).toEqual([200, 409]);
+    const loser = first.response.status === 409 ? first : second;
+    expect(loser.body).toMatchObject({ code: "VERSION_CONFLICT" });
+    await expect(
+      prisma.accountingPeriod.findUniqueOrThrow({ where: { id: period.id } }),
+    ).resolves.toMatchObject({ state: "CLOSED", version: 3 });
+    expect(
+      await prisma.accountingPeriodCloseEvidence.count({ where: { accountingPeriodId: period.id } }),
+    ).toBe(1);
+  });
+
+  it("publishes explicit create-custom/submit/approve/cancel/close OpenAPI operations and no generic PATCH", () => {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle("test").setVersion("1").addBearerAuth().build(),
@@ -1814,6 +2177,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     const submit = document.paths["/api/v1/admin/accounting-periods/{id}/submit"];
     const approve = document.paths["/api/v1/admin/accounting-periods/{id}/approve"];
     const cancel = document.paths["/api/v1/admin/accounting-periods/{id}/cancel"];
+    const close = document.paths["/api/v1/admin/accounting-periods/{id}/close"];
 
     expect(collection?.get?.security).toEqual([{ bearer: [] }]);
     expect(detail?.get?.security).toEqual([{ bearer: [] }]);
@@ -1821,6 +2185,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     expect(submit?.post?.security).toEqual([{ bearer: [] }]);
     expect(approve?.post?.security).toEqual([{ bearer: [] }]);
     expect(cancel?.post?.security).toEqual([{ bearer: [] }]);
+    expect(close?.post?.security).toEqual([{ bearer: [] }]);
     expect(createCustom?.post?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true }),
@@ -1844,12 +2209,20 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
         expect.objectContaining({ name: "id", in: "path", required: true }),
       ]),
     );
+    expect(close?.post?.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true }),
+        expect.objectContaining({ name: "id", in: "path", required: true }),
+      ]),
+    );
     expect(createCustom?.post?.responses?.["409"]).toBeDefined();
     expect(submit?.post?.responses?.["409"]).toBeDefined();
     expect(approve?.post?.responses?.["403"]).toBeDefined();
     expect(approve?.post?.responses?.["409"]).toBeDefined();
     expect(cancel?.post?.responses?.["403"]).toBeDefined();
     expect(cancel?.post?.responses?.["409"]).toBeDefined();
+    expect(close?.post?.responses?.["403"]).toBeDefined();
+    expect(close?.post?.responses?.["409"]).toBeDefined();
     expect(collection?.post).toBeUndefined();
     expect(collection?.patch).toBeUndefined();
     expect(detail?.post).toBeUndefined();
@@ -1858,6 +2231,7 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     expect(submit?.patch).toBeUndefined();
     expect(approve?.patch).toBeUndefined();
     expect(cancel?.patch).toBeUndefined();
+    expect(close?.patch).toBeUndefined();
   });
 
   async function createAdminSession(
@@ -1911,6 +2285,15 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     );
   }
 
+  async function freshCloseReauth(accessToken: string, secret: string): Promise<void> {
+    const context = await adminAuth.authenticateAccess(accessToken);
+    await adminAuth.reauthenticate(
+      context,
+      ACCOUNTING_PERIOD_CLOSE_ACTION_CLASS,
+      generateTotpCode(secret),
+    );
+  }
+
   function authHeaders(accessToken: string): Record<string, string> {
     return { Authorization: `Bearer ${accessToken}` };
   }
@@ -1933,10 +2316,49 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
     return { response, body: await response.json() };
   }
 
+  function closePayload(
+    expectedVersion: number,
+    overrides: Partial<{
+      reason: string;
+      reconciliationReferences: string[];
+      checkpointReferences: string[];
+      blockingDiscrepancyReferences: string[];
+      acceptedExceptionReferences: Array<{
+        discrepancyReference: string;
+        exceptionReference: string;
+      }>;
+    }> = {},
+  ) {
+    return {
+      expectedVersion,
+      reason: "Reconciliation complete for governed close",
+      reconciliationReferences: ["reconciliation-run:test-close"],
+      checkpointReferences: ["ledger-checkpoint:test-close"],
+      blockingDiscrepancyReferences: [],
+      acceptedExceptionReferences: [],
+      ...overrides,
+    };
+  }
+
+  async function createClosingPeriod(effectiveStart: string, effectiveEnd: string) {
+    return prisma.accountingPeriod.create({
+      data: {
+        mode: "AUTOMATIC_WEEKLY",
+        generationKind: "NOMINAL_WEEK",
+        effectiveStart: new Date(effectiveStart),
+        effectiveEnd: new Date(effectiveEnd),
+        state: "CLOSING",
+      },
+    });
+  }
+
   async function deleteImmutableTestEvidence(): Promise<void> {
     await prisma.$transaction(async (tx) => {
       // Test-only cleanup for an ephemeral integration database. Production evidence has no delete path.
       await tx.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+      await tx.accountingPeriodCloseEvidence.deleteMany({
+        where: { actorAdminId: { in: adminIds } },
+      });
       await tx.auditRecord.deleteMany({
         where: { actorAdminId: { in: adminIds } },
       });
@@ -1947,6 +2369,9 @@ describe.runIf(runIntegration)("Admin Accounting Period API contract", () => {
             { approverAdminId: { in: adminIds } },
           ],
         },
+      });
+      await tx.accountingPeriod.deleteMany({
+        where: { closeRequestedByAdminId: { in: adminIds } },
       });
     });
   }
