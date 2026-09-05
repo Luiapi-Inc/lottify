@@ -61,6 +61,32 @@ describe.runIf(runIntegration)("financial core integration", () => {
     ).rejects.toThrow("idempotency conflict");
   });
 
+  it("allows DEPOSIT_CREDIT to credit Member CASH only", async () => {
+    const memberId = randomUUID();
+    const bonusAccountId = await ledger.ensureMemberAccount(memberId, "BONUS");
+    const providerAccountId = await ledger.ensureSystemAccount(`provider:${randomUUID()}`);
+
+    await expect(
+      ledger.post({
+        businessTransactionId: randomUUID(),
+        operationType: "DEPOSIT_CREDIT",
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.deposit.invalid-bucket",
+          key: randomUUID(),
+          fingerprint: "deposit:bonus:1000",
+        },
+        domainReferences: { depositId: randomUUID() },
+        currency: "THB",
+        effectiveAt: new Date(),
+        postings: [
+          { accountId: providerAccountId, side: "DEBIT", amountMinor: 1_000n },
+          { accountId: bonusAccountId, side: "CREDIT", amountMinor: 1_000n },
+        ],
+      }),
+    ).rejects.toThrow("DEPOSIT_CREDIT may post Member value only to CASH");
+  });
+
   it("reverses an immutable financial transaction with exact inverse postings once", async () => {
     const memberId = randomUUID();
     const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
@@ -627,6 +653,138 @@ describe.runIf(runIntegration)("financial core integration", () => {
         },
       }),
     ).toBe(1);
+  });
+
+  it("does not relabel a BET Reservation as a Withdrawal financial effect", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const fundingAccountId = await ledger.ensureSystemAccount(`funding:${randomUUID()}`);
+    const bettingSettlementAccountId = await ledger.ensureSystemAccount(
+      `betting-settlement:${randomUUID()}`,
+    );
+
+    await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "TEST_SEED_BET_PURPOSE",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.consume.bet-purpose.seed",
+        key: randomUUID(),
+        fingerprint: "seed:cash:2500",
+      },
+      domainReferences: { test: "bet-purpose" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: fundingAccountId, side: "DEBIT", amountMinor: 2_500n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 2_500n },
+      ],
+    });
+
+    const reservationId = await ledger.reserve({
+      purpose: "BET",
+      businessReference: `bet:${randomUUID()}`,
+      memberId,
+      currency: "THB",
+      amountMinor: 2_500n,
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.consume.bet-purpose.reserve",
+        key: randomUUID(),
+        fingerprint: "bet:cash:2500",
+      },
+      allocations: [{ accountId: cashAccountId, amountMinor: 2_500n }],
+    });
+
+    await expect(
+      ledger.consumeReservationAndPost({
+        reservationId,
+        businessTransactionId: randomUUID(),
+        operationType: "WITHDRAWAL_FINALIZE",
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.consume.bet-purpose.invalid",
+          key: randomUUID(),
+          fingerprint: "withdrawal-from-bet:2500",
+        },
+        domainReferences: { betOrderId: randomUUID() },
+        currency: "THB",
+        effectiveAt: new Date(),
+        destinations: [{ accountId: bettingSettlementAccountId, amountMinor: 2_500n }],
+      }),
+    ).rejects.toThrow("WITHDRAWAL_FINALIZE requires a WITHDRAWAL Reservation");
+
+    expect(
+      await prisma.reservation.findUniqueOrThrow({
+        where: { id: reservationId },
+        select: { consumedAt: true },
+      }),
+    ).toEqual({ consumedAt: null });
+  });
+
+  it("does not relabel a WITHDRAWAL Reservation as a Bet financial effect", async () => {
+    const memberId = randomUUID();
+    const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
+    const fundingAccountId = await ledger.ensureSystemAccount(`funding:${randomUUID()}`);
+    const payoutAccountId = await ledger.ensureSystemAccount(`payout:${randomUUID()}`);
+
+    await ledger.post({
+      businessTransactionId: randomUUID(),
+      operationType: "TEST_SEED_WITHDRAWAL_PURPOSE",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.consume.withdrawal-purpose.seed",
+        key: randomUUID(),
+        fingerprint: "seed:cash:1800",
+      },
+      domainReferences: { test: "withdrawal-purpose" },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: fundingAccountId, side: "DEBIT", amountMinor: 1_800n },
+        { accountId: cashAccountId, side: "CREDIT", amountMinor: 1_800n },
+      ],
+    });
+
+    const reservationId = await ledger.reserve({
+      purpose: "WITHDRAWAL",
+      businessReference: `withdrawal:${randomUUID()}`,
+      memberId,
+      currency: "THB",
+      amountMinor: 1_800n,
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: "financial.integration.consume.withdrawal-purpose.reserve",
+        key: randomUUID(),
+        fingerprint: "withdrawal:cash:1800",
+      },
+      allocations: [{ accountId: cashAccountId, amountMinor: 1_800n }],
+    });
+
+    await expect(
+      ledger.consumeReservationAndPost({
+        reservationId,
+        businessTransactionId: randomUUID(),
+        operationType: "BET_STAKE_COMMIT",
+        correlationId: randomUUID(),
+        idempotency: {
+          scope: "financial.integration.consume.withdrawal-purpose.invalid",
+          key: randomUUID(),
+          fingerprint: "bet-from-withdrawal:1800",
+        },
+        domainReferences: { withdrawalId: randomUUID() },
+        currency: "THB",
+        effectiveAt: new Date(),
+        destinations: [{ accountId: payoutAccountId, amountMinor: 1_800n }],
+      }),
+    ).rejects.toThrow("BET_STAKE_COMMIT requires a BET Reservation");
+
+    expect(
+      await prisma.reservation.findUniqueOrThrow({
+        where: { id: reservationId },
+        select: { consumedAt: true },
+      }),
+    ).toEqual({ consumedAt: null });
   });
 
   it("does not consume a released Reservation", async () => {

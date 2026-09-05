@@ -116,7 +116,8 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
       return await this.prisma.$transaction(async (tx) => {
         const accountIds = uniqueSorted(input.postings.map((posting) => posting.accountId));
         await lockAccounts(tx, accountIds);
-        await assertPostingAccounts(tx, accountIds, input.currency);
+        const accounts = await assertPostingAccounts(tx, accountIds, input.currency);
+        assertOperationPostingSemantics(input, accounts);
         if (input.correction) {
           await assertCompensationTarget(
             tx,
@@ -435,6 +436,7 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
           where: { id: input.reservationId },
           select: {
             id: true,
+            purpose: true,
             memberId: true,
             currency: true,
             amountMinor: true,
@@ -450,6 +452,8 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
           },
         });
         if (!reservation) throw new Error("Reservation not found");
+
+        assertReservationPurposeMatchesOperation(reservation.purpose, input.operationType);
 
         if (reservation.consumedAt) {
           if (!reservation.consumingTransactionId) {
@@ -790,20 +794,64 @@ async function assertReplayableConsumption(
   throw new Error("Reservation already consumed by another financial transaction");
 }
 
+type PostingAccount = {
+  id: string;
+  kind: string;
+  memberId: string | null;
+  bucket: string | null;
+  currency: string;
+};
+
 async function assertPostingAccounts(
   tx: TransactionClient,
   accountIds: readonly string[],
   currency: "THB",
-): Promise<void> {
+): Promise<PostingAccount[]> {
   const accounts = await tx.ledgerAccount.findMany({
     where: { id: { in: [...accountIds] } },
-    select: { id: true, currency: true },
+    select: { id: true, kind: true, memberId: true, bucket: true, currency: true },
   });
   if (accounts.length !== accountIds.length) {
     throw new Error("Financial transaction references an unknown Ledger account");
   }
   if (accounts.some((account) => account.currency !== currency)) {
     throw new Error("Financial transaction must post within one currency");
+  }
+  return accounts;
+}
+
+function assertOperationPostingSemantics(
+  input: PostFinancialTransactionInput,
+  accounts: readonly PostingAccount[],
+): void {
+  if (input.operationType !== "DEPOSIT_CREDIT") return;
+
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+  const memberPostings = input.postings.filter(
+    (posting) => accountById.get(posting.accountId)?.kind === "MEMBER",
+  );
+  if (
+    memberPostings.some(
+      (posting) => accountById.get(posting.accountId)?.bucket !== "CASH",
+    )
+  ) {
+    throw new Error("DEPOSIT_CREDIT may post Member value only to CASH");
+  }
+
+  if (!memberPostings.some((posting) => posting.side === "CREDIT")) {
+    throw new Error("DEPOSIT_CREDIT must include a Member CASH credit");
+  }
+}
+
+function assertReservationPurposeMatchesOperation(
+  purpose: string,
+  operationType: string,
+): void {
+  if (operationType === "BET_STAKE_COMMIT" && purpose !== "BET") {
+    throw new Error("BET_STAKE_COMMIT requires a BET Reservation");
+  }
+  if (operationType === "WITHDRAWAL_FINALIZE" && purpose !== "WITHDRAWAL") {
+    throw new Error("WITHDRAWAL_FINALIZE requires a WITHDRAWAL Reservation");
   }
 }
 
