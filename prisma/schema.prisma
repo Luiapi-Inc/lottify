@@ -22,6 +22,66 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
+model AdminUser {
+  id                  String                @id @default(uuid()) @db.Uuid
+  email               String                @unique
+  name                String
+  passwordHash        String                @map("password_hash")
+  role                String
+  status              String                @default("ACTIVE")
+  mfaEnabled          Boolean               @default(false) @map("mfa_enabled")
+  mfaSecretEncrypted  String?               @map("mfa_secret_encrypted")
+  failedLoginAttempts Int                   @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?             @map("locked_until")
+  lastLoginAt         DateTime?             @map("last_login_at")
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  sessions            AdminAuthSession[]
+  reauthEvidence      AdminReauthEvidence[]
+
+  @@index([status, role])
+  @@map("admin_users")
+}
+
+model AdminAuthSession {
+  id               String                @id @default(uuid()) @db.Uuid
+  adminUserId      String                @map("admin_user_id") @db.Uuid
+  refreshTokenHash String                @unique @map("refresh_token_hash")
+  familyId         String                @map("family_id") @db.Uuid
+  expiresAt        DateTime              @map("expires_at")
+  revokedAt        DateTime?             @map("revoked_at")
+  replacedById     String?               @map("replaced_by_id") @db.Uuid
+  mfaVerifiedAt    DateTime?             @map("mfa_verified_at")
+  ipAddress        String?               @map("ip_address")
+  userAgent        String?               @map("user_agent")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  lastUsedAt       DateTime?             @map("last_used_at")
+  adminUser        AdminUser             @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  reauthEvidence   AdminReauthEvidence[]
+
+  @@index([adminUserId, createdAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("admin_auth_sessions")
+}
+
+model AdminReauthEvidence {
+  id          String           @id @default(uuid()) @db.Uuid
+  adminUserId String           @map("admin_user_id") @db.Uuid
+  sessionId   String           @map("session_id") @db.Uuid
+  actionClass String           @map("action_class")
+  verifiedAt  DateTime         @map("verified_at")
+  expiresAt   DateTime         @map("expires_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  adminUser   AdminUser        @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  session     AdminAuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, actionClass])
+  @@index([adminUserId, expiresAt])
+  @@map("admin_reauth_evidence")
+}
+
 model IdempotencyRecord {
   id           String   @id @default(uuid()) @db.Uuid
   scope        String

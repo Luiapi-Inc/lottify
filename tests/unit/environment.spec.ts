@@ -20,4 +20,15 @@ describe("environment validation", () => {
   it("rejects unknown environment semantics", () => {
     expect(() => parseEnvironment({ ...valid, APP_ENV: "qa" })).toThrow();
   });
+
+  it("requires a dedicated Admin MFA encryption key outside local/test", () => {
+    expect(() => parseEnvironment({ ...valid, APP_ENV: "staging" })).toThrow();
+    expect(
+      parseEnvironment({
+        ...valid,
+        APP_ENV: "staging",
+        ADMIN_MFA_ENCRYPTION_KEY: "abcdefghijklmnopqrstuvwxyz012345",
+      }).APP_ENV,
+    ).toBe("staging");
+  });
 });
