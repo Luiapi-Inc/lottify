@@ -17,6 +17,7 @@
     "build": "pnpm build:backend && pnpm build:member && pnpm build:admin",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
+    "test:accounting-period-backfill": "RUN_ACCOUNTING_PERIOD_BACKFILL_TEST=1 RUN_INTEGRATION_TESTS=0 vitest run tests/integration/accounting-period-backfill.integration.spec.ts",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
