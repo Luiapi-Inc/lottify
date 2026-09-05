@@ -26,10 +26,15 @@ What are the canonical definitions, source-of-truth lineage, freshness expectati
 - Standard dimensions: canonical dimensions include time/accounting period, Product, Draw, Bet Type, Member, transaction type, CASH/BONUS bucket, provider, payment method, Promotion/Campaign, and status/outcome. Each report allowlists only semantically valid dimensions and filters; arbitrary persistence-schema joins/query builders are not exposed.
 - Audit/export controls: large exports are asynchronous Jobs/Operations. An export request snapshots filters, selected columns, timezone, masking policy, requester, and definition/version. Sensitive values are masked by default; unmasked export requires explicit permission, reason, and audit. Generated artifacts use controlled/expiring access and include `generatedAt`, `dataAsOf`, metric/definition version, and effective filters. Transport/job retries preserve the same logical export identity unless the user intentionally creates a new export request.
 
-### Reporting round 3 — accounting-period cadence change request approved
+### Reporting round 3 — accounting-period cadence change request superseded
 
-- Ledger/accounting reporting groups authoritative accounting periods on the same **monthly v1 cadence** approved by the financial invariant contract.
-- This does not select the accounting timezone or exact monthly boundary instant; reporting must consume the authoritative Accounting Period identity once those remaining financial controls are approved and implemented rather than deriving a competing period definition.
+- The earlier monthly-only reporting cadence decision was approved and subsequently superseded by Reporting round 4.
+
+### Reporting round 4 — accounting-period modes change request approved
+
+- Ledger/accounting reporting consumes authoritative Accounting Periods created under either **Automatic weekly** or **Custom** mode.
+- Reporting must use the authoritative period identity persisted by Wallet & Ledger rather than deriving weekly/custom boundaries independently.
+- This decision does not select the accounting timezone, exact automatic-week boundary, Custom-period validation, or overlap/gap semantics.
 
 ## Answer
 
@@ -39,7 +44,7 @@ Lottify v1 reporting is a rebuildable, lineage-preserving read model over author
 2. Turnover, payout/winnings, GGR, promotion cost, and liabilities use canonical versioned definitions so reports with the same metric name cannot silently calculate different semantics.
 3. Deposit and Withdrawal reports distinguish workflow stages, while financial completion is based on authoritative Ledger completion rather than provider acceptance alone.
 4. Liability reporting separates confirmed stake exposure, projected maximum payout, unsettled winnings, reserved Withdrawals, and outstanding BONUS/Entitlement exposure with reproducible operational drill-down.
-5. Accounting uses posting instant/accounting period with a monthly v1 Accounting Period cadence. Product operations use Product timezone, aggregate reports declare timezone, ranges are half-open `[from,to)`, and closed-period corrections are current-period adjustments linked to original facts. Reporting does not independently define the still-unresolved accounting timezone/boundary control.
+5. Accounting uses posting instant/accounting period with Automatic weekly and Custom v1 period modes. Product operations use Product timezone, aggregate reports declare timezone, ranges are half-open `[from,to)`, and closed-period corrections are current-period adjustments linked to original facts. Reporting consumes the authoritative period identity and does not independently define the still-unresolved accounting timezone/boundary or Custom validation controls.
 6. Reconciliation runs are explicit for Ledger/Wallet, Payments/Provider, Betting-Settlement/Ledger, and Promotion/Ledger and retain `asOf`, checkpoints/ranges, counts, totals, and result evidence.
 7. Discrepancies are durable governed objects with lifecycle, severity, expected/observed facts, ownership, evidence, and monetary-resolution linkage to Adjustment/Compensation workflows.
 8. Every report exposes `dataAsOf`, projection lag, and completeness state; partial/lagging financial outputs cannot masquerade as definitive data.

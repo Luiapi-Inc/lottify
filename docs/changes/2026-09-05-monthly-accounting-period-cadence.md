@@ -1,10 +1,10 @@
 # Change Request: v1 Accounting Period cadence is monthly
 
-Status: approved by product owner on 2026-09-05
+Status: superseded on 2026-09-05 by `2026-09-05-accounting-period-modes.md`
 
 ## Change
 
-Lottify v1 Accounting Periods use a **monthly cadence**.
+Lottify v1 Accounting Periods were initially approved to use a **monthly cadence**.
 
 This resolves the previously open cadence decision only.
 
@@ -25,4 +25,4 @@ This resolves the previously open cadence decision only.
 - Concrete reconciliation/approved-exception close workflow.
 - API/Admin control surfaces, if any.
 
-No schema, migration, API, or Admin contract is authorized by this cadence-only decision until those remaining source-of-truth controls are approved.
+This cadence decision is no longer current. The authoritative v1 decision is now the weekly-automatic/custom period-mode Change Request.
