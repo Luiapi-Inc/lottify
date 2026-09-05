@@ -7,15 +7,15 @@ datasource db {
 }
 
 model AuthSession {
-  id               String   @id @default(uuid()) @db.Uuid
-  memberId         String   @map("member_id") @db.Uuid
-  deviceId         String?  @map("device_id")
-  refreshTokenHash String   @map("refresh_token_hash")
-  version          Int      @default(1)
-  expiresAt        DateTime @map("expires_at")
+  id               String    @id @default(uuid()) @db.Uuid
+  memberId         String    @map("member_id") @db.Uuid
+  deviceId         String?   @map("device_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  version          Int       @default(1)
+  expiresAt        DateTime  @map("expires_at")
   revokedAt        DateTime? @map("revoked_at")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@index([memberId])
   @@index([expiresAt])
@@ -23,16 +23,16 @@ model AuthSession {
 }
 
 model IdempotencyRecord {
-  id             String   @id @default(uuid()) @db.Uuid
-  scope          String
-  key            String
-  fingerprint    String
-  status         String
-  responseCode   Int?     @map("response_code")
-  responseBody   Json?    @map("response_body")
-  expiresAt      DateTime @map("expires_at")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  scope        String
+  key          String
+  fingerprint  String
+  status       String
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@unique([scope, key])
   @@index([expiresAt])
@@ -40,20 +40,118 @@ model IdempotencyRecord {
 }
 
 model OutboxEvent {
-  id            String   @id @default(uuid()) @db.Uuid
+  id            String    @id @default(uuid()) @db.Uuid
   topic         String
-  aggregateType String?  @map("aggregate_type")
-  aggregateId   String?  @map("aggregate_id")
+  aggregateType String?   @map("aggregate_type")
+  aggregateId   String?   @map("aggregate_id")
   payload       Json
-  correlationId String?  @map("correlation_id")
-  attempts      Int      @default(0)
+  correlationId String?   @map("correlation_id")
+  attempts      Int       @default(0)
   lockedAt      DateTime? @map("locked_at")
-  lockOwner     String?  @map("lock_owner")
+  lockOwner     String?   @map("lock_owner")
   publishedAt   DateTime? @map("published_at")
-  lastError     String?  @map("last_error")
-  createdAt     DateTime @default(now()) @map("created_at")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   @@index([publishedAt, lockedAt, createdAt])
   @@index([topic, createdAt])
   @@map("outbox_events")
+}
+
+model LedgerAccount {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  kind                   String
+  memberId               String?                 @map("member_id") @db.Uuid
+  systemCode             String?                 @map("system_code")
+  bucket                 String?
+  currency               String                  @default("THB")
+  createdAt              DateTime                @default(now()) @map("created_at")
+  postings               LedgerPosting[]
+  reservationAllocations ReservationAllocation[]
+
+  @@unique([memberId, bucket, currency])
+  @@unique([systemCode, currency])
+  @@index([memberId, currency])
+  @@map("ledger_accounts")
+}
+
+model FinancialTransaction {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  businessTransactionId  String                 @map("business_transaction_id")
+  operationType          String                 @map("operation_type")
+  correlationId          String                 @map("correlation_id")
+  idempotencyScope       String                 @map("idempotency_scope")
+  idempotencyKey         String                 @map("idempotency_key")
+  fingerprint            String
+  domainReferences       Json                   @map("domain_references")
+  currency               String                 @default("THB")
+  effectiveAt            DateTime               @map("effective_at")
+  postedAt               DateTime               @default(now()) @map("posted_at")
+  correctionKind         String?                @map("correction_kind")
+  correctsTransactionId  String?                @map("corrects_transaction_id") @db.Uuid
+  createdAt              DateTime               @default(now()) @map("created_at")
+  postings               LedgerPosting[]
+  correctsTransaction    FinancialTransaction?  @relation("FinancialCorrection", fields: [correctsTransactionId], references: [id], onDelete: Restrict)
+  correctionTransactions FinancialTransaction[] @relation("FinancialCorrection")
+  consumedReservations   Reservation[]          @relation("ReservationConsumption")
+
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([businessTransactionId])
+  @@index([correlationId])
+  @@index([correctsTransactionId])
+  @@map("financial_transactions")
+}
+
+model LedgerPosting {
+  id            String               @id @default(uuid()) @db.Uuid
+  transactionId String               @map("transaction_id") @db.Uuid
+  accountId     String               @map("account_id") @db.Uuid
+  side          String
+  amountMinor   BigInt               @map("amount_minor")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  transaction   FinancialTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account       LedgerAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([transactionId])
+  @@index([accountId, createdAt])
+  @@map("ledger_postings")
+}
+
+model Reservation {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  purpose                String
+  businessReference      String                  @map("business_reference")
+  memberId               String                  @map("member_id") @db.Uuid
+  currency               String                  @default("THB")
+  amountMinor            BigInt                  @map("amount_minor")
+  correlationId          String                  @map("correlation_id")
+  idempotencyScope       String                  @map("idempotency_scope")
+  idempotencyKey         String                  @map("idempotency_key")
+  fingerprint            String
+  releasedAt             DateTime?               @map("released_at")
+  consumedAt             DateTime?               @map("consumed_at")
+  consumingTransactionId String?                 @map("consuming_transaction_id") @db.Uuid
+  createdAt              DateTime                @default(now()) @map("created_at")
+  allocations            ReservationAllocation[]
+  consumingTransaction   FinancialTransaction?   @relation("ReservationConsumption", fields: [consumingTransactionId], references: [id], onDelete: Restrict)
+
+  @@unique([purpose, businessReference])
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([memberId, releasedAt, consumedAt])
+  @@index([consumingTransactionId])
+  @@map("reservations")
+}
+
+model ReservationAllocation {
+  id            String        @id @default(uuid()) @db.Uuid
+  reservationId String        @map("reservation_id") @db.Uuid
+  accountId     String        @map("account_id") @db.Uuid
+  amountMinor   BigInt        @map("amount_minor")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  reservation   Reservation   @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  account       LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([reservationId, accountId])
+  @@index([accountId, reservationId])
+  @@map("reservation_allocations")
 }
