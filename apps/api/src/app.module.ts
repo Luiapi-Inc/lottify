@@ -11,6 +11,7 @@ import { ApiV1Controller } from "./api-v1.controller";
 import { CorrelationMiddleware } from "./correlation.middleware";
 import { HealthController } from "./health.controller";
 import { HealthService } from "./health.service";
+import { HttpMetricsMiddleware } from "./http-metrics.middleware";
 import { MetricsController } from "./metrics.controller";
 
 collectDefaultMetrics({ prefix: "lottify_" });
@@ -33,6 +34,6 @@ collectDefaultMetrics({ prefix: "lottify_" });
 })
 export class ApiModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CorrelationMiddleware).forRoutes("*");
+    consumer.apply(CorrelationMiddleware, HttpMetricsMiddleware).forRoutes("*");
   }
 }
