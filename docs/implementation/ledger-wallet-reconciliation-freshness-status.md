@@ -25,13 +25,23 @@ do not own or mutate financial authority.
 ## Local verification
 
 - Focused worker, architecture, and financial invariant tests pass.
-- Full local Vitest suite passes; database-backed integration suites remain environment-gated.
-- TypeScript typecheck and full application build pass.
+- `pnpm prisma:generate` passes with the workspace environment.
+- PostgreSQL migration deploy passes for all 14 migrations, including
+  `20260906164500_ledger_wallet_reconciliation`.
+- Ledger ↔ Wallet PostgreSQL integration evidence passes all 4 scenarios, including checkpoint
+  replay/conflict, durable mismatch evidence, authority preservation, alert-age evaluation, and
+  bounded target paging.
+- Accounting Period PostgreSQL evidence passes backfill 2/2, contract migration 5/5, and reporting
+  1/1 dedicated scenarios.
+- The full integration-enabled suite passes 238 tests. One foundation Redis/BullMQ test remains
+  blocked by a connection timeout to the configured Redis endpoint; this is an environment
+  connectivity failure, not a Ledger ↔ Wallet reconciliation failure.
+- TypeScript typecheck and full application build pass from the same source HEAD.
 - `git diff --check` passes.
 
 ## Pending acceptance evidence
 
 Issue #23 requires one immutable CI candidate with PostgreSQL migration deploy, deterministic
-integration/operational evidence, dependency and image scans, and container smokes. This workspace
-does not currently have the required database/Redis environment variables, so those evidence cells
-remain open and no Production GO or Issue #23 completion claim is made here.
+integration/operational evidence, dependency and image scans, and container smokes. PostgreSQL
+evidence is now complete locally. Redis/BullMQ connectivity, CI scans, and container smokes remain
+open, so no Production GO or Issue #23 completion claim is made here.
