@@ -14,6 +14,7 @@ Source of truth: Wayfinder Tickets 01, 02, 06, 10, 11, 16, and 19. This record d
 - Withdrawal eligibility has a dedicated policy resolver for the locked rule set: amount limit, daily aggregate, frequency, KYC tier, payout-destination verification, risk, capability restriction, and approval threshold. Every rule is required as evaluated input, the strictest result wins (`DENY` over `REVIEW_REQUIRED` over `ALLOW`), and the resulting `WITHDRAW` decision preserves policy version, reasons, evidence, evaluation time, and freshness without inventing concrete threshold values.
 - Verification freshness is modeled independently for KYC, phone, device, and payout-destination verification with `verifiedAt`, source/evidence provenance, optional expiry, and an optional reverification-policy reference; explicit expiry is evaluated independently per verification type.
 - Duplicate-account policy now evaluates the locked phone, KYC identity, payout-destination, device, IP/network, and behavior signal set into `ALLOW`, `REVIEW_REQUIRED`, or `BLOCK` without inventing numeric weights or thresholds. Device and IP/network evidence is explicitly non-authoritative for hard blocking, while stronger policy-evaluated signals may block; manual resolution evidence requires both a reason and an Audit reference.
+- Responsible-gaming self-exclusion now produces an immediate Member-owned `BET_BLOCKED` restriction with explicit effective/expiry semantics and traceable policy/evidence reference. KYC/Risk evaluates active self-exclusion as the highest-priority hard eligibility denial, the normal Admin restriction-removal path is denied for self-exclusion, and the restriction does not automatically block an otherwise eligible Withdrawal.
 - No new persistence schema or REST path has been introduced for Device, OTP, or onboarding behavior whose detailed contract is not locked.
 
 ## Evidence confirmed on 2026-09-04
@@ -29,6 +30,7 @@ GitHub Actions `ci` run `33829850497` on commit `932e47c879715c0f16c1a1b712b8faa
 - Duplicate-account policy focused unit tests: 5 passed.
 - Full local Vitest suite: 144 passed; 65 integration tests skipped because their integration environment flags/database were not enabled.
 - TypeScript typecheck passed after using the generated OpenAPI/client artifacts for the same source HEAD. No Identity / Eligibility milestone acceptance or Production GO is claimed from this local evidence.
+- Responsible-gaming self-exclusion focused verification: 18 tests passed across self-exclusion enforcement, Member capability restrictions, and eligibility precedence. The full local Vitest suite then passed 150 tests with 65 integration tests skipped because their integration environment flags/database were not enabled; TypeScript typecheck also passed after generating Prisma Client and using the generated OpenAPI client for the same API source HEAD. This remains local checkpoint evidence rather than Identity / Eligibility milestone acceptance.
 
 ## Remaining contract/detail gaps for affected slices
 
