@@ -182,19 +182,68 @@ export class LotteryConfigurationService {
     return this.transition(input, "REVIEW", "SUBMIT");
   }
 
-  async publish(input: {
+  async approveAndPublish(input: {
     kind: LotteryConfigurationKind;
     id: string;
     expectedRevision: number;
     actor: LotteryConfigurationActor;
-    approvalId: string;
+    reauthEvidenceId: string;
+    correlationId: string;
   }): Promise<LotteryConfigurationCommandResult> {
-    const result = await this.transition(input, "PUBLISHED", "PUBLISH");
-    await this.prisma.adminApprovalEvidence.update({
-      where: { id: input.approvalId },
-      data: { requestedVersion: result.revision },
+    return this.prisma.$transaction(async (tx) => {
+      const current = input.kind === "PRODUCT"
+        ? await tx.lotteryProductVersion.findUnique({ where: { id: input.id }, include: { enabledBetTypes: { include: { betTypeVersion: true } } } })
+        : await tx.lotteryBetTypeVersion.findUnique({ where: { id: input.id } });
+      if (!current) throw new NotFoundException("Lottery configuration version not found");
+      if (current.revision !== input.expectedRevision) {
+        throw new LotteryConfigurationRuleError("VERSION_CONFLICT", "Lottery configuration version is stale", { expectedVersion: input.expectedRevision, currentVersion: current.revision });
+      }
+      if (current.state !== "REVIEW") {
+        throw new LotteryConfigurationRuleError("INVALID_STATE", `Cannot publish Lottery configuration from ${current.state}`, { state: current.state });
+      }
+      if (current.createdByAdminId === input.actor.adminId && input.actor.role === "ADMIN") {
+        throw new LotteryConfigurationRuleError("SELF_APPROVAL_FORBIDDEN", "An ADMIN cannot publish their own Lottery configuration version");
+      }
+      if (input.kind === "PRODUCT") {
+        const product = current as typeof current & { enabledBetTypes: Array<{ betTypeVersion: { state: string } }> };
+        if (product.enabledBetTypes.some((link) => link.betTypeVersion.state !== "PUBLISHED")) {
+          throw new LotteryConfigurationRuleError("BET_TYPE_VERSION_NOT_PUBLISHED", "Every enabled Bet Type version must be published before the Product version", {});
+        }
+      }
+      const payloadHash = createHash("sha256").update(`${input.kind}:${input.id}:${input.expectedRevision}`).digest("hex");
+      const approval = await tx.adminApprovalEvidence.create({
+        data: {
+          id: randomUUID(),
+          action: `LOTTERY_${input.kind}_VERSION_PUBLISH`,
+          resourceType: `LOTTERY_${input.kind}_VERSION`,
+          resourceId: input.id,
+          requesterAdminId: current.createdByAdminId ?? input.actor.adminId,
+          approverAdminId: input.actor.adminId,
+          requestedVersion: input.expectedRevision,
+          payloadHash,
+          reason: `Publish Lottery ${input.kind.toLowerCase()} configuration version`,
+          policyVersion: "lottery-configuration-publish-v1",
+          reauthEvidenceId: input.reauthEvidenceId,
+          correlationId: input.correlationId,
+          approvedAt: new Date(),
+        },
+      });
+      const updated = input.kind === "PRODUCT"
+        ? await tx.lotteryProductVersion.update({ where: { id: input.id }, data: { state: "PUBLISHED", revision: { increment: 1 } } })
+        : await tx.lotteryBetTypeVersion.update({ where: { id: input.id }, data: { state: "PUBLISHED", revision: { increment: 1 } } });
+      await this.createAudit({
+        tx,
+        actor: input.actor,
+        action: `LOTTERY_${input.kind}_VERSION_PUBLISH`,
+        resourceId: input.id,
+        reason: `Publish Lottery ${input.kind.toLowerCase()} configuration version`,
+        outcome: "PUBLISHED",
+        approvalId: approval.id,
+        reauthEvidenceId: input.reauthEvidenceId,
+        correlationId: input.correlationId,
+      });
+      return toResult(input.kind, updated);
     });
-    return result;
   }
 
   private async transition(
@@ -241,6 +290,9 @@ export class LotteryConfigurationService {
     resourceId: string;
     reason: string;
     outcome: string;
+    approvalId?: string;
+    reauthEvidenceId?: string;
+    correlationId?: string;
   }): Promise<void> {
     const db = input.tx ?? this.prisma;
     await db.auditRecord.create({
@@ -254,7 +306,9 @@ export class LotteryConfigurationService {
         resourceId: input.resourceId,
         payloadHash: createHash("sha256").update(input.reason).digest("hex"),
         reason: input.reason,
-        correlationId: randomUUID(),
+        reauthEvidenceId: input.reauthEvidenceId ?? null,
+        approvalId: input.approvalId ?? null,
+        correlationId: input.correlationId ?? randomUUID(),
         outcome: input.outcome,
       },
     });

@@ -3,6 +3,7 @@ import { collectDefaultMetrics } from "prom-client";
 import { ContextsModule } from "../../../src/contexts/contexts.module";
 import { PlatformModule } from "../../../src/platform/platform.module";
 import { AdminAccountingPeriodController } from "./admin-accounting-period.controller";
+import { AdminLotteryConfigurationController } from "./admin-lottery-configuration.controller";
 import { AdminAuthController } from "./admin-auth.controller";
 import { AdminAuthGuard } from "./admin-auth.guard";
 import { AdminCapabilityGuard } from "./admin-capability.guard";
@@ -21,6 +22,7 @@ collectDefaultMetrics({ prefix: "lottify_" });
   controllers: [
     ApiV1Controller,
     AdminAccountingPeriodController,
+    AdminLotteryConfigurationController,
     AdminAuthController,
     HealthController,
     MetricsController,
