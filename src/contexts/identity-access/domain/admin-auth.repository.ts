@@ -8,6 +8,10 @@ export const ADMIN_CAPABILITIES = [
   "accounting-period.approve",
   "accounting-period.cancel",
   "accounting-period.close",
+  "lottery-configuration.read",
+  "lottery-configuration.create",
+  "lottery-configuration.submit",
+  "lottery-configuration.approve",
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 

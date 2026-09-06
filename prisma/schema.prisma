@@ -175,6 +175,7 @@ model LotteryBetTypeVersion {
   id                       String                         @id @default(uuid()) @db.Uuid
   betTypeId                String                         @map("bet_type_id") @db.Uuid
   version                  Int                            @default(1)
+  revision                 Int                            @default(1)
   state                    String
   canonicalNumberFormat    String                         @map("canonical_number_format")
   validationPattern        String                         @map("validation_pattern")
@@ -204,6 +205,7 @@ model LotteryProductVersion {
   id                          String                         @id @default(uuid()) @db.Uuid
   productId                   String                         @map("product_id") @db.Uuid
   version                     Int                            @default(1)
+  revision                    Int                            @default(1)
   state                       String
   timezone                    String
   scheduleTemplateRef         String                         @map("schedule_template_ref")

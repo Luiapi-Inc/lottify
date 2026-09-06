@@ -2,11 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 import { resetEnvironmentForTests } from "../../src/platform/config/env";
+import { LotteryConfigurationService } from "../../src/contexts/lottery/application/lottery-configuration.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 
 describe.runIf(runIntegration)("Lottery configuration persistence", () => {
   let prisma: PrismaService;
+  let configuration: LotteryConfigurationService;
+  let adminId: string;
+  let sessionId: string;
   const productIds: string[] = [];
   const betTypeIds: string[] = [];
   const productVersionIds: string[] = [];
@@ -16,6 +20,27 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
     resetEnvironmentForTests();
     prisma = new PrismaService();
     await prisma.$connect();
+    configuration = new LotteryConfigurationService(prisma);
+    adminId = randomUUID();
+    sessionId = randomUUID();
+    await prisma.adminUser.create({
+      data: {
+        id: adminId,
+        email: `lottery-config-${adminId}@example.test`,
+        name: "Lottery Config Test",
+        passwordHash: "test-hash",
+        role: "ADMIN",
+      },
+    });
+    await prisma.adminAuthSession.create({
+      data: {
+        id: sessionId,
+        adminUserId: adminId,
+        refreshTokenHash: `refresh-${sessionId}`,
+        familyId: randomUUID(),
+        expiresAt: new Date("2199-01-01T00:00:00.000Z"),
+      },
+    });
   });
 
   afterAll(async () => {
@@ -24,6 +49,9 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
     );
     await prisma.$executeRawUnsafe(
       'ALTER TABLE "lottery_bet_type_versions" DISABLE TRIGGER "lottery_bet_type_versions_published_immutable"',
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "audit_records" DISABLE TRIGGER "audit_records_immutable"',
     );
     await prisma.lotteryProductVersionBetType.deleteMany({
       where: { productVersionId: { in: productVersionIds } },
@@ -36,11 +64,17 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
     });
     await prisma.lotteryProduct.deleteMany({ where: { id: { in: productIds } } });
     await prisma.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
+    await prisma.auditRecord.deleteMany({ where: { actorAdminId: adminId } });
+    await prisma.adminAuthSession.deleteMany({ where: { id: sessionId } });
+    await prisma.adminUser.deleteMany({ where: { id: adminId } });
     await prisma.$executeRawUnsafe(
       'ALTER TABLE "lottery_product_versions" ENABLE TRIGGER "lottery_product_versions_published_immutable"',
     );
     await prisma.$executeRawUnsafe(
       'ALTER TABLE "lottery_bet_type_versions" ENABLE TRIGGER "lottery_bet_type_versions_published_immutable"',
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "audit_records" ENABLE TRIGGER "audit_records_immutable"',
     );
     await prisma.$disconnect();
   });
@@ -198,5 +232,40 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
         },
       }),
     ).rejects.toThrow("Lottery Product version references a Bet Type version from a different Bet Type");
+  });
+
+  it("uses a separate revision for optimistic lifecycle commands", async () => {
+    const actor = { adminId, sessionId, role: "ADMIN" as const };
+    const betType = await configuration.createBetType({
+      code: `REVISION_${adminId.slice(0, 8)}`,
+      actor,
+    });
+    betTypeIds.push(betType.id);
+    const version = await configuration.createBetTypeVersion({
+      betTypeId: betType.id,
+      version: 1,
+      canonicalNumberFormat: "00",
+      validationPattern: "^\\d{2}$",
+      defaultPayout: { kind: "FIXED", amountMinor: 9000 },
+      minStakeMinor: 100n,
+      maxStakeMinor: 100000n,
+      limitPolicyRef: "limit-v1",
+      restrictionPolicyRef: "restriction-v1",
+      settlementRuleVersionRef: "settlement-v1",
+      effectiveFrom: new Date("2299-01-01T00:00:00.000Z"),
+      actor,
+    });
+    betTypeVersionIds.push(version.id);
+
+    const submitted = await configuration.submit({
+      kind: "BET_TYPE",
+      id: version.id,
+      expectedRevision: 1,
+      actor,
+    });
+    expect(submitted).toMatchObject({ state: "REVIEW", version: 1, revision: 2 });
+    await expect(
+      configuration.submit({ kind: "BET_TYPE", id: version.id, expectedRevision: 1, actor }),
+    ).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
   });
 });
