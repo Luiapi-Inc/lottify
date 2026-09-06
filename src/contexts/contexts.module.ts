@@ -47,6 +47,11 @@ import { LedgerWalletSourceAdapter } from "../platform/integration/ledger-wallet
     },
     LedgerWalletReconciliationService,
   ],
-  exports: [IdentityAccessModule, WalletLedgerModule, LedgerWalletReconciliationService],
+  exports: [
+    IdentityAccessModule,
+    LotteryModule,
+    WalletLedgerModule,
+    LedgerWalletReconciliationService,
+  ],
 })
 export class ContextsModule {}
