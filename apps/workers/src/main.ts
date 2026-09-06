@@ -6,6 +6,7 @@ import { initObservability, shutdownObservability } from "../../../src/platform/
 import { PrismaService } from "../../../src/platform/persistence/prisma.service";
 import { AccountingPeriodScheduler } from "./accounting-period-scheduler";
 import { startWorkerHealthServer } from "./health-server";
+import { LedgerWalletReconciliationFreshnessWorker } from "./ledger-wallet-reconciliation-freshness.worker";
 import { OutboxDispatcher } from "./outbox-dispatcher";
 import { WorkerModule } from "./worker.module";
 
@@ -18,14 +19,19 @@ async function bootstrap(): Promise<void> {
   const health = startWorkerHealthServer(app.get(PrismaService), env.WORKER_HEALTH_PORT);
   const dispatcher = app.get(OutboxDispatcher);
   const accountingPeriodScheduler = app.get(AccountingPeriodScheduler);
+  const reconciliationFreshness = app.get(LedgerWalletReconciliationFreshnessWorker);
 
   if (env.WORKER_GROUP === "scheduler-outbox") {
     void dispatcher.run();
     void accountingPeriodScheduler.run();
   }
+  if (env.WORKER_GROUP === "payment-reconciliation") {
+    void reconciliationFreshness.run();
+  }
 
   const shutdown = async (): Promise<void> => {
     accountingPeriodScheduler.stop();
+    reconciliationFreshness.stop();
     await dispatcher.stop();
     health.close();
     await app.close();

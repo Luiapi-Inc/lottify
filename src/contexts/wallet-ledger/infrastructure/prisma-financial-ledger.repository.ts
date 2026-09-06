@@ -6,6 +6,7 @@ import {
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReconciliationSourceSnapshot,
+  type ReconciliationTargetPage,
   type ReserveFundsInput,
   type ReverseFinancialTransactionInput,
   type WalletProjection,
@@ -803,6 +804,81 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
+  }
+
+  async listReconciliationTargets(input: {
+    currency: "THB";
+    afterMemberId?: string;
+    limit: number;
+  }): Promise<ReconciliationTargetPage> {
+    const cursorFilter = input.afterMemberId
+      ? Prisma.sql`AND member_id > CAST(${input.afterMemberId} AS uuid)`
+      : Prisma.empty;
+    const rows = await this.prisma.$queryRaw<
+      Array<{ memberId: string; currency: string; sourceVersionAt: Date }>
+    >(Prisma.sql`
+      WITH targets AS (
+        SELECT DISTINCT member_id, currency
+        FROM ledger_accounts
+        WHERE kind = 'MEMBER'
+          AND member_id IS NOT NULL
+          AND currency = ${input.currency}
+          ${cursorFilter}
+        ORDER BY member_id, currency
+        LIMIT ${input.limit + 1}
+      )
+      SELECT
+        t.member_id AS "memberId",
+        t.currency,
+        GREATEST(
+          (
+            SELECT MAX(a.created_at)
+            FROM ledger_accounts AS a
+            WHERE a.kind = 'MEMBER'
+              AND a.member_id = t.member_id
+              AND a.currency = t.currency
+          ),
+          (
+            SELECT MAX(ft.posted_at)
+            FROM ledger_postings AS lp
+            JOIN ledger_accounts AS a ON a.id = lp.account_id
+            JOIN financial_transactions AS ft ON ft.id = lp.transaction_id
+            WHERE a.kind = 'MEMBER'
+              AND a.member_id = t.member_id
+              AND a.currency = t.currency
+          ),
+          (
+            SELECT MAX(r.created_at)
+            FROM reservations AS r
+            WHERE r.member_id = t.member_id
+              AND r.currency = t.currency
+          ),
+          (
+            SELECT MAX(r.released_at)
+            FROM reservations AS r
+            WHERE r.member_id = t.member_id
+              AND r.currency = t.currency
+          ),
+          (
+            SELECT MAX(r.consumed_at)
+            FROM reservations AS r
+            WHERE r.member_id = t.member_id
+              AND r.currency = t.currency
+          )
+        ) AS "sourceVersionAt"
+      FROM targets AS t
+      ORDER BY t.member_id, t.currency
+    `);
+
+    const pageRows = rows.slice(0, input.limit);
+    return {
+      targets: pageRows.map((row) => ({
+        memberId: row.memberId,
+        currency: input.currency,
+        sourceVersionAt: row.sourceVersionAt,
+      })),
+      nextCursor: rows.length > input.limit ? (pageRows.at(-1)?.memberId ?? null) : null,
+    };
   }
 
   private async findReplayableReservation(input: ReserveFundsInput): Promise<string | null> {

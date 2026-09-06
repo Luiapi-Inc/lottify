@@ -36,6 +36,28 @@ What are the canonical definitions, source-of-truth lineage, freshness expectati
 - Reporting must use the authoritative period identity persisted by Wallet & Ledger rather than deriving weekly/custom boundaries independently.
 - This decision does not select the accounting timezone, exact automatic-week boundary, Custom-period validation, or overlap/gap semantics.
 
+### Reporting round 5 — accounting-period boundary semantics approved
+
+- Accounting Period ranges are authoritative half-open `[start, end)` windows in `Asia/Bangkok`.
+- Automatic weekly periods run Monday `00:00` to the following Monday `00:00`; Custom periods use explicit calendar-date boundaries normalized to `00:00`.
+- Reporting must not synthesize overlaps or gaps independently: it groups by the authoritative Accounting Period identity, under the invariant that every permitted Financial Transaction instant resolves to exactly one period.
+- Once an Accounting Period is OPEN or referenced by a Financial Transaction, reporting treats its boundaries as immutable historical facts.
+
+### Reporting round 6 — accounting-period identity and close evidence approved
+
+- Reports group by immutable authoritative `AccountingPeriodId`; period dates/labels are descriptive attributes and never reconstructed identities.
+- `postedAt` is the accounting-period assignment authority. `effectiveAt` remains available as a business/economic dimension but cannot rewrite closed-period membership.
+- `CLOSED` is terminal. Later corrections appear in the current OPEN period and retain linkage to the originating transaction/period.
+- Close reporting/audit evidence includes the immutable close instant, approval reference, reconciliation/checkpoint references, accepted exceptions when any, and actor/Audit Record linkage.
+
+### Reporting round 7 — accounting-period assignment and historical bootstrap semantics approved
+
+- Financial accounting attribution uses the authoritative Accounting Period selected from the transaction's server-authoritative `postedAt`; `effectiveAt` does not reclassify a posting into a historical period.
+- At a boundary, reporting may observe the preceding period in CLOSING while the succeeding period is already OPEN; these states are not an accounting-coverage gap.
+- Historical bootstrap groups existing Financial Transactions into verified historical weekly periods from `postedAt`, after which those historical periods are CLOSED without rewriting the original monetary postings.
+- Close reporting must retain immutable reconciliation, approved-exception, and close-approval evidence associated with the authoritative period.
+- A never-opened Custom period/request may end as `CANCELLED`; Reporting must not treat CANCELLED coverage as an authoritative accounting window for Financial Transactions.
+
 ## Answer
 
 Lottify v1 reporting is a rebuildable, lineage-preserving read model over authoritative domain facts, with explicit metric definitions, time semantics, reconciliation evidence, freshness state, and governed export controls.
@@ -44,7 +66,7 @@ Lottify v1 reporting is a rebuildable, lineage-preserving read model over author
 2. Turnover, payout/winnings, GGR, promotion cost, and liabilities use canonical versioned definitions so reports with the same metric name cannot silently calculate different semantics.
 3. Deposit and Withdrawal reports distinguish workflow stages, while financial completion is based on authoritative Ledger completion rather than provider acceptance alone.
 4. Liability reporting separates confirmed stake exposure, projected maximum payout, unsettled winnings, reserved Withdrawals, and outstanding BONUS/Entitlement exposure with reproducible operational drill-down.
-5. Accounting uses posting instant/accounting period with Automatic weekly and Custom v1 period modes. Product operations use Product timezone, aggregate reports declare timezone, ranges are half-open `[from,to)`, and closed-period corrections are current-period adjustments linked to original facts. Reporting consumes the authoritative period identity and does not independently define the still-unresolved accounting timezone/boundary or Custom validation controls.
+5. Accounting uses the authoritative `postedAt` posting instant/accounting period with Automatic weekly and Custom v1 period modes in `Asia/Bangkok`. Automatic weeks run Monday `00:00` to Monday `00:00`; Custom periods use explicit calendar-date boundaries normalized to `00:00`; all period ranges are half-open `[start,end)`. Product operations still use Product timezone and aggregate reports declare timezone. Closed-period corrections are current-period adjustments linked to original facts, and Reporting consumes the authoritative period identity rather than deriving competing boundaries.
 6. Reconciliation runs are explicit for Ledger/Wallet, Payments/Provider, Betting-Settlement/Ledger, and Promotion/Ledger and retain `asOf`, checkpoints/ranges, counts, totals, and result evidence.
 7. Discrepancies are durable governed objects with lifecycle, severity, expected/observed facts, ownership, evidence, and monetary-resolution linkage to Adjustment/Compensation workflows.
 8. Every report exposes `dataAsOf`, projection lag, and completeness state; partial/lagging financial outputs cannot masquerade as definitive data.

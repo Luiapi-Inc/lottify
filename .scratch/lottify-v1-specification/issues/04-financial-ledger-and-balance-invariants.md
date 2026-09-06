@@ -41,10 +41,46 @@ What exact double-entry account model, posting rules, balance-bucket semantics, 
 ### Financial round 5 — accounting-period modes change request approved
 
 - Lottify v1 supports two Accounting Period modes: **Automatic weekly** and **Custom**.
-- Automatic weekly means the system creates periods on a weekly cadence. The exact accounting timezone and week-start boundary remain unresolved.
-- Custom means an authorized Admin can define explicit period start/end boundaries. This decision does not yet define the authorization/approval flow, overlap/gap behavior, or API/Admin interaction contract.
+- The authoritative v1 accounting timezone is `Asia/Bangkok`; Accounting Periods do not inherit Lottery Product timezones.
+- Wallet & Ledger owns Accounting Period creation/lifecycle and authoritative period assignment. Admin/Approval governs sensitive administrative actions but does not own the financial aggregate.
+- Automatic weekly is the default mode. Custom periods are governed overrides for specific ranges rather than an unconstrained parallel period stream.
+- `ADMIN` and `SUPER_ADMIN` may initiate a Custom-period change. `ADMIN` activation requires a different authorized approver; `SUPER_ADMIN` may self-approve Custom activation. `AUDITOR` is read-only. The self-approval exception is limited to Custom activation; period close remains maker-checker.
+- Automatic weekly means the system creates periods on a weekly cadence. The exact week-start boundary remains unresolved.
+- Custom means an authorized Admin can define explicit period start/end boundaries. Overlap/gap behavior and the exact API/Admin interaction contract remain unresolved.
 - Every Financial Transaction must still belong to exactly one authoritative Accounting Period; CLOSED-period and correction invariants remain unchanged.
-- Implementation must not infer the remaining ownership, boundary, backfill, close-control, or concurrency semantics from these mode decisions alone.
+- Implementation must not infer the remaining boundary, overlap/gap, backfill, close-control, or concurrency semantics from these decisions alone.
+
+### Financial round 6 — accounting-period boundary and coverage controls approved
+
+- Automatic weekly Accounting Periods use half-open `[start, end)` ranges from Monday `00:00` to the following Monday `00:00` in `Asia/Bangkok`.
+- Custom Accounting Periods choose explicit start/end calendar dates; boundaries are normalized to `00:00` in `Asia/Bangkok` and use the same half-open range semantics.
+- Effective Accounting Periods cannot overlap and cannot leave a gap across time in which Financial Transactions are permitted. Every permitted Financial Transaction instant must resolve to exactly one authoritative Accounting Period.
+- Once an Accounting Period is OPEN, or any Financial Transaction has been assigned to it, its effective start/end boundaries are immutable. Existing Financial Transactions are never reassigned by editing period boundaries.
+
+### Financial round 7 — accounting-period identity, finality and concurrency controls approved
+
+- Every Accounting Period has an opaque immutable `AccountingPeriodId`; dates, mode, and labels are attributes rather than identity.
+- A Custom request cannot activate retroactively if approval completes at or after its requested start boundary. It must expire/reject and be resubmitted with a future start if still required; dates are never silently shifted.
+- Period resolution from server-authoritative `postedAt`, OPEN/acceptance validation, and resulting Ledger posting execute within one financial consistency boundary. Exact boundary instants resolve to the succeeding half-open period, without relying on a cron race.
+- `CLOSED` is terminal and cannot be reopened. Corrections after close use current-OPEN-period Adjustment/Compensation with linkage to originating transaction/period.
+- Close evidence is immutable and includes at least `closedAt`, maker-checker Approval reference, reconciliation run/checkpoint references, accepted-exception references when present, and actor/Audit Record linkage.
+- Custom Admin flow is date selection, reason, replacement preview, submit, approve, then `SCHEDULED`; `ADMIN` requires a different authorized approver while `SUPER_ADMIN` may self-approve activation. Raw recurrence/rule configuration is not exposed and OPEN/CLOSING/CLOSED boundaries are not editable.
+
+### Financial round 8 — accounting-period assignment, lifecycle, close and bootstrap controls approved
+
+- Accounting Period assignment uses the server-authoritative `postedAt` instant. `effectiveAt` remains historical/economic context and cannot be used to backdate a new posting into a CLOSED period.
+- An approved Custom period override may replace only future generated weekly coverage. Replacement is atomic and surrounding future weekly coverage is split/rebuilt as necessary so the resulting effective schedule still has neither overlap nor gap. OPEN or transaction-referenced periods cannot be overridden.
+- The canonical lifecycle is `DRAFT -> PENDING_APPROVAL -> SCHEDULED -> OPEN -> CLOSING -> CLOSED`. Automatic weekly periods may be created directly as SCHEDULED; Custom periods traverse the governed draft/approval path before scheduling.
+- At an end boundary, the succeeding period opens immediately while the preceding period may remain CLOSING for reconciliation. Financial posting availability does not wait for the old period to become CLOSED.
+- `CLOSING -> CLOSED` requires the applicable reconciliation evidence, no unresolved blocking discrepancy unless explicitly accepted through an approved exception with evidence, and maker-checker close approval. Close evidence is immutable.
+- Existing Financial Transactions are bootstrapped into historical weekly periods from their `postedAt` instants using the approved Monday `00:00` / `Asia/Bangkok` boundaries. Historical periods become CLOSED only after backfill verification; existing amounts and postings are not rewritten.
+
+### Financial round 9 — accounting-period final operational controls approved
+
+- Custom activation approval is role-sensitive: `ADMIN` cannot self-approve and requires a different authorized approver; `SUPER_ADMIN` may self-approve Custom activation. The separately approved `CLOSING -> CLOSED` transition remains maker-checker.
+- Before OPEN, `DRAFT` may be cancelled by its creator, `PENDING_APPROVAL` may be withdrawn by its creator, and cancelling a `SCHEDULED` Custom period requires governed approval plus atomic restoration of the Automatic weekly coverage it replaced. A never-opened period/request may terminate as `CANCELLED`; after OPEN, cancellation and boundary editing are forbidden.
+- Automatic weekly generation guarantees at least the current and next period. Additional future periods may be pre-generated, but scheduler success is not a correctness dependency: if the required next period is absent at a boundary, the posting path synchronously and transactionally establishes the correct authoritative period before accepting the Ledger posting.
+- `AccountingPeriod` is the Admin/API resource. Mutation is command-oriented through `create-custom`, `submit`, `approve`, `cancel`, and `close`; generic boundary/lifecycle PATCH is forbidden. Exact route/DTO encoding belongs to the specification layer.
 
 ## Answer
 
@@ -57,7 +93,7 @@ Lottify v1 uses a balanced operational double-entry subledger as the financial s
 5. Deposit, Withdrawal, Bet, Win, Refund, Bonus, fee, Adjustment, Chargeback, and recovery effects use explicit traceable double-entry postings rather than hidden balance changes.
 6. Refund and correction preserve the accepted source-bucket allocation. Posted history is never edited: open-period mistakes use reversals; later or closed-period corrections use compensating transactions.
 7. Debt/recovery may create a negative net position, but spendable betting/withdrawal availability is zero until policy resolves it.
-8. Accounting periods support Automatic weekly and Custom modes in v1. Automatic weekly periods are system-created on a weekly cadence; Custom periods allow an authorized Admin to define explicit start/end boundaries. Closed periods cannot be backdated or mutated; later corrections post in a current open period and reference the originating transaction/period. The remaining timezone, exact week boundary, ownership, overlap/gap, backfill, authorization, and close-control semantics require their own approved decisions before implementation.
+8. Accounting periods use `Asia/Bangkok` and are owned by Wallet & Ledger. v1 uses Automatic weekly as the default plus governed future Custom overrides. `ADMIN` requires a different approver for Custom activation; `SUPER_ADMIN` may self-approve activation, while period close remains maker-checker. Automatic weeks run Monday `00:00` to Monday `00:00`; Custom boundaries are explicit calendar dates normalized to `00:00`; both use half-open `[start,end)` ranges with no overlap or posting-time gaps. Assignment is authoritative from `postedAt`; lifecycle is `DRAFT -> PENDING_APPROVAL -> SCHEDULED -> OPEN -> CLOSING -> CLOSED` with `CANCELLED` available only before OPEN; successor opening does not wait for predecessor close. Boundaries become immutable once OPEN/referenced, CLOSED is terminal, historical bootstrap uses `postedAt` without rewriting money, and current/next period availability cannot depend solely on the scheduler. Mutations are explicit AccountingPeriod commands rather than generic PATCH. Later corrections post in the current OPEN period and reference the originating transaction/period.
 9. Wallet is a projection of Ledger + Reservations. On disagreement, Ledger is authoritative and the projection is rebuilt/reconciled.
 10. Reconciliation covers Ledger/Wallet, Payments/Provider, Betting-Settlement/Ledger, and Promotion Entitlement/bonus postings. Mismatches become durable auditable Discrepancies.
 11. Manual discrepancy resolution that changes money creates an approved Adjustment/Compensation transaction with reason, evidence, and audit; balances are not edited directly.

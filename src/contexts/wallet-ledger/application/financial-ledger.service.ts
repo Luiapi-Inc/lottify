@@ -5,6 +5,7 @@ import {
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
   type ReconciliationSourceSnapshot,
+  type ReconciliationTargetPage,
   type ReserveFundsInput,
   type ReverseFinancialTransactionInput,
   type WalletProjection,
@@ -70,5 +71,20 @@ export class FinancialLedgerService {
     asOf: Date,
   ): Promise<ReconciliationSourceSnapshot> {
     return this.repository.getReconciliationSourceSnapshot(memberId, currency, asOf);
+  }
+
+  listReconciliationTargets(input: {
+    currency?: FinancialCurrency;
+    afterMemberId?: string;
+    limit: number;
+  }): Promise<ReconciliationTargetPage> {
+    if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 500) {
+      throw new Error("Reconciliation target page limit must be an integer between 1 and 500");
+    }
+    return this.repository.listReconciliationTargets({
+      currency: input.currency ?? "THB",
+      afterMemberId: input.afterMemberId,
+      limit: input.limit,
+    });
   }
 }

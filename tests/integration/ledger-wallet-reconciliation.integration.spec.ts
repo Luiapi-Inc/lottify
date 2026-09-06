@@ -65,13 +65,13 @@ describe.runIf(runIntegration)("Ledger ↔ Wallet reconciliation integration", (
     await prisma.$disconnect();
   });
 
-  async function createFixture(label: string): Promise<{
+  async function createFixture(label: string, fixedMemberId?: string): Promise<{
     memberId: string;
     cashAccountId: string;
     transactionId: string;
     reservationId: string;
   }> {
-    const memberId = randomUUID();
+    const memberId = fixedMemberId ?? randomUUID();
     memberIds.push(memberId);
     const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH");
     const systemAccountId = await ledger.ensureSystemAccount(`reconciliation:${label}:${randomUUID()}`);
@@ -239,6 +239,70 @@ describe.runIf(runIntegration)("Ledger ↔ Wallet reconciliation integration", (
     expect(discrepancy.resolutionTrail).toEqual([]);
     expect(discrepancy.resolutionEvidence).toBeNull();
     expect(await authoritativeCounts(fixture.memberId)).toEqual(financialCountsBefore);
+
+    const alertNow = new Date();
+    const staleDetectedAt = new Date(alertNow.getTime() - 16 * 60_000);
+    await prisma.reconciliationDiscrepancy.update({
+      where: { id: discrepancy.id },
+      data: { detectedAt: staleDetectedAt, severity: "CRITICAL" },
+    });
+    const alertSummary = await mismatchReconciliation.getOperationalAlertSummary(
+      new Date(alertNow.getTime() - 15 * 60_000),
+    );
+    expect(alertSummary.staleMonetary).toMatchObject({
+      count: expect.any(Number),
+      oldestDiscrepancyId: discrepancy.id,
+      oldestDetectedAt: staleDetectedAt,
+    });
+    expect(alertSummary.staleMonetary?.count).toBeGreaterThanOrEqual(1);
+    expect(alertSummary.critical).toMatchObject({
+      count: expect.any(Number),
+      oldestDiscrepancyId: discrepancy.id,
+      oldestDetectedAt: staleDetectedAt,
+    });
+    expect(alertSummary.critical?.count).toBeGreaterThanOrEqual(1);
+  });
+
+  it("discovers Wallet-Ledger reconciliation targets through a stable bounded page", async () => {
+    const firstMemberId = "ffffffff-ffff-ffff-ffff-ffffffffffd1";
+    const secondMemberId = "ffffffff-ffff-ffff-ffff-ffffffffffd2";
+    const thirdMemberId = "ffffffff-ffff-ffff-ffff-ffffffffffd3";
+    const afterMemberId = "ffffffff-ffff-ffff-ffff-ffffffffffd0";
+    const first = await createFixture("target-page-1", firstMemberId);
+    await createFixture("target-page-2", secondMemberId);
+    await createFixture("target-page-3", thirdMemberId);
+
+    const firstPage = await ledger.listReconciliationTargets({
+      currency: "THB",
+      afterMemberId,
+      limit: 2,
+    });
+    expect(firstPage.targets.map((target) => target.memberId)).toEqual([
+      firstMemberId,
+      secondMemberId,
+    ]);
+    expect(firstPage.targets.every((target) => target.currency === "THB")).toBe(true);
+    expect(firstPage.targets.every((target) => target.sourceVersionAt instanceof Date)).toBe(true);
+    expect(firstPage.nextCursor).toBe(secondMemberId);
+
+    const secondPage = await ledger.listReconciliationTargets({
+      currency: "THB",
+      afterMemberId: firstPage.nextCursor ?? undefined,
+      limit: 2,
+    });
+    expect(secondPage.targets.map((target) => target.memberId)).toEqual([thirdMemberId]);
+    expect(secondPage.nextCursor).toBeNull();
+
+    const releasedAt = await ledger.releaseReservation(first.reservationId);
+    const refreshed = await ledger.listReconciliationTargets({
+      currency: "THB",
+      afterMemberId,
+      limit: 1,
+    });
+    expect(refreshed.targets[0]).toMatchObject({ memberId: firstMemberId, currency: "THB" });
+    expect(refreshed.targets[0]?.sourceVersionAt.getTime()).toBeGreaterThanOrEqual(
+      releasedAt.getTime(),
+    );
   });
 
   async function authoritativeCounts(memberId: string): Promise<{

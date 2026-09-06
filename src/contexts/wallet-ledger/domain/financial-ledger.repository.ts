@@ -101,6 +101,17 @@ export interface ReconciliationSourceSnapshot {
   latestReservation: { id: string; createdAt: Date } | null;
 }
 
+export interface ReconciliationTarget {
+  memberId: string;
+  currency: FinancialCurrency;
+  sourceVersionAt: Date;
+}
+
+export interface ReconciliationTargetPage {
+  targets: readonly ReconciliationTarget[];
+  nextCursor: string | null;
+}
+
 export interface ConsumeReservationAndPostInput {
   reservationId: string;
   businessTransactionId: string;
@@ -135,6 +146,11 @@ export interface FinancialLedgerRepository {
     currency: FinancialCurrency,
     asOf: Date,
   ): Promise<ReconciliationSourceSnapshot>;
+  listReconciliationTargets(input: {
+    currency: FinancialCurrency;
+    afterMemberId?: string;
+    limit: number;
+  }): Promise<ReconciliationTargetPage>;
 }
 
 export const FINANCIAL_LEDGER_REPOSITORY = Symbol("FINANCIAL_LEDGER_REPOSITORY");

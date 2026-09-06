@@ -42,6 +42,19 @@ export interface LedgerWalletReconciliationResult {
   discrepancyCount: number;
 }
 
+export interface ReconciliationOperationalAlertSummary {
+  staleMonetary: {
+    count: number;
+    oldestDiscrepancyId: string;
+    oldestDetectedAt: Date;
+  } | null;
+  critical: {
+    count: number;
+    oldestDiscrepancyId: string;
+    oldestDetectedAt: Date;
+  } | null;
+}
+
 interface ExpectedBucket {
   bucket: ReconciliationMemberBucket;
   accountId: string | null;
@@ -188,6 +201,56 @@ export class LedgerWalletReconciliationService {
       if (racedReplay) return racedReplay;
       throw error;
     }
+  }
+
+  async getOperationalAlertSummary(staleBefore: Date): Promise<ReconciliationOperationalAlertSummary> {
+    const unresolvedStatuses = ["DETECTED", "INVESTIGATING", "RESOLUTION_PENDING"];
+    const pairScope = { reconciliationRun: { pair: RECONCILIATION_PAIR } };
+    const staleWhere: Prisma.ReconciliationDiscrepancyWhereInput = {
+      ...pairScope,
+      status: { in: unresolvedStatuses },
+      amountDifferenceMinor: { not: null },
+      detectedAt: { lte: staleBefore },
+    };
+    const criticalWhere: Prisma.ReconciliationDiscrepancyWhereInput = {
+      ...pairScope,
+      status: { in: unresolvedStatuses },
+      severity: "CRITICAL",
+    };
+
+    const [staleCount, staleOldest, criticalCount, criticalOldest] = await Promise.all([
+      this.prisma.reconciliationDiscrepancy.count({ where: staleWhere }),
+      this.prisma.reconciliationDiscrepancy.findFirst({
+        where: staleWhere,
+        orderBy: [{ detectedAt: "asc" }, { id: "asc" }],
+        select: { id: true, detectedAt: true },
+      }),
+      this.prisma.reconciliationDiscrepancy.count({ where: criticalWhere }),
+      this.prisma.reconciliationDiscrepancy.findFirst({
+        where: criticalWhere,
+        orderBy: [{ detectedAt: "asc" }, { id: "asc" }],
+        select: { id: true, detectedAt: true },
+      }),
+    ]);
+
+    return {
+      staleMonetary:
+        staleCount > 0 && staleOldest
+          ? {
+              count: staleCount,
+              oldestDiscrepancyId: staleOldest.id,
+              oldestDetectedAt: staleOldest.detectedAt,
+            }
+          : null,
+      critical:
+        criticalCount > 0 && criticalOldest
+          ? {
+              count: criticalCount,
+              oldestDiscrepancyId: criticalOldest.id,
+              oldestDetectedAt: criticalOldest.detectedAt,
+            }
+          : null,
+    };
   }
 
   private async findReplay(

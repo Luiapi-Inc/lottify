@@ -56,6 +56,10 @@ _Avoid_: Ledger
 The authoritative immutable double-entry accounting record for every financial movement.
 _Avoid_: Wallet, Balance table
 
+**Accounting Period**:
+An authoritative accounting window to which each Financial Transaction belongs. Its lifecycle governs whether new financial activity may be recorded into that period, and closed-period history is not rewritten.
+_Avoid_: Report date range, Draw period
+
 **Reservation**:
 A durable hold on Member value that reduces available balance without transferring ownership in the Ledger; it remains governed by the business workflow that created it until consumed or released.
 _Avoid_: Ledger posting, Temporary debit
