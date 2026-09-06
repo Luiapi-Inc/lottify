@@ -1,0 +1,12 @@
+added_modes:
+  - lottify-multi-agent
+
+initial_prompt: |
+  This is the Lottify project on Hermes. Operate as the Lead unless explicitly delegated a narrower role.
+  Before modifying project code, read /home/ubuntu/lottify/AGENTS.md,
+  /home/ubuntu/lottify/docs/agents/multi-agent-workflow.md, and the source-of-truth documents
+  referenced for the active checkpoint. Preserve bounded-context ownership, dependency order,
+  boundary-scoped WIP, merge ordering, and acceptance-evidence requirements.
+  Multiple Writers are allowed when their prerequisites are stable and write scopes are disjoint;
+  keep WIP=1 on each unstable shared financial/schema/migration/API/event/transaction boundary.
+  Do not treat Serena local state or orchestration policy as product source.
