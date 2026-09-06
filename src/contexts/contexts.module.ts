@@ -12,9 +12,11 @@ import { PromotionModule } from "./promotion/promotion.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { LedgerWalletReconciliationService } from "./reporting/ledger-wallet-reconciliation.service";
 import { LEDGER_WALLET_PROJECTION_PORT } from "./reporting/ledger-wallet-projection.port";
+import { LEDGER_WALLET_SOURCE_PORT } from "./reporting/ledger-wallet-source.port";
 import { ResultSettlementModule } from "./result-settlement/result-settlement.module";
 import { WalletLedgerModule } from "./wallet-ledger/wallet-ledger.module";
 import { LedgerWalletProjectionAdapter } from "../platform/integration/ledger-wallet-projection.adapter";
+import { LedgerWalletSourceAdapter } from "../platform/integration/ledger-wallet-source.adapter";
 
 @Module({
   imports: [
@@ -34,9 +36,14 @@ import { LedgerWalletProjectionAdapter } from "../platform/integration/ledger-wa
   ],
   providers: [
     LedgerWalletProjectionAdapter,
+    LedgerWalletSourceAdapter,
     {
       provide: LEDGER_WALLET_PROJECTION_PORT,
       useExisting: LedgerWalletProjectionAdapter,
+    },
+    {
+      provide: LEDGER_WALLET_SOURCE_PORT,
+      useExisting: LedgerWalletSourceAdapter,
     },
     LedgerWalletReconciliationService,
   ],

@@ -26,7 +26,7 @@ describe.runIf(runIntegration)("Ledger ↔ Wallet reconciliation integration", (
     ledger = new FinancialLedgerService(
       new PrismaFinancialLedgerRepository(prisma, new DatabaseAccountingPeriodTransactionClock()),
     );
-    reconciliation = new LedgerWalletReconciliationService(prisma, ledger);
+    reconciliation = new LedgerWalletReconciliationService(prisma, ledger, ledger);
     await prisma.$connect();
   });
 
@@ -199,7 +199,7 @@ describe.runIf(runIntegration)("Ledger ↔ Wallet reconciliation integration", (
         };
       },
     };
-    const mismatchReconciliation = new LedgerWalletReconciliationService(prisma, driftingReader);
+    const mismatchReconciliation = new LedgerWalletReconciliationService(prisma, driftingReader, ledger);
 
     const result = await mismatchReconciliation.run({ checkpointKey, memberId: fixture.memberId });
 

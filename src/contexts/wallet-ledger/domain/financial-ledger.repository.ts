@@ -82,6 +82,25 @@ export interface WalletProjection {
   buckets: readonly WalletBucketProjection[];
 }
 
+export interface ReconciliationSourceBucketSnapshot {
+  bucket: MemberLedgerBucket;
+  accountId: string | null;
+  postedMinor: bigint;
+  reservedMinor: bigint;
+}
+
+export interface ReconciliationSourceSnapshot {
+  memberId: string;
+  currency: FinancialCurrency;
+  asOf: Date;
+  buckets: readonly ReconciliationSourceBucketSnapshot[];
+  ledgerAccountCount: number;
+  ledgerPostingCount: number;
+  activeReservationAllocationCount: number;
+  latestLedgerPosting: { id: string; postedAt: Date } | null;
+  latestReservation: { id: string; createdAt: Date } | null;
+}
+
 export interface ConsumeReservationAndPostInput {
   reservationId: string;
   businessTransactionId: string;
@@ -111,6 +130,11 @@ export interface FinancialLedgerRepository {
   consumeReservationAndPost(input: ConsumeReservationAndPostInput): Promise<string>;
   getAvailableMinorUnits(accountId: string): Promise<bigint>;
   getWalletProjection(memberId: string, currency: FinancialCurrency): Promise<WalletProjection>;
+  getReconciliationSourceSnapshot(
+    memberId: string,
+    currency: FinancialCurrency,
+    asOf: Date,
+  ): Promise<ReconciliationSourceSnapshot>;
 }
 
 export const FINANCIAL_LEDGER_REPOSITORY = Symbol("FINANCIAL_LEDGER_REPOSITORY");

@@ -4,6 +4,7 @@ import {
   type ConsumeReservationAndPostInput,
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
+  type ReconciliationSourceSnapshot,
   type ReserveFundsInput,
   type ReverseFinancialTransactionInput,
   type WalletProjection,
@@ -61,5 +62,13 @@ export class FinancialLedgerService {
     currency: FinancialCurrency = "THB",
   ): Promise<WalletProjection> {
     return this.repository.getWalletProjection(memberId, currency);
+  }
+
+  getReconciliationSourceSnapshot(
+    memberId: string,
+    currency: FinancialCurrency,
+    asOf: Date,
+  ): Promise<ReconciliationSourceSnapshot> {
+    return this.repository.getReconciliationSourceSnapshot(memberId, currency, asOf);
   }
 }

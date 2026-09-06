@@ -21,6 +21,19 @@ describe("bounded-context architecture", () => {
       }
     }
   });
+
+  it("keeps Ledger-Wallet reconciliation reads behind the Wallet & Ledger application boundary", async () => {
+    const source = await readFile(
+      resolve(
+        process.cwd(),
+        "src/contexts/reporting/ledger-wallet-reconciliation.service.ts",
+      ),
+      "utf8",
+    );
+    expect(source).not.toMatch(
+      /\.(ledgerAccount|ledgerPosting|reservation|reservationAllocation)\b/,
+    );
+  });
 });
 
 async function walk(directory: string): Promise<string[]> {

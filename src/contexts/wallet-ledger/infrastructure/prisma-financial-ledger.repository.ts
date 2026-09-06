@@ -5,6 +5,7 @@ import {
   type ConsumeReservationAndPostInput,
   type FinancialLedgerRepository,
   type PostFinancialTransactionInput,
+  type ReconciliationSourceSnapshot,
   type ReserveFundsInput,
   type ReverseFinancialTransactionInput,
   type WalletProjection,
@@ -696,6 +697,109 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
           : buckets;
 
         return { memberId, currency, dataAsOf, buckets: projectedBuckets };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
+
+  async getReconciliationSourceSnapshot(
+    memberId: string,
+    currency: "THB",
+    asOf: Date,
+  ): Promise<ReconciliationSourceSnapshot> {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const accounts = await tx.ledgerAccount.findMany({
+          where: { kind: "MEMBER", memberId, currency, createdAt: { lte: asOf } },
+          select: { id: true, bucket: true },
+        });
+        const accountIds = accounts.map((account) => account.id);
+        const accountByBucket = new Map(accounts.map((account) => [account.bucket, account.id]));
+
+        const [postings, activeAllocations] = await Promise.all([
+          accountIds.length === 0
+            ? Promise.resolve([])
+            : tx.ledgerPosting.findMany({
+                where: {
+                  accountId: { in: accountIds },
+                  transaction: { postedAt: { lte: asOf } },
+                },
+                select: {
+                  id: true,
+                  accountId: true,
+                  side: true,
+                  amountMinor: true,
+                  transaction: { select: { postedAt: true } },
+                },
+              }),
+          accountIds.length === 0
+            ? Promise.resolve([])
+            : tx.reservationAllocation.findMany({
+                where: {
+                  accountId: { in: accountIds },
+                  reservation: {
+                    createdAt: { lte: asOf },
+                    AND: [
+                      { OR: [{ releasedAt: null }, { releasedAt: { gt: asOf } }] },
+                      { OR: [{ consumedAt: null }, { consumedAt: { gt: asOf } }] },
+                    ],
+                  },
+                },
+                select: {
+                  accountId: true,
+                  amountMinor: true,
+                  reservation: { select: { id: true, createdAt: true } },
+                },
+              }),
+        ]);
+
+        const buckets = MEMBER_LEDGER_BUCKETS.map((bucket) => {
+          const accountId = accountByBucket.get(bucket) ?? null;
+          if (!accountId) {
+            return { bucket, accountId, postedMinor: 0n, reservedMinor: 0n };
+          }
+          const postedMinor = calculatePostedMinor(
+            postings
+              .filter((posting) => posting.accountId === accountId)
+              .map((posting) => ({ side: posting.side, amountMinor: posting.amountMinor })),
+          );
+          const reservedMinor = activeAllocations
+            .filter((allocation) => allocation.accountId === accountId)
+            .reduce((total, allocation) => total + allocation.amountMinor, 0n);
+          return { bucket, accountId, postedMinor, reservedMinor };
+        });
+
+        const latestLedgerPosting = [...postings]
+          .sort(
+            (left, right) =>
+              right.transaction.postedAt.getTime() - left.transaction.postedAt.getTime() ||
+              right.id.localeCompare(left.id),
+          )[0];
+        const latestReservation = [...activeAllocations]
+          .sort(
+            (left, right) =>
+              right.reservation.createdAt.getTime() - left.reservation.createdAt.getTime() ||
+              right.reservation.id.localeCompare(left.reservation.id),
+          )[0];
+
+        return {
+          memberId,
+          currency,
+          asOf: new Date(asOf),
+          buckets,
+          ledgerAccountCount: accounts.length,
+          ledgerPostingCount: postings.length,
+          activeReservationAllocationCount: activeAllocations.length,
+          latestLedgerPosting: latestLedgerPosting
+            ? { id: latestLedgerPosting.id, postedAt: latestLedgerPosting.transaction.postedAt }
+            : null,
+          latestReservation: latestReservation
+            ? {
+                id: latestReservation.reservation.id,
+                createdAt: latestReservation.reservation.createdAt,
+              }
+            : null,
+        };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
