@@ -33,15 +33,19 @@ do not own or mutate financial authority.
   bounded target paging.
 - Accounting Period PostgreSQL evidence passes backfill 2/2, contract migration 5/5, and reporting
   1/1 dedicated scenarios.
-- The full integration-enabled suite passes 238 tests. One foundation Redis/BullMQ test remains
-  blocked by a connection timeout to the configured Redis endpoint; this is an environment
-  connectivity failure, not a Ledger ↔ Wallet reconciliation failure.
+- Redis access was restored by allowing TCP 6379 from the Hermes security group to the existing
+  Redis container; Redis `PING` returns `PONG` and the foundation Redis/BullMQ scenario passes.
+- The full integration-enabled suite passes 239 tests on a clean migrated PostgreSQL test database,
+  including the 6 foundation, 25 Admin Accounting Period, 18 Financial Core, and 4 Ledger ↔ Wallet
+  integration scenarios.
+- Dedicated Accounting Period backfill 2/2, contract migration 5/5, and reporting 1/1 scenarios
+  also pass on the same clean database.
 - TypeScript typecheck and full application build pass from the same source HEAD.
 - `git diff --check` passes.
 
 ## Pending acceptance evidence
 
 Issue #23 requires one immutable CI candidate with PostgreSQL migration deploy, deterministic
-integration/operational evidence, dependency and image scans, and container smokes. PostgreSQL
-evidence is now complete locally. Redis/BullMQ connectivity, CI scans, and container smokes remain
-open, so no Production GO or Issue #23 completion claim is made here.
+integration/operational evidence, dependency and image scans, and container smokes. PostgreSQL and
+Redis-backed integration evidence is now complete locally. CI scans and container smokes remain open,
+so no Production GO or Issue #23 completion claim is made here.
