@@ -34,3 +34,13 @@ Source of truth: Wayfinder Tickets 01, 02, 03, 05, 16, and 19. This record does 
 ## Milestone disposition
 
 This is a bounded Lottery domain checkpoint only. The Lottery Configuration / Draw milestone remains incomplete until the remaining source-of-truth requirements and required evidence are implemented and verified.
+
+## Issue #24 blocker remediation — local checkpoint (2026-09-07)
+
+Source: Tickets 05/10/16 and ADR 0004. Supersedes the domain-only description above for Product/Bet Type persistence and API work; full milestone acceptance remains open.
+
+- Commands now commit configuration effects, audit and replayable idempotency results in one transaction. BigInt amounts are fingerprinted as JSON-safe strings with sorted object keys. Legacy incomplete records remain explicitly reconciliation-required.
+- Lifecycle commands lock the version row before inspecting revision/state. Product link mutations lock their parents and reject published parents; a forward migration also corrects draft DELETE trigger return semantics.
+- Lottery test cleanup scopes deletion to owned fixtures and changes trigger state transactionally. Pagination tests follow cursors and verify state-filtered versions.
+- Local evidence: 8 PostgreSQL/HTTP integration scenarios passed, including simultaneous submit, published link mutation rejection, minor-unit version creation/replay and injected pre-result rollback/retry. Two contract and three architecture tests passed; typecheck passed.
+- Remaining evidence: controlled publish/link interleavings, concurrent approval, real process termination/restart, full CI and independent post-change review. This is not Issue #24 acceptance or Production GO.

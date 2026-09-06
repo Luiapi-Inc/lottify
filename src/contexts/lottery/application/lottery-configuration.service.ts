@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
@@ -42,7 +43,40 @@ export interface LotteryConfigurationListResult<T> {
 
 @Injectable()
 export class LotteryConfigurationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  private readonly transactionContext = new AsyncLocalStorage<Prisma.TransactionClient>();
+  private get db(): Prisma.TransactionClient { return this.transactionContext.getStore() ?? this.prisma; }
+  private transaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    const active = this.transactionContext.getStore();
+    if (active) return work(active);
+    return this.prisma.$transaction(tx => this.transactionContext.run(tx, () => work(tx)));
+  }
+
+  async executeCommand(input: { scope: string; key: string; fingerprint: string; responseCode: number }, execute: () => Promise<unknown>): Promise<unknown> {
+    return this.transaction(async tx => {
+      // Same logical command serializes before reading its durable result.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify([input.scope, input.key])}, 0))::text`;
+      const prior = await tx.idempotencyRecord.findUnique({ where: { scope_key: { scope: input.scope, key: input.key } } });
+      if (prior) {
+        if (prior.fingerprint !== input.fingerprint) throw new LotteryConfigurationRuleError("IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different payload");
+        if (prior.status === "COMPLETED" && prior.responseBody !== null) return prior.responseBody;
+        // Legacy incomplete records need reconciliation; never replay an unknown effect.
+        throw new LotteryConfigurationRuleError("IDEMPOTENCY_IN_PROGRESS", "Legacy command requires reconciliation", { status: prior.status });
+      }
+      const result = await execute();
+      const responseBody = JSON.parse(JSON.stringify(result, (_key, value) => typeof value === "bigint" ? value.toString() : value)) as Prisma.InputJsonValue;
+      await tx.idempotencyRecord.create({ data: {
+        ...input, status: "COMPLETED", responseBody, expiresAt: new Date("9999-12-31T23:59:59.999Z"),
+      } });
+      return responseBody;
+    });
+  }
+
+  private async lockVersion(tx: Prisma.TransactionClient, kind: LotteryConfigurationKind, id: string): Promise<void> {
+    if (kind === "PRODUCT") await tx.$queryRaw`SELECT id FROM lottery_product_versions WHERE id = ${id}::uuid FOR UPDATE`;
+    else await tx.$queryRaw`SELECT id FROM lottery_bet_type_versions WHERE id = ${id}::uuid FOR UPDATE`;
+  }
 
   async listProducts(input: {
     limit?: number;
@@ -50,7 +84,7 @@ export class LotteryConfigurationService {
     state?: LotteryConfigurationState;
   } = {}): Promise<LotteryConfigurationListResult<unknown>> {
     const limit = boundedLimit(input.limit);
-    const rows = await this.prisma.lotteryProduct.findMany({
+    const rows = await this.db.lotteryProduct.findMany({
       orderBy: { id: "asc" },
       take: limit + 1,
       ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
@@ -73,7 +107,7 @@ export class LotteryConfigurationService {
   }
 
   async getProduct(id: string, state?: LotteryConfigurationState): Promise<unknown> {
-    const row = await this.prisma.lotteryProduct.findUnique({
+    const row = await this.db.lotteryProduct.findUnique({
       where: { id },
       include: {
         versions: {
@@ -120,7 +154,7 @@ export class LotteryConfigurationService {
     state?: LotteryConfigurationState;
   } = {}): Promise<LotteryConfigurationListResult<unknown>> {
     const limit = boundedLimit(input.limit);
-    const rows = await this.prisma.lotteryBetType.findMany({
+    const rows = await this.db.lotteryBetType.findMany({
       orderBy: { id: "asc" },
       take: limit + 1,
       ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
@@ -140,7 +174,7 @@ export class LotteryConfigurationService {
   }
 
   async getBetType(id: string, state?: LotteryConfigurationState): Promise<unknown> {
-    const row = await this.prisma.lotteryBetType.findUnique({
+    const row = await this.db.lotteryBetType.findUnique({
       where: { id },
       include: {
         versions: {
@@ -168,7 +202,7 @@ export class LotteryConfigurationService {
   }
 
   async createProduct(input: { actor: LotteryConfigurationActor }): Promise<{ id: string }> {
-    const product = await this.prisma.lotteryProduct.create({ data: { id: randomUUID() } });
+    const product = await this.db.lotteryProduct.create({ data: { id: randomUUID() } });
     await this.createAudit({
       actor: input.actor,
       action: "LOTTERY_PRODUCT_CREATE",
@@ -186,7 +220,7 @@ export class LotteryConfigurationService {
     const code = input.code.trim();
     if (!code) throw new LotteryConfigurationRuleError("VALIDATION_ERROR", "Bet Type code is required");
     try {
-      const betType = await this.prisma.lotteryBetType.create({
+      const betType = await this.db.lotteryBetType.create({
         data: { id: randomUUID(), code },
       });
       await this.createAudit({
@@ -222,9 +256,9 @@ export class LotteryConfigurationService {
     actor: LotteryConfigurationActor;
   }): Promise<LotteryConfigurationCommandResult> {
     validateVersionInput(input);
-    const betType = await this.prisma.lotteryBetType.findUnique({ where: { id: input.betTypeId } });
+    const betType = await this.db.lotteryBetType.findUnique({ where: { id: input.betTypeId } });
     if (!betType) throw new NotFoundException("Bet Type not found");
-    const version = await this.prisma.lotteryBetTypeVersion.create({
+    const version = await this.db.lotteryBetTypeVersion.create({
       data: {
         id: randomUUID(),
         betTypeId: input.betTypeId,
@@ -264,7 +298,7 @@ export class LotteryConfigurationService {
     actor: LotteryConfigurationActor;
   }): Promise<LotteryConfigurationCommandResult> {
     validateVersionInput(input);
-    const product = await this.prisma.lotteryProduct.findUnique({ where: { id: input.productId } });
+    const product = await this.db.lotteryProduct.findUnique({ where: { id: input.productId } });
     if (!product) throw new NotFoundException("Lottery Product not found");
     const ids = new Set<string>();
     for (const reference of input.enabledBetTypes) {
@@ -273,7 +307,7 @@ export class LotteryConfigurationService {
       }
       ids.add(reference.betTypeId);
     }
-    const version = await this.prisma.$transaction(async (tx) => {
+    const version = await this.transaction(async (tx) => {
       const created = await tx.lotteryProductVersion.create({
         data: {
           id: randomUUID(),
@@ -318,7 +352,8 @@ export class LotteryConfigurationService {
     reauthEvidenceId: string;
     correlationId: string;
   }): Promise<LotteryConfigurationCommandResult> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.transaction(async (tx) => {
+      await this.lockVersion(tx, input.kind, input.id);
       const current = input.kind === "PRODUCT"
         ? await tx.lotteryProductVersion.findUnique({ where: { id: input.id }, include: { enabledBetTypes: { include: { betTypeVersion: true } } } })
         : await tx.lotteryBetTypeVersion.findUnique({ where: { id: input.id } });
@@ -382,7 +417,8 @@ export class LotteryConfigurationService {
     if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
       throw new LotteryConfigurationRuleError("VALIDATION_ERROR", "expectedVersion must be a positive integer", { field: "expectedVersion" });
     }
-    return this.prisma.$transaction(async (tx) => {
+    return this.transaction(async (tx) => {
+      await this.lockVersion(tx, input.kind, input.id);
       const current = input.kind === "PRODUCT"
         ? await tx.lotteryProductVersion.findUnique({ where: { id: input.id } })
         : await tx.lotteryBetTypeVersion.findUnique({ where: { id: input.id } });
@@ -422,7 +458,7 @@ export class LotteryConfigurationService {
     reauthEvidenceId?: string;
     correlationId?: string;
   }): Promise<void> {
-    const db = input.tx ?? this.prisma;
+    const db = input.tx ?? this.db;
     await db.auditRecord.create({
       data: {
         id: randomUUID(),

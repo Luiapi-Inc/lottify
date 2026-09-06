@@ -29,6 +29,7 @@ describe.runIf(runIntegration)("Admin Lottery Configuration API", () => {
   let baseUrl: string;
   const adminIds: string[] = [];
   const betTypeIds: string[] = [];
+  const versionIds: string[] = [];
 
   beforeAll(async () => {
     resetEnvironmentForTests();
@@ -57,16 +58,27 @@ describe.runIf(runIntegration)("Admin Lottery Configuration API", () => {
   });
 
   afterAll(async () => {
-    await prisma.$executeRawUnsafe('ALTER TABLE "audit_records" DISABLE TRIGGER "audit_records_immutable"');
-    await prisma.auditRecord.deleteMany({ where: { actorAdminId: { in: adminIds } } });
-    await prisma.idempotencyRecord.deleteMany({ where: { scope: { startsWith: "admin:" } } });
-    await prisma.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
-    await prisma.adminAuthSession.deleteMany({ where: { adminUserId: { in: adminIds } } });
-    await prisma.adminReauthEvidence.deleteMany({ where: { adminUserId: { in: adminIds } } });
-    await prisma.adminUser.deleteMany({ where: { id: { in: adminIds } } });
-    await prisma.$executeRawUnsafe('ALTER TABLE "audit_records" ENABLE TRIGGER "audit_records_immutable"');
-    await app.close();
-    await prisma.$disconnect();
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('ALTER TABLE "audit_records" DISABLE TRIGGER "audit_records_immutable"');
+        await tx.auditRecord.deleteMany({ where: { actorAdminId: { in: adminIds } } });
+        await tx.idempotencyRecord.deleteMany({
+          where: { OR: adminIds.map((id) => ({ scope: { startsWith: `admin:${id}:lottery:` } })) },
+        });
+        await tx.lotteryBetTypeVersion.deleteMany({ where: { id: { in: versionIds } } });
+        await tx.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
+        await tx.adminAuthSession.deleteMany({ where: { adminUserId: { in: adminIds } } });
+        await tx.adminReauthEvidence.deleteMany({ where: { adminUserId: { in: adminIds } } });
+        await tx.adminUser.deleteMany({ where: { id: { in: adminIds } } });
+        await tx.$executeRawUnsafe('ALTER TABLE "audit_records" ENABLE TRIGGER "audit_records_immutable"');
+      });
+    } finally {
+      try {
+        await app?.close();
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
   });
 
   it("enforces Admin authentication and read capability", async () => {
@@ -109,6 +121,38 @@ describe.runIf(runIntegration)("Admin Lottery Configuration API", () => {
     const conflict = await createBetType(admin.accessToken, key, `${code}_CHANGED`);
     expect(conflict.response.status).toBe(409);
     expect(conflict.body).toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  });
+
+  it("creates a version with minor-unit amounts and replays it", async () => {
+    const admin = await createAdminSession("ADMIN");
+    const identity = await createBetType(admin.accessToken, randomUUID(), `AMOUNT_${randomUUID()}`);
+    expect(identity.response.status).toBe(201);
+    betTypeIds.push(identity.body.id);
+    const key = randomUUID();
+    const payload = { version: 1, canonicalNumberFormat: "00", validationPattern: "^[0-9]{2}$", defaultPayout: { amountMinor: 9000 }, minStakeMinor: "100", maxStakeMinor: "100000", limitPolicyRef: "limit-v1", restrictionPolicyRef: "restriction-v1", settlementRuleVersionRef: "settlement-v1", effectiveFrom: "2099-01-01T00:00:00.000Z" };
+    const send = () => fetch(`${baseUrl}/api/v1/admin/lottery/bet-types/${identity.body.id}/versions`, { method: "POST", headers: { Authorization: `Bearer ${admin.accessToken}`, "content-type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(payload) });
+    const first = await send();
+    expect(first.status).toBe(201);
+    const body = await first.json();
+    versionIds.push(body.id);
+    expect(await (await send()).json()).toEqual(body);
+  });
+
+  it("rolls back effects before result persistence and safely retries", async () => {
+    const token = await createAdminSession("ADMIN");
+    const actor = await adminAuth.authenticateAccess(token.accessToken);
+    const service = new LotteryConfigurationService(prisma);
+    const input = { scope: `admin:${actor.adminId}:lottery:failure`, key: randomUUID(), fingerprint: "same", responseCode: 201 };
+    const code = `ROLLBACK_${randomUUID()}`;
+    await expect(service.executeCommand(input, async () => {
+      await service.createBetType({ code, actor });
+      throw new Error("injected before durable result");
+    })).rejects.toThrow("injected");
+    expect(await prisma.lotteryBetType.count({ where: { code } })).toBe(0);
+    expect(await prisma.idempotencyRecord.count({ where: { scope: input.scope } })).toBe(0);
+    const result = await service.executeCommand(input, () => service.createBetType({ code, actor })) as { id: string };
+    betTypeIds.push(result.id);
+    expect(await service.executeCommand(input, () => { throw new Error("must not re-execute"); })).toEqual(result);
   });
 
   async function createAdminSession(role: AdminRole): Promise<{ accessToken: string }> {

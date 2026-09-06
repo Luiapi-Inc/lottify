@@ -44,39 +44,52 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
   });
 
   afterAll(async () => {
-    await prisma.$executeRawUnsafe(
-      'ALTER TABLE "lottery_product_versions" DISABLE TRIGGER "lottery_product_versions_published_immutable"',
-    );
-    await prisma.$executeRawUnsafe(
-      'ALTER TABLE "lottery_bet_type_versions" DISABLE TRIGGER "lottery_bet_type_versions_published_immutable"',
-    );
-    await prisma.$executeRawUnsafe(
-      'ALTER TABLE "audit_records" DISABLE TRIGGER "audit_records_immutable"',
-    );
-    await prisma.lotteryProductVersionBetType.deleteMany({
-      where: { productVersionId: { in: productVersionIds } },
-    });
-    await prisma.lotteryProductVersion.deleteMany({
-      where: { id: { in: productVersionIds } },
-    });
-    await prisma.lotteryBetTypeVersion.deleteMany({
-      where: { id: { in: betTypeVersionIds } },
-    });
-    await prisma.lotteryProduct.deleteMany({ where: { id: { in: productIds } } });
-    await prisma.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
-    await prisma.auditRecord.deleteMany({ where: { actorAdminId: adminId } });
-    await prisma.adminAuthSession.deleteMany({ where: { id: sessionId } });
-    await prisma.adminUser.deleteMany({ where: { id: adminId } });
-    await prisma.$executeRawUnsafe(
-      'ALTER TABLE "lottery_product_versions" ENABLE TRIGGER "lottery_product_versions_published_immutable"',
-    );
-    await prisma.$executeRawUnsafe(
-      'ALTER TABLE "lottery_bet_type_versions" ENABLE TRIGGER "lottery_bet_type_versions_published_immutable"',
-    );
-    await prisma.$executeRawUnsafe(
-      'ALTER TABLE "audit_records" ENABLE TRIGGER "audit_records_immutable"',
-    );
-    await prisma.$disconnect();
+    try {
+      // Transaction rollback restores trigger state if any cleanup statement fails.
+      await prisma.$transaction(async (tx) => {
+        // Shared cleanup lock order: audit, Bet Type versions, Product versions, links.
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "audit_records" DISABLE TRIGGER "audit_records_immutable"',
+        );
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "lottery_bet_type_versions" DISABLE TRIGGER "lottery_bet_type_versions_published_immutable"',
+        );
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "lottery_product_versions" DISABLE TRIGGER "lottery_product_versions_published_immutable"',
+        );
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "lottery_product_version_bet_types" DISABLE TRIGGER "lottery_product_version_links_immutable"',
+        );
+        await tx.lotteryProductVersionBetType.deleteMany({
+          where: { productVersionId: { in: productVersionIds } },
+        });
+        await tx.lotteryProductVersion.deleteMany({
+          where: { id: { in: productVersionIds } },
+        });
+        await tx.lotteryBetTypeVersion.deleteMany({
+          where: { id: { in: betTypeVersionIds } },
+        });
+        await tx.lotteryProduct.deleteMany({ where: { id: { in: productIds } } });
+        await tx.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
+        await tx.auditRecord.deleteMany({ where: { actorAdminId: adminId } });
+        await tx.adminAuthSession.deleteMany({ where: { id: sessionId } });
+        await tx.adminUser.deleteMany({ where: { id: adminId } });
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "audit_records" ENABLE TRIGGER "audit_records_immutable"',
+        );
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "lottery_bet_type_versions" ENABLE TRIGGER "lottery_bet_type_versions_published_immutable"',
+        );
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "lottery_product_versions" ENABLE TRIGGER "lottery_product_versions_published_immutable"',
+        );
+        await tx.$executeRawUnsafe(
+          'ALTER TABLE "lottery_product_version_bet_types" ENABLE TRIGGER "lottery_product_version_links_immutable"',
+        );
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   it("keeps Product and Bet Type published versions immutable and non-overlapping", async () => {
@@ -149,6 +162,9 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
         data: { reason: "must remain immutable" },
       }),
     ).rejects.toThrow("Published Lottery configuration versions are immutable");
+
+    await expect(prisma.lotteryProductVersionBetType.deleteMany({ where: { productVersionId } })).rejects.toThrow("Published Lottery configuration links are immutable");
+    await expect(prisma.lotteryProductVersionBetType.updateMany({ where: { productVersionId }, data: { betTypeVersionId } })).rejects.toThrow("Published Lottery configuration links are immutable");
 
     const overlappingVersionId = randomUUID();
     productVersionIds.push(overlappingVersionId);
@@ -257,13 +273,12 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
     });
     betTypeVersionIds.push(version.id);
 
-    const submitted = await configuration.submit({
-      kind: "BET_TYPE",
-      id: version.id,
-      expectedRevision: 1,
-      actor,
-    });
-    expect(submitted).toMatchObject({ state: "REVIEW", version: 1, revision: 2 });
+    const outcomes = await Promise.allSettled([1, 2].map(() => configuration.submit({
+      kind: "BET_TYPE", id: version.id, expectedRevision: 1, actor,
+    })));
+    expect(outcomes.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.find(result => result.status === "rejected")).toMatchObject({ reason: { code: "VERSION_CONFLICT" } });
+    expect(await prisma.lotteryBetTypeVersion.findUniqueOrThrow({ where: { id: version.id } })).toMatchObject({ state: "REVIEW", version: 1, revision: 2 });
     await expect(
       configuration.submit({ kind: "BET_TYPE", id: version.id, expectedRevision: 1, actor }),
     ).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
@@ -291,6 +306,32 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
       actor,
     });
     betTypeVersionIds.push(version.id);
+    const reviewBetType = await configuration.createBetType({
+      code: `READ_REVIEW_${adminId.slice(0, 8)}`,
+      actor,
+    });
+    betTypeIds.push(reviewBetType.id);
+    const reviewVersion = await configuration.createBetTypeVersion({
+      betTypeId: reviewBetType.id,
+      version: 1,
+      canonicalNumberFormat: "00",
+      validationPattern: "^\\d{2}$",
+      defaultPayout: { kind: "FIXED", amountMinor: 9000 },
+      minStakeMinor: 100n,
+      maxStakeMinor: 100000n,
+      limitPolicyRef: "limit-v1",
+      restrictionPolicyRef: "restriction-v1",
+      settlementRuleVersionRef: "settlement-v1",
+      effectiveFrom: new Date("2399-01-01T00:00:00.000Z"),
+      actor,
+    });
+    betTypeVersionIds.push(reviewVersion.id);
+    await configuration.submit({
+      kind: "BET_TYPE",
+      id: reviewVersion.id,
+      expectedRevision: 1,
+      actor,
+    });
 
     const detail = await configuration.getBetType(betType.id, "DRAFT");
     expect(detail).toMatchObject({
@@ -301,8 +342,35 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
       ],
     });
 
-    const page = await configuration.listBetTypes({ limit: 1, state: "DRAFT" });
-    expect(page.items).toHaveLength(1);
-    expect(page.nextCursor).toBeTruthy();
+    expect(await configuration.getBetType(reviewBetType.id, "DRAFT")).toMatchObject({
+      id: reviewBetType.id,
+      versions: [],
+    });
+    expect(await configuration.getBetType(reviewBetType.id, "REVIEW")).toMatchObject({
+      versions: [expect.objectContaining({ id: reviewVersion.id, state: "REVIEW" })],
+    });
+
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    let pageCount = 0;
+    do {
+      const page = await configuration.listBetTypes({ limit: 1, state: "DRAFT", cursor });
+      expect(page.items).toHaveLength(1);
+      const item = page.items[0] as { id: string; versions: { id: string; state: string }[] };
+      expect(seen.has(item.id)).toBe(false);
+      if (cursor) expect(item.id > cursor).toBe(true);
+      seen.add(item.id);
+      expect(item.versions.every((entry) => entry.state === "DRAFT")).toBe(true);
+      if (item.id === betType.id) {
+        expect(item.versions).toEqual([expect.objectContaining({ id: version.id, state: "DRAFT" })]);
+      }
+      if (item.id === reviewBetType.id) expect(item.versions).toEqual([]);
+      if (page.nextCursor !== null) expect(page.nextCursor).toBe(item.id);
+      cursor = page.nextCursor ?? undefined;
+      pageCount += 1;
+    } while (cursor);
+    expect(pageCount).toBeGreaterThanOrEqual(2);
+    expect(seen.has(betType.id)).toBe(true);
+    expect(seen.has(reviewBetType.id)).toBe(true);
   });
 });

@@ -327,21 +327,12 @@ export class AdminLotteryConfigurationController {
     execute: () => Promise<unknown>,
   ): Promise<unknown> {
     if (!key?.trim()) throw apiError(request, HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Idempotency-Key header is required", { header: "Idempotency-Key" });
-    const fingerprint = createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex");
-    const claim = await this.idempotency.claim({ scope, key: key.trim(), fingerprint, expiresAt: IDEMPOTENCY_CONTRACT_EXPIRY });
-    if (claim.kind === "existing") {
-      if (claim.fingerprint !== fingerprint) throw apiError(request, HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different payload", {});
-      if (claim.status === "COMPLETED" && claim.responseBody !== null) return claim.responseBody;
-      throw apiError(request, HttpStatus.CONFLICT, "IDEMPOTENCY_IN_PROGRESS", "The idempotent command has not completed", { status: claim.status });
-    }
+    const fingerprint = createHash("sha256").update(canonicalJson(payload), "utf8").digest("hex");
     try {
-      const result = await execute();
-      await this.idempotency.complete(claim.recordId, responseCode, JSON.parse(JSON.stringify(result)) as Prisma.InputJsonValue);
-      return result;
+      return await this.configuration.executeCommand({ scope, key: key.trim(), fingerprint, responseCode }, execute);
     } catch (error) {
-      await this.idempotency.fail(claim.recordId);
       if (error instanceof LotteryConfigurationRuleError) {
-        const status = error.code === "VERSION_CONFLICT" || error.code.endsWith("CONFLICT") ? HttpStatus.CONFLICT : error.code === "SELF_APPROVAL_FORBIDDEN" ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST;
+        const status = error.code === "IDEMPOTENCY_IN_PROGRESS" || error.code === "VERSION_CONFLICT" || error.code.endsWith("CONFLICT") ? HttpStatus.CONFLICT : error.code === "SELF_APPROVAL_FORBIDDEN" ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST;
         throw apiError(request, status, error.code, error.message, error.details);
       }
       throw error;
@@ -431,4 +422,14 @@ function parseProductVersion(body: CreateProductVersionBody, request: AdminAuthe
 
 function apiError(request: AdminAuthenticatedRequest, status: number, code: string, message: string, details: Record<string, unknown>): HttpException {
   return new HttpException({ code, message, details, correlationId: currentCorrelationId() ?? "unknown" }, status);
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => {
+    if (typeof item === "bigint") return item.toString();
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      return Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]]));
+    }
+    return item;
+  });
 }
