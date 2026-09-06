@@ -10,8 +10,11 @@ import { NotificationModule } from "./notification/notification.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { PromotionModule } from "./promotion/promotion.module";
 import { ReportingModule } from "./reporting/reporting.module";
+import { LedgerWalletReconciliationService } from "./reporting/ledger-wallet-reconciliation.service";
+import { LEDGER_WALLET_PROJECTION_PORT } from "./reporting/ledger-wallet-projection.port";
 import { ResultSettlementModule } from "./result-settlement/result-settlement.module";
 import { WalletLedgerModule } from "./wallet-ledger/wallet-ledger.module";
+import { LedgerWalletProjectionAdapter } from "../platform/integration/ledger-wallet-projection.adapter";
 
 @Module({
   imports: [
@@ -29,6 +32,14 @@ import { WalletLedgerModule } from "./wallet-ledger/wallet-ledger.module";
     AuditModule,
     ReportingModule,
   ],
-  exports: [IdentityAccessModule, WalletLedgerModule],
+  providers: [
+    LedgerWalletProjectionAdapter,
+    {
+      provide: LEDGER_WALLET_PROJECTION_PORT,
+      useExisting: LedgerWalletProjectionAdapter,
+    },
+    LedgerWalletReconciliationService,
+  ],
+  exports: [IdentityAccessModule, WalletLedgerModule, LedgerWalletReconciliationService],
 })
 export class ContextsModule {}

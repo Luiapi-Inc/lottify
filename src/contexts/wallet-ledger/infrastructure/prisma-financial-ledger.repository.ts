@@ -650,7 +650,13 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
   async getWalletProjection(memberId: string, currency: "THB"): Promise<WalletProjection> {
     return this.prisma.$transaction(
       async (tx) => {
-        const dataAsOf = new Date();
+        const clocks = await tx.$queryRaw<Array<{ dataAsOf: Date }>>(
+          Prisma.sql`SELECT transaction_timestamp() AS "dataAsOf"`,
+        );
+        const dataAsOf = clocks[0]?.dataAsOf;
+        if (!dataAsOf) {
+          throw new Error("Wallet projection dataAsOf is unavailable");
+        }
         const accounts = await tx.ledgerAccount.findMany({
           where: { kind: "MEMBER", memberId, currency },
           select: { id: true, bucket: true },

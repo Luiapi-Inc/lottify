@@ -343,3 +343,51 @@ model ReservationAllocation {
   @@index([accountId, reservationId])
   @@map("reservation_allocations")
 }
+
+model ReconciliationRun {
+  id                String                      @id @default(uuid()) @db.Uuid
+  pair              String
+  checkpointKey     String                      @map("checkpoint_key")
+  fingerprint       String
+  memberId          String                      @map("member_id") @db.Uuid
+  currency          String                      @default("THB")
+  asOf              DateTime                    @map("as_of")
+  sourceRange       Json                        @map("source_range")
+  sourceCheckpoint  Json                        @map("source_checkpoint")
+  inspectedCounts   Json                        @map("inspected_counts")
+  totals            Json
+  result            String
+  resultSummary     Json                        @map("result_summary")
+  createdAt         DateTime                    @default(now()) @map("created_at")
+  discrepancies     ReconciliationDiscrepancy[]
+
+  @@unique([pair, checkpointKey])
+  @@index([memberId, currency, asOf])
+  @@index([pair, asOf])
+  @@map("reconciliation_runs")
+}
+
+model ReconciliationDiscrepancy {
+  id                    String            @id @default(uuid()) @db.Uuid
+  reconciliationRunId   String            @map("reconciliation_run_id") @db.Uuid
+  identityKey           String            @map("identity_key")
+  status                String
+  severity              String
+  expectedFacts         Json              @map("expected_facts")
+  observedFacts         Json              @map("observed_facts")
+  amountDifferenceMinor BigInt?           @map("amount_difference_minor")
+  sourceReferences      Json              @map("source_references")
+  detectedAt            DateTime          @map("detected_at")
+  ownerReference        String?           @map("owner_reference")
+  resolutionTrail       Json              @default("[]") @map("resolution_trail")
+  resolutionEvidence    Json?             @map("resolution_evidence")
+  resolvedAt            DateTime?         @map("resolved_at")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  reconciliationRun     ReconciliationRun @relation(fields: [reconciliationRunId], references: [id], onDelete: Restrict)
+
+  @@unique([reconciliationRunId, identityKey])
+  @@index([status, detectedAt])
+  @@index([severity, detectedAt])
+  @@map("reconciliation_discrepancies")
+}
