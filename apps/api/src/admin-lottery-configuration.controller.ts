@@ -5,6 +5,7 @@ import {
   Headers,
   HttpException,
   HttpStatus,
+  Inject,
   Param,
   Post,
   Query,
@@ -113,8 +114,11 @@ class ExpectedVersionBody {
 @UseGuards(AdminAuthGuard, AdminCapabilityGuard)
 export class AdminLotteryConfigurationController {
   constructor(
+    @Inject(LotteryConfigurationService)
     private readonly configuration: LotteryConfigurationService,
+    @Inject(AdminAuthService)
     private readonly adminAuth: AdminAuthService,
+    @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
   ) {}
 
