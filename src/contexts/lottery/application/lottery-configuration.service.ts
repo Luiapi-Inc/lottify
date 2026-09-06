@@ -35,9 +35,137 @@ export interface LotteryConfigurationCommandResult {
   effectiveUntil: Date | null;
 }
 
+export interface LotteryConfigurationListResult<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
 @Injectable()
 export class LotteryConfigurationService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async listProducts(input: {
+    limit?: number;
+    cursor?: string;
+    state?: LotteryConfigurationState;
+  } = {}): Promise<LotteryConfigurationListResult<unknown>> {
+    const limit = boundedLimit(input.limit);
+    const rows = await this.prisma.lotteryProduct.findMany({
+      orderBy: { id: "asc" },
+      take: limit + 1,
+      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      include: {
+        versions: {
+          where: input.state ? { state: input.state } : undefined,
+          orderBy: { version: "desc" },
+          select: { id: true, version: true, revision: true, state: true, effectiveFrom: true, effectiveUntil: true },
+        },
+      },
+    });
+    const page = rows.slice(0, limit);
+    return {
+      items: page.map((row) => ({
+        id: row.id,
+        versions: row.versions.map(toVersionSummary),
+      })),
+      nextCursor: rows.length > limit ? page.at(-1)?.id ?? null : null,
+    };
+  }
+
+  async getProduct(id: string, state?: LotteryConfigurationState): Promise<unknown> {
+    const row = await this.prisma.lotteryProduct.findUnique({
+      where: { id },
+      include: {
+        versions: {
+          where: state ? { state } : undefined,
+          orderBy: { version: "desc" },
+          include: {
+            enabledBetTypes: {
+              include: {
+                betType: { select: { id: true, code: true } },
+                betTypeVersion: { select: { id: true, version: true, state: true, revision: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!row) throw new NotFoundException("Lottery Product not found");
+    return {
+      id: row.id,
+      versions: row.versions.map((version) => ({
+        ...toVersionSummary(version),
+        timezone: version.timezone,
+        scheduleTemplateRef: version.scheduleTemplateRef,
+        resultSchemaVersionRef: version.resultSchemaVersionRef,
+        settlementRuleVersionRef: version.settlementRuleVersionRef,
+        defaultPayoutPolicyRef: version.defaultPayoutPolicyRef,
+        defaultLimitPolicyRef: version.defaultLimitPolicyRef,
+        defaultRestrictionPolicyRef: version.defaultRestrictionPolicyRef,
+        enabledBetTypes: version.enabledBetTypes.map((link) => ({
+          betTypeId: link.betType.id,
+          betTypeCode: link.betType.code,
+          betTypeVersionId: link.betTypeVersion.id,
+          betTypeVersion: link.betTypeVersion.version,
+          betTypeVersionState: link.betTypeVersion.state,
+          betTypeVersionRevision: link.betTypeVersion.revision,
+        })),
+      })),
+    };
+  }
+
+  async listBetTypes(input: {
+    limit?: number;
+    cursor?: string;
+    state?: LotteryConfigurationState;
+  } = {}): Promise<LotteryConfigurationListResult<unknown>> {
+    const limit = boundedLimit(input.limit);
+    const rows = await this.prisma.lotteryBetType.findMany({
+      orderBy: { id: "asc" },
+      take: limit + 1,
+      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      include: {
+        versions: {
+          where: input.state ? { state: input.state } : undefined,
+          orderBy: { version: "desc" },
+          select: { id: true, version: true, revision: true, state: true, effectiveFrom: true, effectiveUntil: true },
+        },
+      },
+    });
+    const page = rows.slice(0, limit);
+    return {
+      items: page.map((row) => ({ id: row.id, code: row.code, versions: row.versions.map(toVersionSummary) })),
+      nextCursor: rows.length > limit ? page.at(-1)?.id ?? null : null,
+    };
+  }
+
+  async getBetType(id: string, state?: LotteryConfigurationState): Promise<unknown> {
+    const row = await this.prisma.lotteryBetType.findUnique({
+      where: { id },
+      include: {
+        versions: {
+          where: state ? { state } : undefined,
+          orderBy: { version: "desc" },
+        },
+      },
+    });
+    if (!row) throw new NotFoundException("Lottery Bet Type not found");
+    return {
+      id: row.id,
+      code: row.code,
+      versions: row.versions.map((version) => ({
+        ...toVersionSummary(version),
+        canonicalNumberFormat: version.canonicalNumberFormat,
+        validationPattern: version.validationPattern,
+        defaultPayout: version.defaultPayout,
+        minStakeMinor: version.minStakeMinor.toString(),
+        maxStakeMinor: version.maxStakeMinor.toString(),
+        limitPolicyRef: version.limitPolicyRef,
+        restrictionPolicyRef: version.restrictionPolicyRef,
+        settlementRuleVersionRef: version.settlementRuleVersionRef,
+      })),
+    };
+  }
 
   async createProduct(input: { actor: LotteryConfigurationActor }): Promise<{ id: string }> {
     const product = await this.prisma.lotteryProduct.create({ data: { id: randomUUID() } });
@@ -332,6 +460,32 @@ function validateVersionInput(input: {
       throw new LotteryConfigurationRuleError("VALIDATION_ERROR", "effectiveUntil must be after effectiveFrom", { field: "effectiveUntil" });
     }
   }
+}
+
+function boundedLimit(value: number | undefined): number {
+  if (value === undefined) return 50;
+  if (!Number.isInteger(value) || value < 1 || value > 100) {
+    throw new LotteryConfigurationRuleError("VALIDATION_ERROR", "limit must be an integer between 1 and 100", { field: "limit" });
+  }
+  return value;
+}
+
+function toVersionSummary(row: {
+  id: string;
+  version: number;
+  revision: number;
+  state: string;
+  effectiveFrom: Date;
+  effectiveUntil: Date | null;
+}) {
+  return {
+    id: row.id,
+    version: row.version,
+    revision: row.revision,
+    state: row.state,
+    effectiveFrom: row.effectiveFrom,
+    effectiveUntil: row.effectiveUntil,
+  };
 }
 
 function toResult(kind: LotteryConfigurationKind, row: { id: string; state: string; version: number; revision: number; effectiveFrom: Date; effectiveUntil: Date | null }): LotteryConfigurationCommandResult {

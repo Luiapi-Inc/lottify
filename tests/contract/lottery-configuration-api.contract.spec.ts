@@ -72,4 +72,35 @@ describe("Lottery configuration API contract", () => {
       ExpectedVersionBody: expect.any(Object),
     });
   });
+
+  it("publishes authenticated read paths with cursor and state filters", () => {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("test").setVersion("1").addBearerAuth().build(),
+    );
+    for (const path of [
+      "/api/v1/admin/lottery/products",
+      "/api/v1/admin/lottery/products/{id}",
+      "/api/v1/admin/lottery/bet-types",
+      "/api/v1/admin/lottery/bet-types/{id}",
+    ]) {
+      const operation = document.paths[path]?.get;
+      expect(operation, path).toBeDefined();
+      expect(operation?.security).toEqual([{ bearer: [] }]);
+      expect(operation?.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "state", in: "query", required: false }),
+        ]),
+      );
+    }
+
+    for (const path of ["/api/v1/admin/lottery/products", "/api/v1/admin/lottery/bet-types"]) {
+      expect(document.paths[path]?.get?.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "limit", in: "query", required: false }),
+          expect.objectContaining({ name: "cursor", in: "query", required: false }),
+        ]),
+      );
+    }
+  });
 });

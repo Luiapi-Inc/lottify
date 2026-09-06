@@ -1,21 +1,25 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpException,
   HttpStatus,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiProperty, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiProperty, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { AdminAuthService } from "../../../src/contexts/identity-access/application/admin-auth.service";
 import {
   LotteryConfigurationRuleError,
+  LOTTERY_CONFIGURATION_STATES,
   LotteryConfigurationService,
+  type LotteryConfigurationState,
 } from "../../../src/contexts/lottery/application/lottery-configuration.service";
 import { IdempotencyService } from "../../../src/platform/idempotency/idempotency.service";
 import {
@@ -113,6 +117,50 @@ export class AdminLotteryConfigurationController {
     private readonly adminAuth: AdminAuthService,
     private readonly idempotency: IdempotencyService,
   ) {}
+
+  @Get("products")
+  @RequireAdminCapabilities("lottery-configuration.read")
+  @ApiOperation({ summary: "List Lottery Products and configuration version summaries" })
+  @ApiQuery({ name: "limit", required: false, type: Number, minimum: 1, maximum: 100 })
+  @ApiQuery({ name: "cursor", required: false, type: String })
+  @ApiQuery({ name: "state", required: false, enum: [...LOTTERY_CONFIGURATION_STATES] })
+  async listProducts(
+    @Query("limit") limit: string | undefined,
+    @Query("cursor") cursor: string | undefined,
+    @Query("state") state: string | undefined,
+  ): Promise<unknown> {
+    return this.configuration.listProducts({ limit: parseLimit(limit), cursor: cursor?.trim() || undefined, state: parseState(state) });
+  }
+
+  @Get("products/:id")
+  @RequireAdminCapabilities("lottery-configuration.read")
+  @ApiOperation({ summary: "Get a Lottery Product and its configuration versions" })
+  @ApiQuery({ name: "state", required: false, enum: [...LOTTERY_CONFIGURATION_STATES] })
+  async getProduct(@Param("id") id: string, @Query("state") state: string | undefined): Promise<unknown> {
+    return this.configuration.getProduct(id, parseState(state));
+  }
+
+  @Get("bet-types")
+  @RequireAdminCapabilities("lottery-configuration.read")
+  @ApiOperation({ summary: "List Lottery Bet Types and configuration version summaries" })
+  @ApiQuery({ name: "limit", required: false, type: Number, minimum: 1, maximum: 100 })
+  @ApiQuery({ name: "cursor", required: false, type: String })
+  @ApiQuery({ name: "state", required: false, enum: [...LOTTERY_CONFIGURATION_STATES] })
+  async listBetTypes(
+    @Query("limit") limit: string | undefined,
+    @Query("cursor") cursor: string | undefined,
+    @Query("state") state: string | undefined,
+  ): Promise<unknown> {
+    return this.configuration.listBetTypes({ limit: parseLimit(limit), cursor: cursor?.trim() || undefined, state: parseState(state) });
+  }
+
+  @Get("bet-types/:id")
+  @RequireAdminCapabilities("lottery-configuration.read")
+  @ApiOperation({ summary: "Get a Lottery Bet Type and its configuration versions" })
+  @ApiQuery({ name: "state", required: false, enum: [...LOTTERY_CONFIGURATION_STATES] })
+  async getBetType(@Param("id") id: string, @Query("state") state: string | undefined): Promise<unknown> {
+    return this.configuration.getBetType(id, parseState(state));
+  }
 
   @Post("products")
   @RequireAdminCapabilities("lottery-configuration.create")
@@ -310,6 +358,21 @@ function requireString(value: unknown, field: string, request: AdminAuthenticate
 function parseExpectedVersion(body: ExpectedVersionBody, request: AdminAuthenticatedRequest): number {
   if (!body || !Number.isInteger(body.expectedVersion) || body.expectedVersion < 1) throw apiError(request, HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "expectedVersion must be a positive integer", { field: "expectedVersion" });
   return body.expectedVersion;
+}
+
+function parseLimit(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+    throw new HttpException({ code: "VALIDATION_ERROR", message: "limit must be an integer between 1 and 100", details: { field: "limit" }, correlationId: currentCorrelationId() ?? "unknown" }, HttpStatus.BAD_REQUEST);
+  }
+  return parsed;
+}
+
+function parseState(value: string | undefined): LotteryConfigurationState | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  if ((LOTTERY_CONFIGURATION_STATES as readonly string[]).includes(value)) return value as LotteryConfigurationState;
+  throw new HttpException({ code: "VALIDATION_ERROR", message: "state must be DRAFT, REVIEW, or PUBLISHED", details: { field: "state" }, correlationId: currentCorrelationId() ?? "unknown" }, HttpStatus.BAD_REQUEST);
 }
 
 function parseInstant(value: unknown, field: string, request: AdminAuthenticatedRequest): Date {

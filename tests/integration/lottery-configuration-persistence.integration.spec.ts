@@ -268,4 +268,41 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
       configuration.submit({ kind: "BET_TYPE", id: version.id, expectedRevision: 1, actor }),
     ).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
   });
+
+  it("reads versioned Bet Type resources with state filtering and cursor pagination", async () => {
+    const actor = { adminId, sessionId, role: "ADMIN" as const };
+    const betType = await configuration.createBetType({
+      code: `READ_${adminId.slice(0, 8)}`,
+      actor,
+    });
+    betTypeIds.push(betType.id);
+    const version = await configuration.createBetTypeVersion({
+      betTypeId: betType.id,
+      version: 1,
+      canonicalNumberFormat: "00",
+      validationPattern: "^\\d{2}$",
+      defaultPayout: { kind: "FIXED", amountMinor: 9000 },
+      minStakeMinor: 100n,
+      maxStakeMinor: 100000n,
+      limitPolicyRef: "limit-v1",
+      restrictionPolicyRef: "restriction-v1",
+      settlementRuleVersionRef: "settlement-v1",
+      effectiveFrom: new Date("2399-01-01T00:00:00.000Z"),
+      actor,
+    });
+    betTypeVersionIds.push(version.id);
+
+    const detail = await configuration.getBetType(betType.id, "DRAFT");
+    expect(detail).toMatchObject({
+      id: betType.id,
+      code: betType.code,
+      versions: [
+        expect.objectContaining({ id: version.id, state: "DRAFT", minStakeMinor: "100" }),
+      ],
+    });
+
+    const page = await configuration.listBetTypes({ limit: 1, state: "DRAFT" });
+    expect(page.items).toHaveLength(1);
+    expect(page.nextCursor).toBeTruthy();
+  });
 });
