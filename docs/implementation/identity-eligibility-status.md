@@ -13,6 +13,7 @@ Source of truth: Wayfinder Tickets 01, 02, 06, 10, 11, 16, and 19. This record d
 - Eligibility policy resolution follows the locked deny-first layer order: hard restriction/self-exclusion, compliance, risk, capability/business policy, then allow. Every layer is required as an input, and a lower-priority layer cannot replace an earlier non-allow decision.
 - Withdrawal eligibility has a dedicated policy resolver for the locked rule set: amount limit, daily aggregate, frequency, KYC tier, payout-destination verification, risk, capability restriction, and approval threshold. Every rule is required as evaluated input, the strictest result wins (`DENY` over `REVIEW_REQUIRED` over `ALLOW`), and the resulting `WITHDRAW` decision preserves policy version, reasons, evidence, evaluation time, and freshness without inventing concrete threshold values.
 - Verification freshness is modeled independently for KYC, phone, device, and payout-destination verification with `verifiedAt`, source/evidence provenance, optional expiry, and an optional reverification-policy reference; explicit expiry is evaluated independently per verification type.
+- Duplicate-account policy now evaluates the locked phone, KYC identity, payout-destination, device, IP/network, and behavior signal set into `ALLOW`, `REVIEW_REQUIRED`, or `BLOCK` without inventing numeric weights or thresholds. Device and IP/network evidence is explicitly non-authoritative for hard blocking, while stronger policy-evaluated signals may block; manual resolution evidence requires both a reason and an Audit reference.
 - No new persistence schema or REST path has been introduced for Device, OTP, or onboarding behavior whose detailed contract is not locked.
 
 ## Evidence confirmed on 2026-09-04
@@ -22,6 +23,12 @@ GitHub Actions `ci` run `33829850497` on commit `932e47c879715c0f16c1a1b712b8faa
 - `verify`: PASS — Prisma generation/migration, OpenAPI generation, typecheck, tests, production dependency audit, and build all passed.
 - `container-smoke`: PASS — API, worker, Member, and Admin OCI images built and all runtime smoke checks passed.
 - This CI result confirms the scoped session-management checkpoint only; it does not establish Identity / Eligibility milestone acceptance or Production GO.
+
+## Local evidence on 2026-09-06
+
+- Duplicate-account policy focused unit tests: 5 passed.
+- Full local Vitest suite: 144 passed; 65 integration tests skipped because their integration environment flags/database were not enabled.
+- TypeScript typecheck passed after using the generated OpenAPI/client artifacts for the same source HEAD. No Identity / Eligibility milestone acceptance or Production GO is claimed from this local evidence.
 
 ## Remaining contract/detail gaps for affected slices
 
