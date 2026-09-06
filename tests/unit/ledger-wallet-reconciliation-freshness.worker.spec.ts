@@ -80,4 +80,79 @@ describe("Ledger-Wallet reconciliation freshness worker", () => {
     });
     expect(emitted[2]).toMatchObject({ severity: "CRITICAL", occurredAt: now });
   });
+
+  it("walks every target page and keeps checkpoint identity stable across a retry", async () => {
+    const now = new Date("2026-09-06T10:00:29.000Z");
+    const memberIds = [
+      "11111111-1111-1111-1111-111111111111",
+      "22222222-2222-2222-2222-222222222222",
+      "33333333-3333-3333-3333-333333333333",
+    ] as const;
+    const listReconciliationTargets = vi
+      .fn()
+      .mockResolvedValueOnce({
+        targets: [{ memberId: memberIds[0], currency: "THB", sourceVersionAt: now }],
+        nextCursor: memberIds[0],
+      })
+      .mockResolvedValueOnce({
+        targets: [
+          { memberId: memberIds[1], currency: "THB", sourceVersionAt: now },
+          { memberId: memberIds[2], currency: "THB", sourceVersionAt: now },
+        ],
+        nextCursor: null,
+      })
+      .mockResolvedValueOnce({
+        targets: [{ memberId: memberIds[0], currency: "THB", sourceVersionAt: now }],
+        nextCursor: memberIds[0],
+      })
+      .mockResolvedValueOnce({
+        targets: [
+          { memberId: memberIds[1], currency: "THB", sourceVersionAt: now },
+          { memberId: memberIds[2], currency: "THB", sourceVersionAt: now },
+        ],
+        nextCursor: null,
+      });
+    const run = vi.fn().mockResolvedValue({
+      id: "run-id",
+      checkpointKey: "unused",
+      memberId: memberIds[0],
+      currency: "THB",
+      asOf: now,
+      result: "MATCHED",
+      discrepancyCount: 0,
+    });
+    const getOperationalAlertSummary = vi.fn().mockResolvedValue({
+      staleMonetary: null,
+      critical: null,
+    });
+    const alerts: OperationalAlertSink = { emit: vi.fn() };
+    const worker = new LedgerWalletReconciliationFreshnessWorker(
+      { listReconciliationTargets } as unknown as FinancialLedgerService,
+      { run, getOperationalAlertSummary } as unknown as LedgerWalletReconciliationService,
+      alerts,
+    );
+
+    await worker.runCycle(now);
+    await worker.runCycle(now);
+
+    expect(listReconciliationTargets).toHaveBeenNthCalledWith(1, {
+      currency: "THB",
+      afterMemberId: undefined,
+      limit: 100,
+    });
+    expect(listReconciliationTargets).toHaveBeenNthCalledWith(2, {
+      currency: "THB",
+      afterMemberId: memberIds[0],
+      limit: 100,
+    });
+    expect(listReconciliationTargets).toHaveBeenCalledTimes(4);
+    expect(run).toHaveBeenCalledTimes(6);
+
+    const firstRunKeys = run.mock.calls.slice(0, 3).map(([input]) => input.checkpointKey);
+    const retryRunKeys = run.mock.calls.slice(3).map(([input]) => input.checkpointKey);
+    expect(retryRunKeys).toEqual(firstRunKeys);
+    expect(new Set(firstRunKeys)).toEqual(
+      new Set(memberIds.map((memberId) => ledgerWalletFreshnessCheckpointKey(now, memberId, "THB"))),
+    );
+  });
 });
