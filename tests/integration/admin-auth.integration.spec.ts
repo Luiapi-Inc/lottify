@@ -101,6 +101,10 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
         "accounting-period.approve",
         "accounting-period.cancel",
         "accounting-period.close",
+        "lottery-configuration.read",
+        "lottery-configuration.create",
+        "lottery-configuration.submit",
+        "lottery-configuration.approve",
       ],
     });
 
@@ -169,7 +173,10 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
     const context = await auth.authenticateAccess(tokens.accessToken);
 
     expect(context.role).toBe("AUDITOR");
-    expect(context.capabilities).toEqual(["accounting-period.read"]);
+    expect(context.capabilities).toEqual([
+      "accounting-period.read",
+      "lottery-configuration.read",
+    ]);
   });
 
   async function createAdmin(

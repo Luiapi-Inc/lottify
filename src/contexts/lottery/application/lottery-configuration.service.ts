@@ -1,17 +1,17 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
-import type { AdminRole } from "../../identity-access/domain/admin-auth.repository";
 
 export const LOTTERY_CONFIGURATION_STATES = ["DRAFT", "REVIEW", "PUBLISHED"] as const;
 export type LotteryConfigurationState = (typeof LOTTERY_CONFIGURATION_STATES)[number];
 export type LotteryConfigurationKind = "PRODUCT" | "BET_TYPE";
+export type LotteryConfigurationAdminRole = "SUPER_ADMIN" | "ADMIN" | "AUDITOR";
 
 export interface LotteryConfigurationActor {
   adminId: string;
   sessionId: string;
-  role: AdminRole;
+  role: LotteryConfigurationAdminRole;
 }
 
 export class LotteryConfigurationRuleError extends Error {
