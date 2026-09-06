@@ -23,28 +23,30 @@ model AuthSession {
 }
 
 model AdminUser {
-  id                  String                @id @default(uuid()) @db.Uuid
-  email               String                @unique
-  name                String
-  passwordHash        String                @map("password_hash")
-  role                String
-  status              String                @default("ACTIVE")
-  mfaEnabled          Boolean               @default(false) @map("mfa_enabled")
-  mfaSecretEncrypted  String?               @map("mfa_secret_encrypted")
-  failedLoginAttempts Int                   @default(0) @map("failed_login_attempts")
-  lockedUntil         DateTime?             @map("locked_until")
-  lastLoginAt         DateTime?             @map("last_login_at")
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
-  sessions            AdminAuthSession[]
-  reauthEvidence      AdminReauthEvidence[]
-  accountingPeriodsCreated AccountingPeriod[] @relation("AccountingPeriodCreatedBy")
-  approvalRequests    AdminApprovalEvidence[] @relation("AdminApprovalRequester")
-  approvalDecisions   AdminApprovalEvidence[] @relation("AdminApprovalApprover")
-  auditRecords        AuditRecord[]
-  accountingPeriodCancellationRequests AccountingPeriod[] @relation("AccountingPeriodCancellationRequestedBy")
-  accountingPeriodCloseRequests AccountingPeriod[] @relation("AccountingPeriodCloseRequestedBy")
-  accountingPeriodCloseEvidence AccountingPeriodCloseEvidence[] @relation("AccountingPeriodClosedBy")
+  id                                   String                          @id @default(uuid()) @db.Uuid
+  email                                String                          @unique
+  name                                 String
+  passwordHash                         String                          @map("password_hash")
+  role                                 String
+  status                               String                          @default("ACTIVE")
+  mfaEnabled                           Boolean                         @default(false) @map("mfa_enabled")
+  mfaSecretEncrypted                   String?                         @map("mfa_secret_encrypted")
+  failedLoginAttempts                  Int                             @default(0) @map("failed_login_attempts")
+  lockedUntil                          DateTime?                       @map("locked_until")
+  lastLoginAt                          DateTime?                       @map("last_login_at")
+  createdAt                            DateTime                        @default(now()) @map("created_at")
+  updatedAt                            DateTime                        @updatedAt @map("updated_at")
+  sessions                             AdminAuthSession[]
+  reauthEvidence                       AdminReauthEvidence[]
+  accountingPeriodsCreated             AccountingPeriod[]              @relation("AccountingPeriodCreatedBy")
+  approvalRequests                     AdminApprovalEvidence[]         @relation("AdminApprovalRequester")
+  approvalDecisions                    AdminApprovalEvidence[]         @relation("AdminApprovalApprover")
+  auditRecords                         AuditRecord[]
+  accountingPeriodCancellationRequests AccountingPeriod[]              @relation("AccountingPeriodCancellationRequestedBy")
+  accountingPeriodCloseRequests        AccountingPeriod[]              @relation("AccountingPeriodCloseRequestedBy")
+  accountingPeriodCloseEvidence        AccountingPeriodCloseEvidence[] @relation("AccountingPeriodClosedBy")
+  lotteryProductVersionsCreated        LotteryProductVersion[]         @relation("LotteryProductVersionCreatedBy")
+  lotteryBetTypeVersionsCreated        LotteryBetTypeVersion[]         @relation("LotteryBetTypeVersionCreatedBy")
 
   @@index([status, role])
   @@map("admin_users")
@@ -74,17 +76,17 @@ model AdminAuthSession {
 }
 
 model AdminReauthEvidence {
-  id          String           @id @default(uuid()) @db.Uuid
-  adminUserId String           @map("admin_user_id") @db.Uuid
-  sessionId   String           @map("session_id") @db.Uuid
-  actionClass String           @map("action_class")
-  verifiedAt  DateTime         @map("verified_at")
-  expiresAt   DateTime         @map("expires_at")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  adminUser   AdminUser        @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-  session     AdminAuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  approvals   AdminApprovalEvidence[]
+  id           String                  @id @default(uuid()) @db.Uuid
+  adminUserId  String                  @map("admin_user_id") @db.Uuid
+  sessionId    String                  @map("session_id") @db.Uuid
+  actionClass  String                  @map("action_class")
+  verifiedAt   DateTime                @map("verified_at")
+  expiresAt    DateTime                @map("expires_at")
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
+  adminUser    AdminUser               @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  session      AdminAuthSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  approvals    AdminApprovalEvidence[]
   auditRecords AuditRecord[]
 
   @@index([sessionId, actionClass, expiresAt])
@@ -93,26 +95,26 @@ model AdminReauthEvidence {
 }
 
 model AdminApprovalEvidence {
-  id                String              @id @default(uuid()) @db.Uuid
-  action            String
-  resourceType      String              @map("resource_type")
-  resourceId        String              @map("resource_id") @db.Uuid
-  requesterAdminId  String              @map("requester_admin_id") @db.Uuid
-  approverAdminId   String              @map("approver_admin_id") @db.Uuid
-  requestedVersion  Int                 @map("requested_version")
-  payloadHash        String              @map("payload_hash")
-  reason             String
-  policyVersion      String              @map("policy_version")
-  reauthEvidenceId  String              @map("reauth_evidence_id") @db.Uuid
-  correlationId     String              @map("correlation_id")
-  approvedAt        DateTime            @map("approved_at")
-  createdAt         DateTime            @default(now()) @map("created_at")
-  requester         AdminUser           @relation("AdminApprovalRequester", fields: [requesterAdminId], references: [id], onDelete: Restrict)
-  approver          AdminUser           @relation("AdminApprovalApprover", fields: [approverAdminId], references: [id], onDelete: Restrict)
-  reauthEvidence    AdminReauthEvidence @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
-  auditRecords      AuditRecord[]
+  id                            String                         @id @default(uuid()) @db.Uuid
+  action                        String
+  resourceType                  String                         @map("resource_type")
+  resourceId                    String                         @map("resource_id") @db.Uuid
+  requesterAdminId              String                         @map("requester_admin_id") @db.Uuid
+  approverAdminId               String                         @map("approver_admin_id") @db.Uuid
+  requestedVersion              Int                            @map("requested_version")
+  payloadHash                   String                         @map("payload_hash")
+  reason                        String
+  policyVersion                 String                         @map("policy_version")
+  reauthEvidenceId              String                         @map("reauth_evidence_id") @db.Uuid
+  correlationId                 String                         @map("correlation_id")
+  approvedAt                    DateTime                       @map("approved_at")
+  createdAt                     DateTime                       @default(now()) @map("created_at")
+  requester                     AdminUser                      @relation("AdminApprovalRequester", fields: [requesterAdminId], references: [id], onDelete: Restrict)
+  approver                      AdminUser                      @relation("AdminApprovalApprover", fields: [approverAdminId], references: [id], onDelete: Restrict)
+  reauthEvidence                AdminReauthEvidence            @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
+  auditRecords                  AuditRecord[]
   accountingPeriodCloseEvidence AccountingPeriodCloseEvidence?
-  activatedAccountingPeriod AccountingPeriod? @relation("AccountingPeriodActivationApproval")
+  activatedAccountingPeriod     AccountingPeriod?              @relation("AccountingPeriodActivationApproval")
 
   @@unique([action, resourceId])
   @@index([requesterAdminId, createdAt])
@@ -122,24 +124,24 @@ model AdminApprovalEvidence {
 }
 
 model AuditRecord {
-  id               String                 @id @default(uuid()) @db.Uuid
-  actorAdminId     String                 @map("actor_admin_id") @db.Uuid
-  actorRole        String                 @map("actor_role")
-  sessionId        String                 @map("session_id") @db.Uuid
-  action           String
-  resourceType     String                 @map("resource_type")
-  resourceId       String                 @map("resource_id") @db.Uuid
-  payloadHash      String                 @map("payload_hash")
-  reason           String
-  reauthEvidenceId String?                @map("reauth_evidence_id") @db.Uuid
-  approvalId       String?                @map("approval_id") @db.Uuid
-  correlationId    String                 @map("correlation_id")
-  outcome          String
-  createdAt        DateTime               @default(now()) @map("created_at")
-  actor            AdminUser              @relation(fields: [actorAdminId], references: [id], onDelete: Restrict)
-  session          AdminAuthSession        @relation(fields: [sessionId], references: [id], onDelete: Restrict)
-  reauthEvidence   AdminReauthEvidence?    @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
-  approval         AdminApprovalEvidence? @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  id                            String                         @id @default(uuid()) @db.Uuid
+  actorAdminId                  String                         @map("actor_admin_id") @db.Uuid
+  actorRole                     String                         @map("actor_role")
+  sessionId                     String                         @map("session_id") @db.Uuid
+  action                        String
+  resourceType                  String                         @map("resource_type")
+  resourceId                    String                         @map("resource_id") @db.Uuid
+  payloadHash                   String                         @map("payload_hash")
+  reason                        String
+  reauthEvidenceId              String?                        @map("reauth_evidence_id") @db.Uuid
+  approvalId                    String?                        @map("approval_id") @db.Uuid
+  correlationId                 String                         @map("correlation_id")
+  outcome                       String
+  createdAt                     DateTime                       @default(now()) @map("created_at")
+  actor                         AdminUser                      @relation(fields: [actorAdminId], references: [id], onDelete: Restrict)
+  session                       AdminAuthSession               @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  reauthEvidence                AdminReauthEvidence?           @relation(fields: [reauthEvidenceId], references: [id], onDelete: Restrict)
+  approval                      AdminApprovalEvidence?         @relation(fields: [approvalId], references: [id], onDelete: Restrict)
   accountingPeriodCloseEvidence AccountingPeriodCloseEvidence?
 
   @@index([resourceType, resourceId, createdAt])
@@ -147,6 +149,97 @@ model AuditRecord {
   @@index([correlationId])
   @@index([approvalId])
   @@map("audit_records")
+}
+
+model LotteryProduct {
+  id        String                  @id @default(uuid()) @db.Uuid
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @updatedAt @map("updated_at")
+  versions  LotteryProductVersion[]
+
+  @@map("lottery_products")
+}
+
+model LotteryBetType {
+  id                  String                         @id @default(uuid()) @db.Uuid
+  code                String                         @unique
+  createdAt           DateTime                       @default(now()) @map("created_at")
+  updatedAt           DateTime                       @updatedAt @map("updated_at")
+  versions            LotteryBetTypeVersion[]
+  productVersionLinks LotteryProductVersionBetType[]
+
+  @@map("lottery_bet_types")
+}
+
+model LotteryBetTypeVersion {
+  id                       String                         @id @default(uuid()) @db.Uuid
+  betTypeId                String                         @map("bet_type_id") @db.Uuid
+  version                  Int                            @default(1)
+  state                    String
+  canonicalNumberFormat    String                         @map("canonical_number_format")
+  validationPattern        String                         @map("validation_pattern")
+  defaultPayout            Json                           @map("default_payout")
+  minStakeMinor            BigInt                         @map("min_stake_minor")
+  maxStakeMinor            BigInt                         @map("max_stake_minor")
+  limitPolicyRef           String                         @map("limit_policy_ref")
+  restrictionPolicyRef     String                         @map("restriction_policy_ref")
+  settlementRuleVersionRef String                         @map("settlement_rule_version_ref")
+  effectiveFrom            DateTime                       @map("effective_from")
+  effectiveUntil           DateTime?                      @map("effective_until")
+  reason                   String?
+  createdByAdminId         String?                        @map("created_by_admin_id") @db.Uuid
+  createdAt                DateTime                       @default(now()) @map("created_at")
+  updatedAt                DateTime                       @updatedAt @map("updated_at")
+  betType                  LotteryBetType                 @relation(fields: [betTypeId], references: [id], onDelete: Restrict)
+  createdByAdmin           AdminUser?                     @relation("LotteryBetTypeVersionCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  productVersionLinks      LotteryProductVersionBetType[]
+
+  @@unique([betTypeId, version])
+  @@index([state, effectiveFrom, effectiveUntil])
+  @@index([betTypeId, state, effectiveFrom])
+  @@map("lottery_bet_type_versions")
+}
+
+model LotteryProductVersion {
+  id                          String                         @id @default(uuid()) @db.Uuid
+  productId                   String                         @map("product_id") @db.Uuid
+  version                     Int                            @default(1)
+  state                       String
+  timezone                    String
+  scheduleTemplateRef         String                         @map("schedule_template_ref")
+  resultSchemaVersionRef      String                         @map("result_schema_version_ref")
+  settlementRuleVersionRef    String                         @map("settlement_rule_version_ref")
+  defaultPayoutPolicyRef      String                         @map("default_payout_policy_ref")
+  defaultLimitPolicyRef       String                         @map("default_limit_policy_ref")
+  defaultRestrictionPolicyRef String                         @map("default_restriction_policy_ref")
+  effectiveFrom               DateTime                       @map("effective_from")
+  effectiveUntil              DateTime?                      @map("effective_until")
+  reason                      String?
+  createdByAdminId            String?                        @map("created_by_admin_id") @db.Uuid
+  createdAt                   DateTime                       @default(now()) @map("created_at")
+  updatedAt                   DateTime                       @updatedAt @map("updated_at")
+  product                     LotteryProduct                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdByAdmin              AdminUser?                     @relation("LotteryProductVersionCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  enabledBetTypes             LotteryProductVersionBetType[]
+
+  @@unique([productId, version])
+  @@index([state, effectiveFrom, effectiveUntil])
+  @@index([productId, state, effectiveFrom])
+  @@map("lottery_product_versions")
+}
+
+model LotteryProductVersionBetType {
+  productVersionId String                @map("product_version_id") @db.Uuid
+  betTypeId        String                @map("bet_type_id") @db.Uuid
+  betTypeVersionId String                @map("bet_type_version_id") @db.Uuid
+  productVersion   LotteryProductVersion @relation(fields: [productVersionId], references: [id], onDelete: Restrict)
+  betType          LotteryBetType        @relation(fields: [betTypeId], references: [id], onDelete: Restrict)
+  betTypeVersion   LotteryBetTypeVersion @relation(fields: [betTypeVersionId], references: [id], onDelete: Restrict)
+
+  @@id([productVersionId, betTypeId])
+  @@unique([productVersionId, betTypeVersionId])
+  @@index([betTypeId, betTypeVersionId])
+  @@map("lottery_product_version_bet_types")
 }
 
 model IdempotencyRecord {
@@ -233,34 +326,34 @@ model FinancialTransaction {
 }
 
 model AccountingPeriod {
-  id                    String                 @id @default(uuid()) @db.Uuid
-  mode                  String
-  generationKind        String                 @map("generation_kind")
-  effectiveStart        DateTime               @map("effective_start")
-  effectiveEnd          DateTime               @map("effective_end")
-  state                 String
-  version               Int                    @default(1)
-  reason                String?
-  createdByAdminId      String?                @map("created_by_admin_id") @db.Uuid
-  activationApprovalId  String?                @unique @map("activation_approval_id") @db.Uuid
-  cancellationRequestedByAdminId String?       @map("cancellation_requested_by_admin_id") @db.Uuid
-  cancellationReason    String?                @map("cancellation_reason")
-  cancellationRequestedAt DateTime?            @map("cancellation_requested_at")
-  closeRequestedByAdminId String?              @map("close_requested_by_admin_id") @db.Uuid
-  closeReason            String?               @map("close_reason")
-  closeRequestedAt       DateTime?             @map("close_requested_at")
-  closeReconciliationReferences Json?          @map("close_reconciliation_references")
-  closeCheckpointReferences Json?              @map("close_checkpoint_references")
-  closeBlockingDiscrepancyReferences Json?     @map("close_blocking_discrepancy_references")
-  closeAcceptedExceptionReferences Json?       @map("close_accepted_exception_references")
-  createdAt             DateTime               @default(now()) @map("created_at")
-  updatedAt             DateTime               @updatedAt @map("updated_at")
-  financialTransactions FinancialTransaction[]
-  createdByAdmin        AdminUser?             @relation("AccountingPeriodCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
-  activationApproval    AdminApprovalEvidence? @relation("AccountingPeriodActivationApproval", fields: [activationApprovalId], references: [id], onDelete: Restrict)
-  cancellationRequestedBy AdminUser?           @relation("AccountingPeriodCancellationRequestedBy", fields: [cancellationRequestedByAdminId], references: [id], onDelete: Restrict)
-  closeRequestedBy      AdminUser?             @relation("AccountingPeriodCloseRequestedBy", fields: [closeRequestedByAdminId], references: [id], onDelete: Restrict)
-  closeEvidence         AccountingPeriodCloseEvidence?
+  id                                 String                         @id @default(uuid()) @db.Uuid
+  mode                               String
+  generationKind                     String                         @map("generation_kind")
+  effectiveStart                     DateTime                       @map("effective_start")
+  effectiveEnd                       DateTime                       @map("effective_end")
+  state                              String
+  version                            Int                            @default(1)
+  reason                             String?
+  createdByAdminId                   String?                        @map("created_by_admin_id") @db.Uuid
+  activationApprovalId               String?                        @unique @map("activation_approval_id") @db.Uuid
+  cancellationRequestedByAdminId     String?                        @map("cancellation_requested_by_admin_id") @db.Uuid
+  cancellationReason                 String?                        @map("cancellation_reason")
+  cancellationRequestedAt            DateTime?                      @map("cancellation_requested_at")
+  closeRequestedByAdminId            String?                        @map("close_requested_by_admin_id") @db.Uuid
+  closeReason                        String?                        @map("close_reason")
+  closeRequestedAt                   DateTime?                      @map("close_requested_at")
+  closeReconciliationReferences      Json?                          @map("close_reconciliation_references")
+  closeCheckpointReferences          Json?                          @map("close_checkpoint_references")
+  closeBlockingDiscrepancyReferences Json?                          @map("close_blocking_discrepancy_references")
+  closeAcceptedExceptionReferences   Json?                          @map("close_accepted_exception_references")
+  createdAt                          DateTime                       @default(now()) @map("created_at")
+  updatedAt                          DateTime                       @updatedAt @map("updated_at")
+  financialTransactions              FinancialTransaction[]
+  createdByAdmin                     AdminUser?                     @relation("AccountingPeriodCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  activationApproval                 AdminApprovalEvidence?         @relation("AccountingPeriodActivationApproval", fields: [activationApprovalId], references: [id], onDelete: Restrict)
+  cancellationRequestedBy            AdminUser?                     @relation("AccountingPeriodCancellationRequestedBy", fields: [cancellationRequestedByAdminId], references: [id], onDelete: Restrict)
+  closeRequestedBy                   AdminUser?                     @relation("AccountingPeriodCloseRequestedBy", fields: [closeRequestedByAdminId], references: [id], onDelete: Restrict)
+  closeEvidence                      AccountingPeriodCloseEvidence?
 
   @@index([state, effectiveStart, effectiveEnd])
   @@index([createdByAdminId, createdAt])
@@ -345,21 +438,21 @@ model ReservationAllocation {
 }
 
 model ReconciliationRun {
-  id                String                      @id @default(uuid()) @db.Uuid
-  pair              String
-  checkpointKey     String                      @map("checkpoint_key")
-  fingerprint       String
-  memberId          String                      @map("member_id") @db.Uuid
-  currency          String                      @default("THB")
-  asOf              DateTime                    @map("as_of")
-  sourceRange       Json                        @map("source_range")
-  sourceCheckpoint  Json                        @map("source_checkpoint")
-  inspectedCounts   Json                        @map("inspected_counts")
-  totals            Json
-  result            String
-  resultSummary     Json                        @map("result_summary")
-  createdAt         DateTime                    @default(now()) @map("created_at")
-  discrepancies     ReconciliationDiscrepancy[]
+  id               String                      @id @default(uuid()) @db.Uuid
+  pair             String
+  checkpointKey    String                      @map("checkpoint_key")
+  fingerprint      String
+  memberId         String                      @map("member_id") @db.Uuid
+  currency         String                      @default("THB")
+  asOf             DateTime                    @map("as_of")
+  sourceRange      Json                        @map("source_range")
+  sourceCheckpoint Json                        @map("source_checkpoint")
+  inspectedCounts  Json                        @map("inspected_counts")
+  totals           Json
+  result           String
+  resultSummary    Json                        @map("result_summary")
+  createdAt        DateTime                    @default(now()) @map("created_at")
+  discrepancies    ReconciliationDiscrepancy[]
 
   @@unique([pair, checkpointKey])
   @@index([memberId, currency, asOf])
