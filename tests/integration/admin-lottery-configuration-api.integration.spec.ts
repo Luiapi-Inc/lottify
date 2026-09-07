@@ -4,7 +4,7 @@ import type { INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { AdminLotteryConfigurationController } from "../../apps/api/src/admin-lottery-configuration.controller";
 import { AdminAuthGuard } from "../../apps/api/src/admin-auth.guard";
 import { AdminCapabilityGuard } from "../../apps/api/src/admin-capability.guard";
@@ -136,6 +136,50 @@ describe.runIf(runIntegration)("Admin Lottery Configuration API", () => {
     const body = await first.json();
     versionIds.push(body.id);
     expect(await (await send()).json()).toEqual(body);
+  });
+
+  it("replays pre-canonicalization completed submit records and preserves conflicts and reconciliation", async () => {
+    const token = await createAdminSession("ADMIN");
+    const actor = await adminAuth.authenticateAccess(token.accessToken);
+    const service = new LotteryConfigurationService(prisma);
+    const identity = await service.createBetType({ code: `LEGACY_${randomUUID()}`, actor });
+    betTypeIds.push(identity.id);
+    const version = await service.createBetTypeVersion({
+      betTypeId: identity.id, version: 1, canonicalNumberFormat: "00", validationPattern: "^[0-9]{2}$",
+      defaultPayout: { amountMinor: 9000 }, minStakeMinor: 100n, maxStakeMinor: 100000n,
+      limitPolicyRef: "limit-v1", restrictionPolicyRef: "restriction-v1", settlementRuleVersionRef: "settlement-v1",
+      effectiveFrom: new Date("2099-01-01T00:00:00Z"), actor,
+    });
+    versionIds.push(version.id);
+    const original = await service.submit({ kind: "BET_TYPE", id: version.id, expectedRevision: 1, actor });
+    const responseBody = JSON.parse(JSON.stringify(original));
+    const scope = `admin:${actor.adminId}:lottery:BET_TYPE:${version.id}:submit`;
+    // Exact fingerprint algorithm and property order from the pre-upgrade controller.
+    const fingerprint = createHash("sha256").update(JSON.stringify({ kind: "BET_TYPE", id: version.id, expectedVersion: 1 })).digest("hex");
+    const key = randomUUID();
+    await prisma.idempotencyRecord.create({ data: {
+      scope, key, fingerprint, status: "COMPLETED", responseCode: 200, responseBody,
+      expiresAt: new Date("2199-01-01T00:00:00Z"),
+    } });
+    const send = (requestKey: string, expectedVersion = 1) => fetch(`${baseUrl}/api/v1/admin/lottery/bet-type-versions/${version.id}/submit`, {
+      method: "POST", headers: { Authorization: `Bearer ${token.accessToken}`, "content-type": "application/json", "Idempotency-Key": requestKey },
+      body: JSON.stringify({ expectedVersion }),
+    });
+    const replay = await send(key);
+    expect(replay.status).toBe(201); // Nest's existing command HTTP status is unchanged.
+    expect(await replay.json()).toEqual(responseBody);
+    const conflict = await send(key, 2);
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    const incompleteKey = randomUUID();
+    await prisma.idempotencyRecord.create({ data: {
+      scope, key: incompleteKey, fingerprint, status: "IN_PROGRESS", expiresAt: new Date("2199-01-01T00:00:00Z"),
+    } });
+    const incomplete = await send(incompleteKey);
+    expect(incomplete.status).toBe(409);
+    expect(await incomplete.json()).toMatchObject({ code: "IDEMPOTENCY_IN_PROGRESS" });
+    expect(await prisma.lotteryBetTypeVersion.findUniqueOrThrow({ where: { id: version.id } })).toMatchObject({ state: "REVIEW", revision: 2 });
+    expect(await prisma.auditRecord.count({ where: { resourceId: version.id, action: "LOTTERY_BET_TYPE_VERSION_SUBMIT" } })).toBe(1);
   });
 
   it("rolls back effects before result persistence and safely retries", async () => {
