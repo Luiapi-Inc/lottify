@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./styles.css";
+import "./control-plane.css";
 
 export const metadata: Metadata = { title: "Lottify Admin", description: "Lottify Admin Control Plane" };
 
