@@ -9,10 +9,19 @@ export class PrismaSessionRepository implements SessionRepository {
   create(input: {
     memberId: string;
     deviceId?: string;
+    familyId: string;
     refreshTokenHash: string;
     expiresAt: Date;
   }): Promise<AuthSessionRecord> {
-    return this.prisma.authSession.create({ data: input });
+    return this.prisma.authSession.create({
+      data: {
+        memberId: input.memberId,
+        familyId: input.familyId,
+        ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+        refreshTokenHash: input.refreshTokenHash,
+        expiresAt: input.expiresAt,
+      },
+    });
   }
 
   findById(id: string): Promise<AuthSessionRecord | null> {
@@ -28,32 +37,57 @@ export class PrismaSessionRepository implements SessionRepository {
       where: {
         memberId,
         revokedAt: null,
+        replacedById: null,
         expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: "desc" },
     });
   }
 
-  async rotate(input: { id: string; expectedHash: string; newHash: string; newExpiresAt: Date }): Promise<boolean> {
-    const result = await this.prisma.authSession.updateMany({
-      where: {
-        id: input.id,
-        refreshTokenHash: input.expectedHash,
-        revokedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      data: {
-        refreshTokenHash: input.newHash,
-        expiresAt: input.newExpiresAt,
-        version: { increment: 1 },
-      },
+  async rotate(input: {
+    id: string;
+    expectedHash: string;
+    newHash: string;
+    newExpiresAt: Date;
+    nextId: string;
+  }): Promise<AuthSessionRecord | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.authSession.findUnique({
+        where: { id: input.id },
+      });
+      if (!current) return null;
+
+      const now = new Date();
+      // Guard against concurrent rotation: only a still-current, unrevoked,
+      // unreplaced head row whose hash still matches can advance the lineage.
+      const revoked = await tx.authSession.updateMany({
+        where: {
+          id: current.id,
+          refreshTokenHash: input.expectedHash,
+          revokedAt: null,
+          replacedById: null,
+          expiresAt: { gt: now },
+        },
+        data: { revokedAt: now, replacedById: input.nextId },
+      });
+      if (revoked.count !== 1) return null;
+
+      return tx.authSession.create({
+        data: {
+          id: input.nextId,
+          memberId: current.memberId,
+          deviceId: current.deviceId,
+          familyId: current.familyId,
+          refreshTokenHash: input.newHash,
+          expiresAt: input.newExpiresAt,
+        },
+      });
     });
-    return result.count === 1;
   }
 
-  async revokeForMember(memberId: string, id: string): Promise<void> {
+  async revokeFamily(familyId: string): Promise<void> {
     await this.prisma.authSession.updateMany({
-      where: { id, memberId, revokedAt: null },
+      where: { familyId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }

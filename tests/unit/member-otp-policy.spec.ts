@@ -69,6 +69,7 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
       now,
       recentRequestCountInWindow: 3,
       windowStartsAt: new Date(now.getTime() - 60_000),
+      latestCooldownUntil: null,
     }, policy);
     expect(decision).toEqual({ action: "issue", policy });
   });
@@ -80,12 +81,42 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
       now,
       recentRequestCountInWindow: 5,
       windowStartsAt: new Date(now.getTime() - 60_000),
+      latestCooldownUntil: null,
     }, policy);
     if (decision.action === "rate_limited") {
       expect(decision.retryAfterSeconds).toBeGreaterThan(0);
     } else {
       throw new Error("expected rate_limited decision");
     }
+  });
+
+  it("denies a resend before the documented cooldown elapses", () => {
+    const cooldownUntil = new Date(now.getTime() + 45_000);
+    const decision = decideOtpRequest("LOGIN", {
+      phone: "+668****5678",
+      purpose: "LOGIN",
+      now,
+      recentRequestCountInWindow: 1,
+      windowStartsAt: new Date(now.getTime() - 60_000),
+      latestCooldownUntil: cooldownUntil,
+    }, policy);
+    if (decision.action === "cooldown_active") {
+      expect(decision.retryAfterSeconds).toBe(45);
+    } else {
+      throw new Error("expected cooldown_active decision");
+    }
+  });
+
+  it("issues again once the resend cooldown has elapsed", () => {
+    const decision = decideOtpRequest("LOGIN", {
+      phone: "+668****5678",
+      purpose: "LOGIN",
+      now,
+      recentRequestCountInWindow: 1,
+      windowStartsAt: new Date(now.getTime() - 60_000),
+      latestCooldownUntil: new Date(now.getTime() - 1_000),
+    }, policy);
+    expect(decision.action).toBe("issue");
   });
 });
 

@@ -107,20 +107,18 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     await expect(auth.verifyOtp("REGISTER", phone, code, "Phone")).rejects.toThrow();
   });
 
-  it("enforces per-purpose request rate limits server-side", async () => {
+  it("enforces the resend cooldown per purpose and keeps buckets isolated", async () => {
     const phone = freshPhone();
-    const env = getEnvironment();
-    // Keep the test bounded: drive the window counter to the configured limit.
-    const limit = env.MEMBER_OTP_REQUEST_MAX_PER_WINDOW;
-    const issued: string[] = [];
-    for (let i = 0; i < limit; i += 1) {
-      await auth.requestOtp("REGISTER", phone);
-      issued.push(delivery.lastCode(phone, "REGISTER")!);
-    }
+    // First request issues immediately (no prior challenge for this phone+purpose).
+    await expect(auth.requestOtp("REGISTER", phone)).resolves.toMatchObject({
+      purpose: "REGISTER",
+      retryAfterSeconds: null,
+    });
+    // An immediate resend is inside the documented 60s cooldown and is denied.
     await expect(auth.requestOtp("REGISTER", phone)).rejects.toThrow(
-      "Too many OTP requests",
+      "Please wait before requesting another code",
     );
-    // Purposely separate buckets for LOGIN are not exhausted.
+    // LOGIN is its own bucket, so a fresh LOGIN request is not cooldown-blocked.
     await expect(auth.requestOtp("LOGIN", phone)).resolves.toMatchObject({
       purpose: "LOGIN",
     });
@@ -132,10 +130,13 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     const code = delivery.lastCode(phone, "REGISTER")!;
     const first = await auth.verifyOtp("REGISTER", phone, code, "First Device");
 
-    await auth.requestOtp("REGISTER", phone);
-    const secondCode = delivery.lastCode(phone, "REGISTER")!;
-    const second = await auth.verifyOtp("REGISTER", phone, secondCode, "Second Device");
+    // Log in again on a second device via the separate LOGIN purpose bucket so
+    // the 60s REGISTER resend cooldown does not block the second session.
+    await auth.requestOtp("LOGIN", phone);
+    const loginCode = delivery.lastCode(phone, "LOGIN")!;
+    const second = await auth.verifyOtp("LOGIN", phone, loginCode, "Second Device");
     expect(second.accountCreated).toBe(false);
+    expect(second.memberId).toBe(first.memberId);
 
     expect((await auth.listDevices(first.memberId)).length).toBe(2);
 
@@ -143,5 +144,23 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     const remaining = await auth.listSessions(first.memberId);
     expect(remaining.length).toBe(1);
     expect(remaining[0]!.deviceId).toBe(second.deviceId);
+  });
+
+  it("revokes the session family when a rotated-away refresh token is reused", async () => {
+    const phone = freshPhone();
+    await auth.requestOtp("REGISTER", phone);
+    const code = delivery.lastCode(phone, "REGISTER")!;
+    const issued = await auth.verifyOtp("REGISTER", phone, code, "Phone");
+
+    const rotated = await auth.refresh(issued.refreshToken);
+    expect(rotated.refreshToken).not.toBe(issued.refreshToken);
+
+    // Replaying the rotated-away token is a reuse signal: the server revokes
+    // the whole family so even the freshly rotated access token stops working.
+    await expect(auth.refresh(issued.refreshToken)).rejects.toThrow();
+    await expect(auth.refresh(rotated.refreshToken)).rejects.toThrow();
+    await expect(
+      sessions.authenticateAccess(rotated.accessToken),
+    ).rejects.toThrow();
   });
 });

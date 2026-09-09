@@ -1,6 +1,6 @@
 import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getEnvironment } from "../../../platform/config/env";
 import { SESSION_REPOSITORY, type SessionRepository } from "../domain/session.repository";
 
@@ -28,6 +28,7 @@ export class SessionService {
     const refreshToken = newRefreshToken();
     const session = await this.sessions.create({
       memberId,
+      familyId: randomUUID(),
       ...(deviceId ? { deviceId } : {}),
       refreshTokenHash: hashRefreshToken(refreshToken),
       expiresAt: new Date(Date.now() + env.REFRESH_TOKEN_TTL_SECONDS * 1_000),
@@ -40,7 +41,38 @@ export class SessionService {
     };
   }
 
-  async rotate(sessionId: string, currentRefreshToken: string): Promise<{
+  // Ticket 10 refresh rotation with server-enforced reuse/revocation. A valid
+  // refresh credential advances its family lineage; a replayed or rotated-away
+  // credential is a reuse signal that revokes the entire family so the reused
+  // credential can never keep a live session alive.
+  async refresh(refreshToken: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+  }> {
+    const session = await this.sessions.findByRefreshHash(
+      hashRefreshToken(refreshToken),
+    );
+    if (!session) {
+      throw new UnauthorizedException("Refresh session is invalid, expired, or revoked");
+    }
+
+    const now = new Date();
+    if (session.revokedAt || session.expiresAt <= now) {
+      // A rotated-away row is revoked AND replaced: presenting that old token
+      // is a replay, so kill the whole family (including the live successor).
+      if (session.replacedById) {
+        await this.sessions.revokeFamily(session.familyId);
+      }
+      throw new UnauthorizedException("Refresh session is invalid, expired, or revoked");
+    }
+
+    return this.rotate(session.id, refreshToken);
+  }
+
+  async rotate(
+    sessionId: string,
+    currentRefreshToken: string,
+  ): Promise<{
     accessToken: string;
     refreshToken: string;
   }> {
@@ -51,18 +83,22 @@ export class SessionService {
       expectedHash: hashRefreshToken(currentRefreshToken),
       newHash: hashRefreshToken(nextRefreshToken),
       newExpiresAt: new Date(Date.now() + env.REFRESH_TOKEN_TTL_SECONDS * 1_000),
+      nextId: randomUUID(),
     });
     if (!rotated) {
+      // Rotation could not advance the lineage: the session is revoked/expired
+      // or the credential was already rotated away (concurrent reuse). In the
+      // reuse case the current successor must not survive, so revoke the whole
+      // family. Killing an already-revoked family is a harmless no-op.
+      const current = await this.sessions.findById(sessionId);
+      if (current) {
+        await this.sessions.revokeFamily(current.familyId);
+      }
       throw new UnauthorizedException("Refresh token is invalid, expired, reused, or revoked");
     }
 
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.revokedAt) {
-      throw new UnauthorizedException("Session is not active");
-    }
-
     return {
-      accessToken: await this.signAccess(session.memberId, session.id),
+      accessToken: await this.signAccess(rotated.memberId, rotated.id),
       refreshToken: nextRefreshToken,
     };
   }
@@ -87,17 +123,6 @@ export class SessionService {
     };
   }
 
-  async refresh(refreshToken: string): Promise<{
-    accessToken: string;
-    refreshToken: string;
-  }> {
-    const found = await this.findSessionForRefreshToken(refreshToken);
-    if (!found || found.revokedAt || found.expiresAt <= new Date()) {
-      throw new UnauthorizedException("Refresh session is invalid, expired, or revoked");
-    }
-    return this.rotate(found.sessionId, refreshToken);
-  }
-
   async listForMember(memberId: string): Promise<
     Array<{
       sessionId: string;
@@ -113,8 +138,13 @@ export class SessionService {
     }));
   }
 
-  revoke(memberId: string, sessionId: string): Promise<void> {
-    return this.sessions.revokeForMember(memberId, sessionId);
+  // Revoking a session revokes its whole family lineage so the session cannot
+  // be resurrected through a rotated successor.
+  async revoke(memberId: string, sessionId: string): Promise<void> {
+    const session = await this.sessions.findById(sessionId);
+    if (session && session.memberId === memberId) {
+      await this.sessions.revokeFamily(session.familyId);
+    }
   }
 
   revokeByDevice(memberId: string, deviceId: string): Promise<void> {

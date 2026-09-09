@@ -19,6 +19,7 @@ class InMemorySessionRepository implements SessionRepository {
   async create(input: {
     memberId: string;
     deviceId?: string;
+    familyId: string;
     refreshTokenHash: string;
     expiresAt: Date;
   }): Promise<AuthSessionRecord> {
@@ -26,7 +27,9 @@ class InMemorySessionRepository implements SessionRepository {
       id: randomUUID(),
       memberId: input.memberId,
       deviceId: input.deviceId ?? null,
+      familyId: input.familyId,
       refreshTokenHash: input.refreshTokenHash,
+      replacedById: null,
       version: 1,
       expiresAt: input.expiresAt,
       revokedAt: null,
@@ -56,9 +59,10 @@ class InMemorySessionRepository implements SessionRepository {
   async rotate(input: {
     id: string;
     expectedHash: string;
+    nextId: string;
     newHash: string;
     newExpiresAt: Date;
-  }): Promise<boolean> {
+  }): Promise<AuthSessionRecord | null> {
     const record = this.records.get(input.id);
     if (
       !record ||
@@ -66,17 +70,29 @@ class InMemorySessionRepository implements SessionRepository {
       record.revokedAt ||
       record.expiresAt <= new Date()
     ) {
-      return false;
+      return null;
     }
-    record.refreshTokenHash = input.newHash;
-    record.expiresAt = input.newExpiresAt;
-    record.version += 1;
-    return true;
+    record.revokedAt = new Date();
+    record.replacedById = input.nextId;
+    const next: StoredSession = {
+      id: input.nextId,
+      memberId: record.memberId,
+      deviceId: record.deviceId,
+      familyId: record.familyId,
+      refreshTokenHash: input.newHash,
+      replacedById: null,
+      version: 1,
+      expiresAt: input.newExpiresAt,
+      revokedAt: null,
+    };
+    this.records.set(next.id, next);
+    return next;
   }
 
-  async revokeForMember(memberId: string, id: string): Promise<void> {
-    const record = this.records.get(id);
-    if (record?.memberId === memberId && !record.revokedAt) record.revokedAt = new Date();
+  async revokeFamily(familyId: string): Promise<void> {
+    for (const record of this.records.values()) {
+      if (record.familyId === familyId && !record.revokedAt) record.revokedAt = new Date();
+    }
   }
 
   async revokeByDevice(memberId: string, deviceId: string): Promise<void> {

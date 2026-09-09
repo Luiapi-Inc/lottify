@@ -51,7 +51,7 @@ export class PrismaMemberAuthRepository implements MemberAuthRepository {
     purpose: MemberOtpPurpose;
     windowStart: Date;
   }): Promise<OtpRequestWindowFact> {
-    const [challenges, oldest] = await this.prisma.$transaction([
+    const [challenges, oldest, latest] = await this.prisma.$transaction([
       this.prisma.memberOtpChallenge.count({
         where: {
           phone: input.phone,
@@ -68,10 +68,19 @@ export class PrismaMemberAuthRepository implements MemberAuthRepository {
         orderBy: { createdAt: "asc" },
         select: { createdAt: true },
       }),
+      this.prisma.memberOtpChallenge.findFirst({
+        where: {
+          phone: input.phone,
+          purpose: input.purpose,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { cooldownUntil: true },
+      }),
     ]);
     return {
       recentRequestCountInWindow: challenges,
       windowStartsAt: oldest?.createdAt ?? input.windowStart,
+      latestCooldownUntil: latest?.cooldownUntil ?? null,
     };
   }
 

@@ -66,20 +66,33 @@ export interface RequestOtpFacts {
   now: Date;
   recentRequestCountInWindow: number;
   windowStartsAt: Date;
+  latestCooldownUntil: Date | null;
 }
 
 export type OtpRequestDecision =
   | { action: "issue"; policy: MemberOtpPolicy }
-  | { action: "rate_limited"; retryAfterSeconds: number };
+  | { action: "rate_limited"; retryAfterSeconds: number }
+  | { action: "cooldown_active"; retryAfterSeconds: number };
 
 // Anti-enumeration + rate-limit gate applied before issuing a new challenge.
 // The request is rejected when the rolling window is full so that callers
-// cannot infer account state and cannot spam OTP issuance.
+// cannot infer account state and cannot spam OTP issuance, and while a resend
+// cooldown from the most recent challenge is still active.
 export function decideOtpRequest(
   purpose: MemberOtpPurpose,
   facts: RequestOtpFacts,
   policy: MemberOtpPolicy,
 ): OtpRequestDecision {
+  if (
+    facts.latestCooldownUntil &&
+    facts.now.getTime() < facts.latestCooldownUntil.getTime()
+  ) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((facts.latestCooldownUntil.getTime() - facts.now.getTime()) / 1_000),
+    );
+    return { action: "cooldown_active", retryAfterSeconds };
+  }
   if (facts.recentRequestCountInWindow >= policy.requestMaxPerWindow) {
     const nowMs = facts.now.getTime();
     const elapsedMs = nowMs - facts.windowStartsAt.getTime();

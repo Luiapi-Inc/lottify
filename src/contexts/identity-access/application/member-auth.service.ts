@@ -89,6 +89,13 @@ export class MemberAuthService {
       { phone, purpose, now, ...windowFact },
       policy,
     );
+    if (decision.action === "cooldown_active") {
+      throw new ConflictException({
+        code: "OTP_COOLDOWN",
+        message: "Please wait before requesting another code",
+        details: { retryAfterSeconds: decision.retryAfterSeconds },
+      });
+    }
     if (decision.action === "rate_limited") {
       throw new ConflictException({
         code: "OTP_RATE_LIMITED",

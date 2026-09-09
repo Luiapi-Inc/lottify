@@ -56,7 +56,7 @@ class InMemoryMemberRepository implements MemberAuthRepository {
     return member;
   }
   async countOtpRequestsInWindow(): Promise<OtpRequestWindowFact> {
-    return { recentRequestCountInWindow: 0, windowStartsAt: new Date() };
+    return { recentRequestCountInWindow: 0, windowStartsAt: new Date(), latestCooldownUntil: null };
   }
   async createOtpChallenge(input: {
     phone: string;
@@ -139,6 +139,7 @@ class InMemorySessionRepo implements SessionRepository {
   async create(input: {
     memberId: string;
     deviceId?: string;
+    familyId: string;
     refreshTokenHash: string;
     expiresAt: Date;
   }): Promise<AuthSessionRecord> {
@@ -146,7 +147,9 @@ class InMemorySessionRepo implements SessionRepository {
       id: randomUUID(),
       memberId: input.memberId,
       deviceId: input.deviceId ?? null,
+      familyId: input.familyId,
       refreshTokenHash: input.refreshTokenHash,
+      replacedById: null,
       version: 1,
       expiresAt: input.expiresAt,
       revokedAt: null,
@@ -169,19 +172,32 @@ class InMemorySessionRepo implements SessionRepository {
   async rotate(input: {
     id: string;
     expectedHash: string;
+    nextId: string;
     newHash: string;
     newExpiresAt: Date;
-  }): Promise<boolean> {
+  }): Promise<AuthSessionRecord | null> {
     const r = this.records.get(input.id);
-    if (!r || r.refreshTokenHash !== input.expectedHash || r.revokedAt || r.expiresAt <= new Date()) return false;
-    r.refreshTokenHash = input.newHash;
-    r.expiresAt = input.newExpiresAt;
-    r.version += 1;
-    return true;
+    if (!r || r.refreshTokenHash !== input.expectedHash || r.revokedAt || r.expiresAt <= new Date()) return null;
+    r.revokedAt = new Date();
+    r.replacedById = input.nextId;
+    const next: AuthSessionRecord = {
+      id: input.nextId,
+      memberId: r.memberId,
+      deviceId: r.deviceId,
+      familyId: r.familyId,
+      refreshTokenHash: input.newHash,
+      replacedById: null,
+      version: 1,
+      expiresAt: input.newExpiresAt,
+      revokedAt: null,
+    };
+    this.records.set(next.id, next);
+    return next;
   }
-  async revokeForMember(memberId: string, id: string): Promise<void> {
-    const r = this.records.get(id);
-    if (r?.memberId === memberId && !r.revokedAt) r.revokedAt = new Date();
+  async revokeFamily(familyId: string): Promise<void> {
+    for (const r of this.records.values()) {
+      if (r.familyId === familyId && !r.revokedAt) r.revokedAt = new Date();
+    }
   }
   async revokeByDevice(memberId: string, deviceId: string): Promise<void> {
     for (const r of this.records.values()) {
@@ -263,9 +279,10 @@ describe("MemberAuthService refresh rotation", () => {
     expect(rotated.accessToken).toBeTruthy();
     expect(rotated.refreshToken).not.toBe(issued.refreshToken);
 
+    // Reuse of the rotated-away token is a reuse signal: the whole family is
+    // revoked server-side, so even the freshly-rotated access token stops working.
     await expect(auth.refresh(issued.refreshToken)).rejects.toThrow();
-    const session = await sessions.authenticateAccess(rotated.accessToken);
-    expect(session.memberId).toBe(issued.memberId);
+    await expect(sessions.authenticateAccess(rotated.accessToken)).rejects.toThrow();
   });
 
   it("revokes a single session scoped to the owning Member", async () => {

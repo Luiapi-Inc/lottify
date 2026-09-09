@@ -34,6 +34,7 @@ export interface MemberOtpChallengeRecord {
 export interface OtpRequestWindowFact {
   recentRequestCountInWindow: number;
   windowStartsAt: Date;
+  latestCooldownUntil: Date | null;
 }
 
 export interface MemberAuthRepository {

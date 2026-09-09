@@ -52,14 +52,15 @@ describe.runIf(runIntegration)("foundation integration", () => {
     expect(replay).toMatchObject({ kind: "existing", status: "COMPLETED", responseCode: 200 });
   });
 
-  it("rotates refresh tokens atomically and rejects reuse", async () => {
+  it("rotates refresh tokens and revokes the whole family on reuse", async () => {
     const memberId = randomUUID();
     const issued = await sessions.issue(memberId, "integration-device");
     const rotated = await sessions.rotate(issued.sessionId, issued.refreshToken);
     expect(rotated.refreshToken).not.toBe(issued.refreshToken);
-    await expect(sessions.rotate(issued.sessionId, issued.refreshToken)).rejects.toThrow();
-    await sessions.revoke(memberId, issued.sessionId);
-    await expect(sessions.rotate(issued.sessionId, rotated.refreshToken)).rejects.toThrow();
+    // Reuse of the rotated-away token is a reuse signal: the family is revoked
+    // server-side, so even the freshly rotated credential stops working.
+    await expect(sessions.refresh(issued.refreshToken)).rejects.toThrow();
+    await expect(sessions.refresh(rotated.refreshToken)).rejects.toThrow();
   });
 
   it("lists and revokes member sessions without crossing member boundaries", async () => {
@@ -97,8 +98,10 @@ describe.runIf(runIntegration)("foundation integration", () => {
 
     await sessions.revokeAllForMember(memberId);
 
-    await expect(sessions.rotate(otherDevice.sessionId, rotatedOtherDevice.refreshToken)).rejects.toThrow();
-    await expect(sessions.rotate(otherMember.sessionId, rotatedOtherMember.refreshToken)).resolves.toBeDefined();
+    // Revoke-all kills the Member's rotated successor lineage...
+    await expect(sessions.refresh(rotatedOtherDevice.refreshToken)).rejects.toThrow();
+    // ...but never crosses into another Member's sessions.
+    await expect(sessions.refresh(rotatedOtherMember.refreshToken)).resolves.toBeDefined();
   });
 
   it("claims a transactional outbox row once per lease and marks it published", async () => {

@@ -10,7 +10,9 @@ model AuthSession {
   id               String    @id @default(uuid()) @db.Uuid
   memberId         String    @map("member_id") @db.Uuid
   deviceId         String?   @map("device_id")
+  familyId         String    @map("family_id") @db.Uuid
   refreshTokenHash String    @map("refresh_token_hash")
+  replacedById     String?   @map("replaced_by_id") @db.Uuid
   version          Int       @default(1)
   expiresAt        DateTime  @map("expires_at")
   revokedAt        DateTime? @map("revoked_at")
@@ -18,6 +20,7 @@ model AuthSession {
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@index([memberId])
+  @@index([familyId])
   @@index([expiresAt])
   @@map("auth_sessions")
 }
