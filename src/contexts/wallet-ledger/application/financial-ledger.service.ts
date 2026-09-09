@@ -3,6 +3,8 @@ import {
   FINANCIAL_LEDGER_REPOSITORY,
   type ConsumeReservationAndPostInput,
   type FinancialLedgerRepository,
+  type ListMemberTransactionsInput,
+  type MemberLedgerTransactionPage,
   type PostFinancialTransactionInput,
   type ReconciliationSourceSnapshot,
   type ReconciliationTargetPage,
@@ -63,6 +65,20 @@ export class FinancialLedgerService {
     currency: FinancialCurrency = "THB",
   ): Promise<WalletProjection> {
     return this.repository.getWalletProjection(memberId, currency);
+  }
+
+  listMemberTransactions(
+    input: ListMemberTransactionsInput,
+  ): Promise<MemberLedgerTransactionPage> {
+    if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
+      throw new Error("Member transaction page limit must be an integer between 1 and 100");
+    }
+    return this.repository.listMemberTransactions({
+      memberId: input.memberId,
+      currency: input.currency ?? "THB",
+      afterCursor: input.afterCursor,
+      limit: input.limit,
+    });
   }
 
   getReconciliationSourceSnapshot(

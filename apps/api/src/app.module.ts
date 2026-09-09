@@ -16,6 +16,8 @@ import { HttpMetricsMiddleware } from "./http-metrics.middleware";
 import { MemberAuthController } from "./member-auth.controller";
 import { MemberAuthGuard } from "./member-auth.guard";
 import { MemberSessionDeviceController } from "./member-session-device.controller";
+import { MemberWalletController } from "./member-wallet.controller";
+import { MemberDepositController } from "./member-deposit.controller";
 import { MetricsController } from "./metrics.controller";
 
 collectDefaultMetrics({ prefix: "lottify_" });
@@ -29,6 +31,8 @@ collectDefaultMetrics({ prefix: "lottify_" });
     AdminAuthController,
     MemberAuthController,
     MemberSessionDeviceController,
+    MemberWalletController,
+    MemberDepositController,
     HealthController,
     MetricsController,
   ],
