@@ -1,0 +1,5 @@
+import { PageHeading, Section, Unavailable } from "../components/presentation";
+export const metadata = { title: "บัญชี" };
+export default function AccountPage() {
+  return <><PageHeading title="บัญชี" description="ข้อมูลสมาชิก การยืนยันบัญชี และความปลอดภัยของคุณ" /><Section title="เข้าสู่ระบบและข้อมูลสมาชิก"><Unavailable title="ยังเข้าสู่ระบบหรือสมัครสมาชิกไม่ได้">บริการบัญชียังไม่เปิดใช้งาน หน้านี้ยังไม่รับเบอร์โทรศัพท์ รหัส OTP หรือข้อมูลส่วนตัว</Unavailable></Section><Section title="ความพร้อมของบัญชี"><Unavailable title="ยังตรวจสอบสิทธิ์การใช้งานไม่ได้">ข้อมูลเงื่อนไขที่ต้องยอมรับ ข้อมูลสมาชิกที่จำเป็น และสถานะการยืนยันยังไม่พร้อมแสดง</Unavailable><p className="footnote">การสร้างบัญชีไม่ได้หมายความว่าสามารถซื้อหวยได้ทันที แต่ละบริการมีเงื่อนไขการใช้งานของตนเอง</p></Section><Section title="ความปลอดภัย"><div className="detail-list"><div><h3>อุปกรณ์และการเข้าสู่ระบบ</h3><p>ยังแสดงอุปกรณ์ที่เข้าใช้งานหรือออกจากระบบรายอุปกรณ์และทุกอุปกรณ์ไม่ได้</p></div><div><h3>การกู้คืนบัญชี</h3><p>ยังไม่เปิดรับคำขอกู้คืนบัญชี การยืนยัน OTP ของเบอร์ใหม่เพียงอย่างเดียวไม่เพียงพอสำหรับการกู้คืน</p></div></div></Section></>;
+}
