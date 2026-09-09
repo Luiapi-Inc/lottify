@@ -40,7 +40,7 @@ describe("member OTP policy binding", () => {
     const policy = buildMemberOtpPolicy("LOGIN", {
       codeLength: 6,
       ttlSeconds: 300,
-      maxAttempts: 5,
+      maxAttempts: 10,
       resendCooldownSeconds: 60,
       requestWindowSeconds: 900,
       requestMaxPerWindow: 5,
@@ -55,7 +55,7 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
   const policy = buildMemberOtpPolicy("LOGIN", {
     codeLength: 6,
     ttlSeconds: 300,
-    maxAttempts: 5,
+    maxAttempts: 10,
     resendCooldownSeconds: 60,
     requestWindowSeconds: 900,
     requestMaxPerWindow: 5,

@@ -21,7 +21,7 @@ const environmentSchema = z
     ADMIN_LOGIN_LOCKOUT_SECONDS: z.coerce.number().int().positive().default(900),
     MEMBER_OTP_CODE_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
     MEMBER_OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
-    MEMBER_OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+    MEMBER_OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
     MEMBER_OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
     MEMBER_OTP_REQUEST_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
     MEMBER_OTP_REQUEST_MAX_PER_WINDOW: z.coerce.number().int().positive().default(5),

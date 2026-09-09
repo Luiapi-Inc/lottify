@@ -32,17 +32,9 @@ not Identity / Eligibility milestone acceptance or Production GO.
 
 The previous status text still listed OTP and Member session/device wire/storage
 contracts as unresolved after Issue 31 had already recorded and implemented those
-decisions. That documentation drift is corrected below. One material requirement
-mismatch remains and is intentionally not hidden by the documentation update:
-
-- Ticket 13 locks the v1 baseline at `OTP verify 10 attempts / challenge`.
-- The current runtime default is `MEMBER_OTP_MAX_ATTEMPTS=5`, and
-  `member-identity-decisions.md` previously described that value as if it matched
-  the Ticket 13 baseline.
-- Because this changes an authentication abuse-control policy, the implementation
-  must be aligned through the existing requirement/decision process and then
-  re-verified with the applicable security evidence before this slice can be
-  accepted.
+decisions. That documentation drift is corrected below. The OTP verify-attempt
+default is now aligned with Ticket 13 at `10 attempts / challenge`; Ticket 16
+security/abuse evidence remains required before acceptance.
 
 ## Evidence confirmed on 2026-09-04
 
@@ -63,10 +55,10 @@ GitHub Actions `ci` run `33829850497` on commit `932e47c879715c0f16c1a1b712b8faa
 
 The Wayfinder map declares the engineering specification handoff complete. The following lower-level details are still not explicit enough to implement the affected slices without choosing additional behavior or wire/storage shape. They do not block unrelated Identity / Eligibility work whose behavior is already locked.
 
-1. **OTP policy alignment/evidence** — Issue 31 resolved the concrete OTP storage and REST shape plus TTL/resend/request-window bindings. The remaining blocker is the `5` versus Ticket 13 `10 attempts / challenge` mismatch described above, plus the required Ticket 16 security/abuse evidence for the final aligned policy.
+1. **OTP acceptance evidence** — Issue 31 resolved the concrete OTP storage and REST shape plus TTL/resend/request-window bindings, and the verify-attempt default now matches Ticket 13 at `10 attempts / challenge`. The remaining gap is the required Ticket 16 security/abuse evidence for the aligned policy.
 2. **Logical Device risk evidence** — Issue 31 resolved the Device persistence and Member session/device management surface. Ticket 06 still requires anomalous-device Risk Signals and policy outcomes (`ALLOW`, `CHALLENGE`, `REAUTH`, `BLOCK`); the evidence model and its end-to-end wiring remain outside the implemented session/device management checkpoint.
 3. **Member onboarding contract** — Tickets 02/06/11 require Terms acceptance, mandatory profile data, and age/jurisdiction eligibility before affected capabilities are enabled, but do not lock the mandatory profile field set, Terms acceptance representation/version contract, or age/jurisdiction evidence rules.
 
 ## Milestone disposition
 
-Member phone authentication and session/device management are implemented checkpoints on `main`; the earlier wire/storage-contract gaps for those operations are no longer open. Identity / Eligibility remains incomplete because the OTP verify-attempt binding is not aligned with Ticket 13, anomalous-device risk behavior and onboarding readiness remain unresolved/unfinished, and Ticket 16 acceptance evidence is not complete. Slices that depend on those gaps must not invent policy values or identity-evidence semantics; any required specification change must be recorded explicitly rather than inferred from the implementation.
+Member phone authentication and session/device management are implemented checkpoints on `main`; the earlier wire/storage-contract gaps for those operations are no longer open. Identity / Eligibility remains incomplete because anomalous-device risk behavior and onboarding readiness remain unresolved/unfinished, and Ticket 16 acceptance evidence is not complete. Slices that depend on those gaps must not invent policy values or identity-evidence semantics; any required specification change must be recorded explicitly rather than inferred from the implementation.

@@ -10,7 +10,9 @@ const valid = {
 
 describe("environment validation", () => {
   it("accepts a complete supported environment", () => {
-    expect(parseEnvironment(valid).APP_ENV).toBe("test");
+    const parsed = parseEnvironment(valid);
+    expect(parsed.APP_ENV).toBe("test");
+    expect(parsed.MEMBER_OTP_MAX_ATTEMPTS).toBe(10);
   });
 
   it("rejects weak access-token secrets", () => {

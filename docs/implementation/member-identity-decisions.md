@@ -28,16 +28,14 @@ member-scoped rotating refresh session foundation (`SessionService` +
 - OTP request/verify are purpose-scoped (`LOGIN`, `REGISTER`; `REAUTH` is a
   reserved purpose reserved for later sensitive-action self-service).
 - Concrete implementation bindings live in `env.ts` defaults:
-  - code length 6, TTL 300s, max verify attempts 5,
+  - code length 6, TTL 300s, max verify attempts 10,
   - resend cooldown 60s, request window 900s with max 5 requests/window.
 - `MEMBER_OTP_REQUEST_MAX_PER_WINDOW` and `requestWindowSeconds` implement the
   Ticket 13 "OTP request 5 / 15 minutes" baseline. Codes are stored only as
   SHA-256 hashes and are never returned by the API.
-- **Known source-alignment gap (2026-09-09):** Ticket 13 locks `OTP verify 10
-  attempts / challenge`, while the current `MEMBER_OTP_MAX_ATTEMPTS` default is
-  `5`. The `5` value is therefore an implementation mismatch, not a Ticket 13
-  binding. This record does not approve or redefine that requirement; the runtime
-  policy and its Ticket 16 security evidence must be reconciled before acceptance.
+- `MEMBER_OTP_MAX_ATTEMPTS=10` now aligns the runtime default with the Ticket 13
+  `OTP verify 10 attempts / challenge` baseline. This is a source-alignment fix;
+  Ticket 16 security/abuse evidence is still required before milestone acceptance.
 
 ## Decision 3 — Anti-enumeration
 
