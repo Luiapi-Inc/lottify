@@ -2,6 +2,16 @@
 
 Source of truth: Wayfinder Tickets 01, 02, 06, 10, 11, 16, and 19. This record does not redefine those requirements.
 
+## Member API identity vertical (Issue 31) checkpoint
+
+The Member phone + OTP + registration + session/device flow is now implemented as
+domain application services in `identity-access` and `/api/v1/member` REST on the
+codex/member-api-identity branch. Concrete implementation decisions for the
+previously-unlocked OTP/Device/session contracts are recorded in
+`docs/implementation/member-identity-decisions.md`. Local typecheck, unit,
+contract, and DB integration evidence pass on that branch. This is checkpoint
+evidence, not milestone acceptance or Production GO.
+
 ## Implemented checkpoint
 
 - Identity & Access has the rotating refresh-session foundation required by the approved security model.

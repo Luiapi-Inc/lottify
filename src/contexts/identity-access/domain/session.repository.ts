@@ -16,6 +16,7 @@ export interface SessionRepository {
     expiresAt: Date;
   }): Promise<AuthSessionRecord>;
   findById(id: string): Promise<AuthSessionRecord | null>;
+  findByRefreshHash(refreshTokenHash: string): Promise<AuthSessionRecord | null>;
   listActiveForMember(memberId: string): Promise<AuthSessionRecord[]>;
   rotate(input: { id: string; expectedHash: string; newHash: string; newExpiresAt: Date }): Promise<boolean>;
   revokeForMember(memberId: string, id: string): Promise<void>;

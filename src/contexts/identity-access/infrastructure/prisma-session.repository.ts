@@ -19,6 +19,10 @@ export class PrismaSessionRepository implements SessionRepository {
     return this.prisma.authSession.findUnique({ where: { id } });
   }
 
+  findByRefreshHash(refreshTokenHash: string): Promise<AuthSessionRecord | null> {
+    return this.prisma.authSession.findFirst({ where: { refreshTokenHash } });
+  }
+
   listActiveForMember(memberId: string): Promise<AuthSessionRecord[]> {
     return this.prisma.authSession.findMany({
       where: {

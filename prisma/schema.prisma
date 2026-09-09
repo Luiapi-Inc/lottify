@@ -22,6 +22,47 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
+model Member {
+  id        String         @id @default(uuid()) @db.Uuid
+  phone     String         @unique
+  status    String         @default("ACTIVE")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  devices   MemberDevice[]
+  otpChallenges MemberOtpChallenge[]
+
+  @@map("members")
+}
+
+model MemberDevice {
+  id        String   @id @default(uuid()) @db.Uuid
+  memberId  String   @map("member_id") @db.Uuid
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@map("member_devices")
+}
+
+model MemberOtpChallenge {
+  id            String   @id @default(uuid()) @db.Uuid
+  phone         String
+  purpose       String
+  memberId      String?  @map("member_id") @db.Uuid
+  codeHash      String   @map("code_hash")
+  attemptsUsed  Int      @default(0) @map("attempts_used")
+  expiresAt     DateTime @map("expires_at")
+  cooldownUntil DateTime @map("cooldown_until")
+  consumedAt    DateTime? @map("consumed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  member        Member?  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([phone, purpose, createdAt])
+  @@map("member_otp_challenges")
+}
+
 model AdminUser {
   id                                   String                          @id @default(uuid()) @db.Uuid
   email                                String                          @unique

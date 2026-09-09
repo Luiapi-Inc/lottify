@@ -39,6 +39,13 @@ class InMemorySessionRepository implements SessionRepository {
     return this.records.get(id) ?? null;
   }
 
+  async findByRefreshHash(refreshTokenHash: string): Promise<AuthSessionRecord | null> {
+    for (const record of this.records.values()) {
+      if (record.refreshTokenHash === refreshTokenHash) return record;
+    }
+    return null;
+  }
+
   async listActiveForMember(memberId: string): Promise<AuthSessionRecord[]> {
     const now = new Date();
     return [...this.records.values()].filter(
