@@ -1,5 +1,2 @@
-import AccountingPeriodWorkspace from "./accounting-period-workspace";
-
-export default function AdminAccountingPeriodPage() {
-  return <AccountingPeriodWorkspace />;
-}
+import { redirect } from 'next/navigation';
+export default function Page() { redirect('/lottery'); }
