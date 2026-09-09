@@ -8,6 +8,8 @@ import { LotteryModule } from "./lottery/lottery.module";
 import { MemberModule } from "./member/member.module";
 import { NotificationModule } from "./notification/notification.module";
 import { PaymentsModule } from "./payments/payments.module";
+import { DepositService } from "./payments/application/deposit.service";
+import { DEPOSIT_LEDGER_PORT } from "./payments/application/deposit-ledger.port";
 import { PromotionModule } from "./promotion/promotion.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { LedgerWalletReconciliationService } from "./reporting/ledger-wallet-reconciliation.service";
@@ -17,6 +19,7 @@ import { ResultSettlementModule } from "./result-settlement/result-settlement.mo
 import { WalletLedgerModule } from "./wallet-ledger/wallet-ledger.module";
 import { LedgerWalletProjectionAdapter } from "../platform/integration/ledger-wallet-projection.adapter";
 import { LedgerWalletSourceAdapter } from "../platform/integration/ledger-wallet-source.adapter";
+import { DepositLedgerAdapter } from "../platform/integration/deposit-ledger.adapter";
 
 @Module({
   imports: [
@@ -45,12 +48,20 @@ import { LedgerWalletSourceAdapter } from "../platform/integration/ledger-wallet
       provide: LEDGER_WALLET_SOURCE_PORT,
       useExisting: LedgerWalletSourceAdapter,
     },
+    DepositLedgerAdapter,
+    {
+      provide: DEPOSIT_LEDGER_PORT,
+      useExisting: DepositLedgerAdapter,
+    },
+    DepositService,
     LedgerWalletReconciliationService,
   ],
   exports: [
     IdentityAccessModule,
     LotteryModule,
     WalletLedgerModule,
+    PaymentsModule,
+    DepositService,
     LedgerWalletReconciliationService,
   ],
 })

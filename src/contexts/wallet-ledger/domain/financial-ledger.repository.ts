@@ -82,6 +82,29 @@ export interface WalletProjection {
   buckets: readonly WalletBucketProjection[];
 }
 
+export interface MemberLedgerTransactionItem {
+  id: string;
+  businessTransactionId: string;
+  operationType: string;
+  correlationId: string;
+  postedAt: Date;
+  effectiveAt: Date;
+  /** Net signed impact to the Member (credit positive, debit negative), minor units. */
+  netImpactMinor: bigint;
+}
+
+export interface MemberLedgerTransactionPage {
+  items: readonly MemberLedgerTransactionItem[];
+  nextCursor: string | null;
+}
+
+export interface ListMemberTransactionsInput {
+  memberId: string;
+  currency: FinancialCurrency;
+  afterCursor?: string | null;
+  limit: number;
+}
+
 export interface ReconciliationSourceBucketSnapshot {
   bucket: MemberLedgerBucket;
   accountId: string | null;
@@ -141,6 +164,9 @@ export interface FinancialLedgerRepository {
   consumeReservationAndPost(input: ConsumeReservationAndPostInput): Promise<string>;
   getAvailableMinorUnits(accountId: string): Promise<bigint>;
   getWalletProjection(memberId: string, currency: FinancialCurrency): Promise<WalletProjection>;
+  listMemberTransactions(
+    input: ListMemberTransactionsInput,
+  ): Promise<MemberLedgerTransactionPage>;
   getReconciliationSourceSnapshot(
     memberId: string,
     currency: FinancialCurrency,

@@ -4,6 +4,8 @@ import { PrismaService } from "../../../platform/persistence/prisma.service";
 import {
   type ConsumeReservationAndPostInput,
   type FinancialLedgerRepository,
+  type ListMemberTransactionsInput,
+  type MemberLedgerTransactionPage,
   type PostFinancialTransactionInput,
   type ReconciliationSourceSnapshot,
   type ReconciliationTargetPage,
@@ -703,6 +705,70 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
     );
   }
 
+  async listMemberTransactions(input: ListMemberTransactionsInput): Promise<MemberLedgerTransactionPage> {
+    const { cursorPostedAt, cursorId } = decodeTransactionCursor(input.afterCursor);
+    const cursorFilter =
+      cursorPostedAt === undefined
+        ? Prisma.empty
+        : Prisma.sql`AND (ft."posted_at" < ${cursorPostedAt} OR (ft."posted_at" = ${cursorPostedAt} AND ft.id < ${cursorId}::uuid))`;
+
+    // Keyset pagination over the member's Ledger transactions ordered by
+    // (postedAt DESC, id DESC) — a stable, deterministic sort with a unique
+    // tie-breaker per Ticket 10. Only transactions that post to the Member's
+    // own accounts (CASH/BONUS/LOCKED) are member-visible.
+    const rows = await this.prisma.$queryRaw<Array<MemberTransactionRowSnapshot>>(Prisma.sql`
+      WITH member_accounts AS (
+        SELECT id FROM ledger_accounts
+        WHERE kind = 'MEMBER' AND member_id = ${input.memberId}::uuid AND currency = ${input.currency}
+      ),
+      member_transactions AS (
+        SELECT DISTINCT
+          ft.id,
+          ft.business_transaction_id,
+          ft.operation_type,
+          ft.correlation_id,
+          ft.posted_at,
+          ft.effective_at
+        FROM financial_transactions ft
+        JOIN ledger_postings lp ON lp.transaction_id = ft.id AND lp.account_id IN (SELECT id FROM member_accounts)
+        ${cursorFilter}
+        ORDER BY ft.posted_at DESC, ft.id DESC
+        LIMIT ${input.limit + 1}
+      )
+      SELECT
+        mt.id,
+        mt.business_transaction_id AS "businessTransactionId",
+        mt.operation_type AS "operationType",
+        mt.correlation_id AS "correlationId",
+        mt.posted_at AS "postedAt",
+        mt.effective_at AS "effectiveAt",
+        COALESCE((
+          SELECT SUM(CASE WHEN p.side = 'CREDIT' THEN p.amount_minor ELSE -p.amount_minor END)
+          FROM ledger_postings p
+          WHERE p.transaction_id = mt.id AND p.account_id IN (SELECT id FROM member_accounts)
+        ), 0) AS "netImpactMinor"
+      FROM member_transactions mt
+      ORDER BY mt.posted_at DESC, mt.id DESC
+    `);
+
+    const pageRows = rows.slice(0, input.limit);
+    return {
+      items: pageRows.map((row) => ({
+        id: row.id,
+        businessTransactionId: row.businessTransactionId,
+        operationType: row.operationType,
+        correlationId: row.correlationId,
+        postedAt: row.postedAt,
+        effectiveAt: row.effectiveAt,
+        netImpactMinor: BigInt(row.netImpactMinor),
+      })),
+      nextCursor:
+        rows.length > input.limit
+          ? encodeTransactionCursor(pageRows.at(-1)!.postedAt, pageRows.at(-1)!.id)
+          : null,
+    };
+  }
+
   async getReconciliationSourceSnapshot(
     memberId: string,
     currency: "THB",
@@ -1191,6 +1257,48 @@ async function lockFinancialTransaction(
 
 function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+interface MemberTransactionRowSnapshot {
+  id: string;
+  businessTransactionId: string;
+  operationType: string;
+  correlationId: string;
+  postedAt: Date;
+  effectiveAt: Date;
+  netImpactMinor: bigint | number;
+}
+
+const TRANSACTION_CURSOR_SEPARATOR = "|";
+
+function encodeTransactionCursor(postedAt: Date, transactionId: string): string {
+  return Buffer.from(
+    `${postedAt.toISOString()}${TRANSACTION_CURSOR_SEPARATOR}${transactionId}`,
+    "utf8",
+  ).toString("base64url");
+}
+
+function decodeTransactionCursor(
+  cursor: string | null | undefined,
+): { cursorPostedAt?: Date; cursorId?: string } {
+  if (!cursor) return {};
+  let decoded: string;
+  try {
+    decoded = Buffer.from(cursor, "base64url").toString("utf8");
+  } catch {
+    throw new Error("Invalid transaction history cursor");
+  }
+  const separatorIndex = decoded.lastIndexOf(TRANSACTION_CURSOR_SEPARATOR);
+  if (separatorIndex < 0) {
+    throw new Error("Invalid transaction history cursor");
+  }
+  const postedAtIso = decoded.slice(0, separatorIndex);
+  const cursorId = decoded.slice(separatorIndex + 1);
+  const postedAt = new Date(postedAtIso);
+  if (Number.isNaN(postedAt.getTime()) || !cursorId) {
+    throw new Error("Invalid transaction history cursor");
+  }
+  return { cursorPostedAt: postedAt, cursorId };
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

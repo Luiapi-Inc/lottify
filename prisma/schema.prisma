@@ -33,6 +33,7 @@ model Member {
   updatedAt DateTime       @updatedAt @map("updated_at")
   devices   MemberDevice[]
   otpChallenges MemberOtpChallenge[]
+  deposits  PaymentDeposit[]
 
   @@map("members")
 }
@@ -529,4 +530,36 @@ model ReconciliationDiscrepancy {
   @@index([status, detectedAt])
   @@index([severity, detectedAt])
   @@map("reconciliation_discrepancies")
+}
+
+// Payments context Deposit aggregate. A Deposit is the Member-facing mutation
+// lifecycle of a deposit initiation; it is idempotent by a scoped
+// Idempotency-Key and records provider transaction identity separately so that
+// an ambiguous provider outcome is never re-initiated or credited blindly.
+model PaymentDeposit {
+  id                    String   @id @default(uuid()) @db.Uuid
+  memberId              String   @map("member_id") @db.Uuid
+  providerId            String   @map("provider_id")
+  providerCode          String   @map("provider_code")
+  methodCode            String   @map("method_code")
+  amountMinor           BigInt   @map("amount_minor")
+  currency              String   @default("THB")
+  status                String
+  idempotencyScope      String   @map("idempotency_scope")
+  idempotencyKey        String   @map("idempotency_key")
+  fingerprint           String
+  providerReferenceKey  String   @map("provider_reference_key")
+  providerTransactionId String?  @map("provider_transaction_id")
+  requestAttemptId      String?  @map("request_attempt_id")
+  correlationId         String   @map("correlation_id")
+  ledgerTransactionId   String?  @map("ledger_transaction_id") @db.Uuid
+  incomingProviderError String?  @map("incoming_provider_error")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  member                Member   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([memberId, createdAt])
+  @@index([providerReferenceKey])
+  @@map("payment_deposits")
 }
