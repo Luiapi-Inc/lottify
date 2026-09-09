@@ -62,6 +62,7 @@ export class DepositService {
     const scope = `DEPOSIT_INITIATE:${memberId}`;
     const fingerprint = depositFingerprint({
       memberId,
+      providerCode: command.providerCode,
       methodCode: command.methodCode,
       amountMinor: command.amountMinor,
       currency: command.currency,
@@ -189,6 +190,13 @@ export class DepositService {
     if (deposit.ledgerTransactionId) {
       return deposit; // already credited; terminal.
     }
+    if (deposit.status === "COMPLETED") {
+      // Crash/disconnect recovery: the COMPLETED resolve committed before the
+      // Ledger credit (a non-atomic window). The Ledger posting is idempotent
+      // per depositId, so re-running creditIfCompleted restores exactly one
+      // credit and is provably single-effect.
+      return this.creditIfCompleted(deposit);
+    }
     if (!depositIsOpenForResolution(deposit.status)) {
       return deposit; // REJECTED is terminal; nothing to resolve.
     }
@@ -252,6 +260,7 @@ export class DepositService {
 
 export function depositFingerprint(input: {
   memberId: string;
+  providerCode: string;
   methodCode: string;
   amountMinor: bigint;
   currency: PaymentCurrency;
@@ -260,6 +269,7 @@ export function depositFingerprint(input: {
     .update(
       JSON.stringify({
         memberId: input.memberId,
+        providerCode: input.providerCode,
         methodCode: input.methodCode,
         amountMinor: input.amountMinor.toString(),
         currency: input.currency,

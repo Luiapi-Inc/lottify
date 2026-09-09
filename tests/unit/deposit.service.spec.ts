@@ -64,6 +64,12 @@ class InMemoryDepositRepository {
     this.byIdempotency.set(idempotencyKeyOf(updated.idempotencyScope, updated.idempotencyKey), updated);
     return updated;
   }
+
+  /** Seeds a pre-existing row (e.g. one left COMPLETED-without-credit by a simulated crash). */
+  seed(deposit: Deposit): void {
+    this.rows.set(deposit.id, deposit);
+    this.byIdempotency.set(idempotencyKeyOf(deposit.idempotencyScope, deposit.idempotencyKey), deposit);
+  }
 }
 
 class RecordingLedgerPort implements DepositLedgerPort {
@@ -204,5 +210,59 @@ describe("DepositService", () => {
     const { service } = depositService({ corridor: { outcome: "APPROVED" } });
     const deposit = await service.initiateDeposit(memberId, { ...baseCommand, idempotencyKey: randomUUID() }, "corr-1");
     await expect(service.getDeposit(randomUUID(), deposit.id)).rejects.toBeInstanceOf(DepositError);
+  });
+
+  it("conflicts when the same key changes providerCode (idempotency scope includes routing)", async () => {
+    const { service } = depositService({ corridor: { outcome: "APPROVED" } });
+    const key = randomUUID();
+    await service.initiateDeposit(memberId, { ...baseCommand, idempotencyKey: key }, "corr-1");
+    await expect(
+      service.initiateDeposit(
+        memberId,
+        { ...baseCommand, providerCode: "another-provider", idempotencyKey: key },
+        "corr-2",
+      ),
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  });
+
+  it("heals a deposit stranded COMPLETED-without-credit to exactly one ledger credit", async () => {
+    const { service, ledger, repository } = depositService({});
+    // Simulate the crash window: the COMPLETED resolve committed but the Ledger
+    // credit + markCredited never ran, leaving a durably COMPLETED deposit with
+    // no ledger reference and no posting.
+    const depositId = randomUUID();
+    repository.seed({
+      id: depositId,
+      memberId,
+      providerId: "corridor",
+      providerCode: "corridor",
+      methodCode: "bank-transfer",
+      amountMinor: 100_00n,
+      currency: "THB",
+      status: "COMPLETED",
+      idempotencyScope: `DEPOSIT_INITIATE:${memberId}`,
+      idempotencyKey: randomUUID(),
+      fingerprint: "x",
+      providerReferenceKey: `dep:${depositId}`,
+      providerTransactionId: "provider-txn-1",
+      requestAttemptId: null,
+      correlationId: "corr-crash",
+      ledgerTransactionId: null,
+      incomingProviderError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const healed = await service.reconcileDeposit(memberId, depositId, "corr-heal");
+    expect(healed.status).toBe("COMPLETED");
+    expect(healed.ledgerTransactionId).toBe("ledger-txn-1");
+    expect(ledger.credits).toHaveLength(1);
+    expect(ledger.credits[0]!.depositId).toBe(depositId);
+    expect(ledger.credits[0]!.amountMinor).toBe(100_00n);
+
+    // a second reconcile is idempotent at the ledger layer: no double credit.
+    const again = await service.reconcileDeposit(memberId, depositId, "corr-heal-2");
+    expect(again.ledgerTransactionId).toBe("ledger-txn-1");
+    expect(ledger.credits).toHaveLength(1);
   });
 });

@@ -303,4 +303,59 @@ describe.runIf(runIntegration)("Member Wallet + Deposit vertical integration", (
     );
     expect(totalNet).toBe(cash?.postedMinor ?? 0n);
   });
+
+  it("heals a deposit stranded COMPLETED-without-credit to exactly one Ledger posting", async () => {
+    const memberId = await createMember();
+    const providerCode = "heal-stranded";
+    providerCodes.add(providerCode);
+    // Simulate the crash window directly at the persistence layer: a deposit row
+    // durably COMPLETED (resolve committed) but with no Ledger reference because
+    // the creditDeposit + markCredited never ran.
+    const depositId = randomUUID();
+    const scope = `DEPOSIT_INITIATE:${memberId}`;
+    const key = randomUUID();
+    await prisma.paymentDeposit.create({
+      data: {
+        id: depositId,
+        memberId,
+        providerId: providerCode,
+        providerCode,
+        methodCode: "bank-transfer",
+        amountMinor: 100_00n,
+        currency: "THB",
+        status: "COMPLETED",
+        idempotencyScope: scope,
+        idempotencyKey: key,
+        fingerprint: "stranded",
+        providerReferenceKey: `dep:${depositId}`,
+        providerTransactionId: "stranded-provider-txn",
+        correlationId: randomUUID(),
+        ledgerTransactionId: null,
+        incomingProviderError: null,
+      },
+    });
+
+    const { service } = depositServiceFor({ [providerCode]: {} });
+    const healed = await service.reconcileDeposit(memberId, depositId, randomUUID());
+    expect(healed.status).toBe("COMPLETED");
+    expect(healed.ledgerTransactionId).not.toBeNull();
+    if (healed.ledgerTransactionId) depositLedgerTransactionIds.push(healed.ledgerTransactionId);
+
+    expect(
+      await prisma.financialTransaction.count({
+        where: { businessTransactionId: depositId, operationType: "DEPOSIT_CREDIT" },
+      }),
+    ).toBe(1);
+    expect((await cashBalance(memberId))?.availableMinor).toBe(100_00n);
+
+    // a second reconcile must not double-post.
+    const again = await service.reconcileDeposit(memberId, depositId, randomUUID());
+    expect(again.ledgerTransactionId).toBe(healed.ledgerTransactionId);
+    expect(
+      await prisma.financialTransaction.count({
+        where: { businessTransactionId: depositId, operationType: "DEPOSIT_CREDIT" },
+      }),
+    ).toBe(1);
+    expect((await cashBalance(memberId))?.availableMinor).toBe(100_00n);
+  });
 });
