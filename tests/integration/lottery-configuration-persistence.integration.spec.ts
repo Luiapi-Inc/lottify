@@ -18,6 +18,8 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
   const betTypeIds: string[] = [];
   const productVersionIds: string[] = [];
   const betTypeVersionIds: string[] = [];
+  const commandScopes: string[] = [];
+  const commandReauthId = randomUUID();
 
   beforeAll(async () => {
     resetEnvironmentForTests();
@@ -79,6 +81,7 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
         await tx.lotteryProduct.deleteMany({ where: { id: { in: productIds } } });
         await tx.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
         await tx.auditRecord.deleteMany({ where: { actorAdminId: adminId } });
+        await tx.idempotencyRecord.deleteMany({ where: { scope: { in: commandScopes } } });
         await tx.$executeRawUnsafe('ALTER TABLE "admin_approval_evidence" DISABLE TRIGGER "admin_approval_evidence_immutable"');
         await tx.adminApprovalEvidence.deleteMany({ where: { approverAdminId: adminId } });
         await tx.$executeRawUnsafe('ALTER TABLE "admin_approval_evidence" ENABLE TRIGGER "admin_approval_evidence_immutable"');
@@ -104,7 +107,7 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
     }
   });
 
-  async function raceFixture() {
+  async function raceFixture(publishBetType = true) {
     const productId = randomUUID();
     const betTypeId = randomUUID();
     const productVersionId = randomUUID();
@@ -128,8 +131,10 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
       defaultPayoutPolicyRef: "payout-v1", defaultLimitPolicyRef: "limit-v1",
       defaultRestrictionPolicyRef: "restriction-v1", effectiveFrom: new Date("2099-01-01T00:00:00Z"),
     } });
-    await prisma.lotteryBetTypeVersion.update({ where: { id: betTypeVersionId }, data: { state: "REVIEW" } });
-    await prisma.lotteryBetTypeVersion.update({ where: { id: betTypeVersionId }, data: { state: "PUBLISHED" } });
+    if (publishBetType) {
+      await prisma.lotteryBetTypeVersion.update({ where: { id: betTypeVersionId }, data: { state: "REVIEW" } });
+      await prisma.lotteryBetTypeVersion.update({ where: { id: betTypeVersionId }, data: { state: "PUBLISHED" } });
+    }
     return { productVersionId, betTypeId, betTypeVersionId };
   }
 
@@ -195,6 +200,129 @@ describe.runIf(runIntegration)("Lottery configuration persistence", () => {
       if (publication) await publication;
     }
   });
+
+  async function publicationCommand(productVersionId: string) {
+    await prisma.lotteryProductVersion.update({ where: { id: productVersionId }, data: { createdByAdminId: makerId } });
+    const actor = { adminId, sessionId, role: "ADMIN" as const };
+    await configuration.submit({ kind: "PRODUCT", id: productVersionId, expectedRevision: 1, actor });
+    // One action-scoped evidence record per session, shared by these fixtures.
+    const reauth = await prisma.adminReauthEvidence.upsert({
+      where: { id: commandReauthId },
+      update: {}, create: { id: commandReauthId, adminUserId: adminId, sessionId, actionClass: "lottery-configuration.publish",
+        verifiedAt: new Date(), expiresAt: new Date("2199-01-01T00:00:00Z") },
+    });
+    const scope = `admin:${adminId}:lottery:PRODUCT:${productVersionId}:approve`;
+    commandScopes.push(scope);
+    const command = { scope, key: randomUUID(), fingerprint: randomUUID(), responseCode: 200 };
+    const publish = (service = configuration) => service.executeCommand(command, () => service.approveAndPublish({
+      kind: "PRODUCT", id: productVersionId, expectedRevision: 2, actor,
+      reauthEvidenceId: reauth.id, correlationId: `race:${productVersionId}`,
+    }));
+    const verify = async (result: unknown) => {
+      expect(await prisma.lotteryProductVersion.findUniqueOrThrow({ where: { id: productVersionId } })).toMatchObject({ state: "PUBLISHED", revision: 3 });
+      const approvals = await prisma.adminApprovalEvidence.findMany({ where: { resourceId: productVersionId } });
+      expect(approvals).toHaveLength(1);
+      expect(approvals[0]).toMatchObject({ requesterAdminId: makerId, approverAdminId: adminId, requestedVersion: 2, reauthEvidenceId: reauth.id });
+      const audits = await prisma.auditRecord.findMany({ where: { resourceId: productVersionId, action: "LOTTERY_PRODUCT_VERSION_PUBLISH" } });
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({ approvalId: approvals[0]!.id, reauthEvidenceId: reauth.id, outcome: "PUBLISHED" });
+      const records = await prisma.idempotencyRecord.findMany({ where: { scope } });
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({ status: "COMPLETED", responseBody: result });
+      expect(await publish()).toEqual(result);
+      expect(await prisma.adminApprovalEvidence.findMany({ where: { resourceId: productVersionId } })).toEqual(approvals);
+      expect(await prisma.auditRecord.findMany({ where: { resourceId: productVersionId, action: "LOTTERY_PRODUCT_VERSION_PUBLISH" } })).toEqual(audits);
+    };
+    return { publish, verify };
+  }
+
+  it.each(["INSERT", "UPDATE", "DELETE", "MOVE_IN", "MOVE_OUT"] as const)(
+    "command publication commits before waiting %s and preserves both parent link sets", async operation => {
+      const target = await raceFixture();
+      const other = await raceFixture();
+      const sourceParent = operation === "MOVE_IN" ? other.productVersionId : target.productVersionId;
+      if (operation !== "INSERT") await prisma.lotteryProductVersionBetType.create({ data: { ...target, productVersionId: sourceParent } });
+      const parentIds = [target.productVersionId, other.productVersionId];
+      const links = () => prisma.lotteryProductVersionBetType.findMany({ where: { productVersionId: { in: parentIds } }, orderBy: [{ productVersionId: "asc" }, { betTypeId: "asc" }] });
+      const original = await links();
+      const command = await publicationCommand(target.productVersionId);
+      let mutation: Promise<PromiseSettledResult<unknown>[]> | undefined;
+      const mutate = async (tx: Prisma.TransactionClient): Promise<unknown> => {
+        const where = { productVersionId: sourceParent, betTypeId: target.betTypeId };
+        if (operation === "INSERT") return tx.lotteryProductVersionBetType.create({ data: target });
+        if (operation === "DELETE") return tx.lotteryProductVersionBetType.deleteMany({ where });
+        return tx.lotteryProductVersionBetType.updateMany({ where, data: operation === "UPDATE"
+          ? { betTypeId: other.betTypeId, betTypeVersionId: other.betTypeVersionId }
+          : { productVersionId: operation === "MOVE_IN" ? target.productVersionId : other.productVersionId } });
+      };
+      // Hold the real command's transaction after result persistence, before commit.
+      const instrumented = new Proxy(prisma, { get(targetPrisma, property) {
+        if (property === "$transaction") return (work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+          targetPrisma.$transaction(async tx => {
+            const result = await work(tx);
+            const [backend] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+            mutation = Promise.allSettled([prisma.$transaction(mutate)]);
+            await waitForBlockedBy(backend!.pid);
+            return result;
+          });
+        return Reflect.get(targetPrisma, property, targetPrisma);
+      } });
+      try {
+        const result = await command.publish(new LotteryConfigurationService(instrumented));
+        const [outcome] = await mutation!;
+        expect(outcome).toMatchObject({ status: "rejected" });
+        if (outcome?.status === "rejected") expect(String(outcome.reason)).toContain("Published Lottery configuration links are immutable");
+        expect(await links()).toEqual(original);
+        expect(await prisma.lotteryProductVersion.findUniqueOrThrow({ where: { id: other.productVersionId } })).toMatchObject({ state: "DRAFT", revision: 1 });
+        await command.verify(result);
+      } finally {
+        if (mutation) await mutation;
+      }
+    },
+  );
+
+  it.each([
+    ["SOURCE", "PUBLISHED"], ["DESTINATION", "PUBLISHED"],
+    ["SOURCE", "DRAFT"], ["DESTINATION", "DRAFT"],
+  ] as const)(
+    "command publication of %s revalidates a moved %s Bet Type after waiting", async (publishedParent, betTypeState) => {
+      const source = await raceFixture(betTypeState === "PUBLISHED");
+      const destination = await raceFixture();
+      await prisma.lotteryProductVersionBetType.create({ data: source });
+      const targetId = publishedParent === "SOURCE" ? source.productVersionId : destination.productVersionId;
+      const command = await publicationCommand(targetId);
+      let publication: Promise<PromiseSettledResult<unknown>[]> | undefined;
+      try {
+        await prisma.$transaction(async tx => {
+          const [backend] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+          expect(await tx.lotteryProductVersionBetType.updateMany({
+            where: { productVersionId: source.productVersionId }, data: { productVersionId: destination.productVersionId },
+          })).toEqual({ count: 1 });
+          publication = Promise.allSettled([command.publish()]);
+          await waitForBlockedBy(backend!.pid);
+        });
+        const [outcome] = await publication!;
+        if (publishedParent === "DESTINATION" && betTypeState === "DRAFT") {
+          expect(outcome).toMatchObject({ status: "rejected", reason: { code: "BET_TYPE_VERSION_NOT_PUBLISHED" } });
+          await expect(command.publish()).rejects.toMatchObject({ code: "BET_TYPE_VERSION_NOT_PUBLISHED" });
+          expect(await prisma.lotteryProductVersion.findUniqueOrThrow({ where: { id: targetId } })).toMatchObject({ state: "REVIEW", revision: 2 });
+          expect(await prisma.adminApprovalEvidence.count({ where: { resourceId: targetId } })).toBe(0);
+          expect(await prisma.auditRecord.count({ where: { resourceId: targetId, action: "LOTTERY_PRODUCT_VERSION_PUBLISH" } })).toBe(0);
+          expect(await prisma.idempotencyRecord.count({ where: { scope: `admin:${adminId}:lottery:PRODUCT:${targetId}:approve` } })).toBe(0);
+        } else {
+          expect(outcome).toMatchObject({ status: "fulfilled", value: { state: "PUBLISHED" } });
+          if (outcome?.status !== "fulfilled") throw new Error("Expected publication after link update");
+          await command.verify(outcome.value);
+        }
+        expect(await prisma.lotteryProductVersionBetType.count({ where: { productVersionId: source.productVersionId } })).toBe(0);
+        const links = await prisma.lotteryProductVersionBetType.findMany({ where: { productVersionId: destination.productVersionId } });
+        expect(links).toHaveLength(1);
+        expect(links[0]).toMatchObject({ betTypeId: source.betTypeId, betTypeVersionId: source.betTypeVersionId });
+      } finally {
+        if (publication) await publication;
+      }
+    },
+  );
 
   it("concurrent approvals publish once with one linked approval and audit record", async () => {
     const link = await raceFixture();

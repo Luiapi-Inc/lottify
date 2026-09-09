@@ -8,6 +8,7 @@ export interface ProcessCommand {
   phase: "before-commit" | "after-commit" | "retry";
   command: { scope: string; key: string; fingerprint: string; responseCode: number };
   code: string;
+  publication?: { kind: "PRODUCT" | "BET_TYPE"; id: string; expectedRevision: number; reauthEvidenceId: string; correlationId: string };
   actor: LotteryConfigurationActor;
 }
 
@@ -32,7 +33,9 @@ process.once("message", async (input: ProcessCommand) => {
   const service = new LotteryConfigurationService(instrumented);
   try {
     const result = await service.executeCommand(input.command, async () => {
-      const resource = await service.createBetType({ code: input.code, actor: input.actor });
+      const resource = input.publication
+        ? await service.approveAndPublish({ ...input.publication, actor: input.actor })
+        : await service.createBetType({ code: input.code, actor: input.actor });
       if (input.phase === "before-commit") {
         process.send!({ phase: "before-commit", resourceId: resource.id, backendPid });
         await new Promise<never>(() => {});
