@@ -328,8 +328,17 @@ export class AdminLotteryConfigurationController {
   ): Promise<unknown> {
     if (!key?.trim()) throw apiError(request, HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Idempotency-Key header is required", { header: "Idempotency-Key" });
     const fingerprint = createHash("sha256").update(canonicalJson(payload), "utf8").digest("hex");
+    // Pre-canonicalization releases hashed the parsed payload in insertion order.
+    // Keep that comparison for durable old records; new writes use the canonical hash.
+    // BigInt payloads could not complete in the old release, so have no legacy hash.
+    let legacyFingerprint: string | undefined;
     try {
-      return await this.configuration.executeCommand({ scope, key: key.trim(), fingerprint, responseCode }, execute);
+      legacyFingerprint = createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex");
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+    }
+    try {
+      return await this.configuration.executeCommand({ scope, key: key.trim(), fingerprint, legacyFingerprint, responseCode }, execute);
     } catch (error) {
       if (error instanceof LotteryConfigurationRuleError) {
         const status = error.code === "IDEMPOTENCY_IN_PROGRESS" || error.code === "VERSION_CONFLICT" || error.code.endsWith("CONFLICT") ? HttpStatus.CONFLICT : error.code === "SELF_APPROVAL_FORBIDDEN" ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST;

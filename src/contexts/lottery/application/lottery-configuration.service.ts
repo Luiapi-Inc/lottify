@@ -53,13 +53,13 @@ export class LotteryConfigurationService {
     return this.prisma.$transaction(tx => this.transactionContext.run(tx, () => work(tx)));
   }
 
-  async executeCommand(input: { scope: string; key: string; fingerprint: string; responseCode: number }, execute: () => Promise<unknown>): Promise<unknown> {
+  async executeCommand(input: { scope: string; key: string; fingerprint: string; legacyFingerprint?: string; responseCode: number }, execute: () => Promise<unknown>): Promise<unknown> {
     return this.transaction(async tx => {
       // Same logical command serializes before reading its durable result.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify([input.scope, input.key])}, 0))::text`;
       const prior = await tx.idempotencyRecord.findUnique({ where: { scope_key: { scope: input.scope, key: input.key } } });
       if (prior) {
-        if (prior.fingerprint !== input.fingerprint) throw new LotteryConfigurationRuleError("IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different payload");
+        if (prior.fingerprint !== input.fingerprint && prior.fingerprint !== input.legacyFingerprint) throw new LotteryConfigurationRuleError("IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different payload");
         if (prior.status === "COMPLETED" && prior.responseBody !== null) return prior.responseBody;
         // Legacy incomplete records need reconciliation; never replay an unknown effect.
         throw new LotteryConfigurationRuleError("IDEMPOTENCY_IN_PROGRESS", "Legacy command requires reconciliation", { status: prior.status });
@@ -67,7 +67,8 @@ export class LotteryConfigurationService {
       const result = await execute();
       const responseBody = JSON.parse(JSON.stringify(result, (_key, value) => typeof value === "bigint" ? value.toString() : value)) as Prisma.InputJsonValue;
       await tx.idempotencyRecord.create({ data: {
-        ...input, status: "COMPLETED", responseBody, expiresAt: new Date("9999-12-31T23:59:59.999Z"),
+        scope: input.scope, key: input.key, fingerprint: input.fingerprint, responseCode: input.responseCode,
+        status: "COMPLETED", responseBody, expiresAt: new Date("9999-12-31T23:59:59.999Z"),
       } });
       return responseBody;
     });
