@@ -1,2 +1,5 @@
-import { redirect } from 'next/navigation';
-export default function Page() { redirect('/lottery'); }
+import OverviewPage from "./control-plane/overview";
+
+export default function AdminOverviewPage() {
+  return <OverviewPage />;
+}
