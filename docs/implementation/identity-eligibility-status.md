@@ -6,11 +6,11 @@ Source of truth: Wayfinder Tickets 01, 02, 06, 10, 11, 16, and 19. This record d
 
 The Member phone + OTP + registration + session/device flow is now implemented as
 domain application services in `identity-access` and `/api/v1/member` REST on the
-codex/member-api-identity branch. Concrete implementation decisions for the
+`main` branch. Concrete implementation decisions for the
 previously-unlocked OTP/Device/session contracts are recorded in
-`docs/implementation/member-identity-decisions.md`. Local typecheck, unit,
-contract, and DB integration evidence pass on that branch. This is checkpoint
-evidence, not milestone acceptance or Production GO.
+`docs/implementation/member-identity-decisions.md`. The Member presentation
+surface from PR #30 is also merged to `main`. These are implementation checkpoints,
+not Identity / Eligibility milestone acceptance or Production GO.
 
 ## Implemented checkpoint
 
@@ -25,7 +25,24 @@ evidence, not milestone acceptance or Production GO.
 - Verification freshness is modeled independently for KYC, phone, device, and payout-destination verification with `verifiedAt`, source/evidence provenance, optional expiry, and an optional reverification-policy reference; explicit expiry is evaluated independently per verification type.
 - Duplicate-account policy now evaluates the locked phone, KYC identity, payout-destination, device, IP/network, and behavior signal set into `ALLOW`, `REVIEW_REQUIRED`, or `BLOCK` without inventing numeric weights or thresholds. Device and IP/network evidence is explicitly non-authoritative for hard blocking, while stronger policy-evaluated signals may block; manual resolution evidence requires both a reason and an Audit reference.
 - Responsible-gaming self-exclusion now produces an immediate Member-owned `BET_BLOCKED` restriction with explicit effective/expiry semantics and traceable policy/evidence reference. KYC/Risk evaluates active self-exclusion as the highest-priority hard eligibility denial, the normal Admin restriction-removal path is denied for self-exclusion, and the restriction does not automatically block an otherwise eligible Withdrawal.
-- No new persistence schema or REST path has been introduced for Device, OTP, or onboarding behavior whose detailed contract is not locked.
+- Member phone identity, OTP challenges, logical Device records, and Member session/device REST operations now have concrete implementation contracts recorded in `member-identity-decisions.md` and implemented by migrations/API code on `main`.
+- Refresh-token reuse revokes the server-authoritative session family; OTP resend cooldown is enforced by the request gate.
+
+## Source-alignment finding on 2026-09-09
+
+The previous status text still listed OTP and Member session/device wire/storage
+contracts as unresolved after Issue 31 had already recorded and implemented those
+decisions. That documentation drift is corrected below. One material requirement
+mismatch remains and is intentionally not hidden by the documentation update:
+
+- Ticket 13 locks the v1 baseline at `OTP verify 10 attempts / challenge`.
+- The current runtime default is `MEMBER_OTP_MAX_ATTEMPTS=5`, and
+  `member-identity-decisions.md` previously described that value as if it matched
+  the Ticket 13 baseline.
+- Because this changes an authentication abuse-control policy, the implementation
+  must be aligned through the existing requirement/decision process and then
+  re-verified with the applicable security evidence before this slice can be
+  accepted.
 
 ## Evidence confirmed on 2026-09-04
 
@@ -46,11 +63,10 @@ GitHub Actions `ci` run `33829850497` on commit `932e47c879715c0f16c1a1b712b8faa
 
 The Wayfinder map declares the engineering specification handoff complete. The following lower-level details are still not explicit enough to implement the affected slices without choosing additional behavior or wire/storage shape. They do not block unrelated Identity / Eligibility work whose behavior is already locked.
 
-1. **OTP operational contract** — Ticket 06 requires purpose-scoped/versioned expiry, attempt limits, resend cooldown, rate limits, old-code invalidation, and anti-enumeration. Ticket 13 additionally locks the baseline limits at OTP request `5 / 15 minutes / phone+IP` and OTP verify `10 attempts / challenge`. Concrete expiry/resend values and the exact policy/wire representation are not stated; Ticket 10 requires explicit purpose-scoped request/verify operations without enumerating their exact REST paths/payloads.
-2. **Logical Device record contract** — Tickets 01/06 require Identity & Access-owned logical Device records and per-device management, but do not lock the canonical Device attributes, device-registration/linkage rules, or the evidence model used for anomalous-device decisions.
+1. **OTP policy alignment/evidence** — Issue 31 resolved the concrete OTP storage and REST shape plus TTL/resend/request-window bindings. The remaining blocker is the `5` versus Ticket 13 `10 attempts / challenge` mismatch described above, plus the required Ticket 16 security/abuse evidence for the final aligned policy.
+2. **Logical Device risk evidence** — Issue 31 resolved the Device persistence and Member session/device management surface. Ticket 06 still requires anomalous-device Risk Signals and policy outcomes (`ALLOW`, `CHALLENGE`, `REAUTH`, `BLOCK`); the evidence model and its end-to-end wiring remain outside the implemented session/device management checkpoint.
 3. **Member onboarding contract** — Tickets 02/06/11 require Terms acceptance, mandatory profile data, and age/jurisdiction eligibility before affected capabilities are enabled, but do not lock the mandatory profile field set, Terms acceptance representation/version contract, or age/jurisdiction evidence rules.
-4. **Sessions/devices external API shape** — Ticket 10 requires first-class Member sessions/devices resources, while the exact operations, paths, request shapes, and response representations are not specified beyond the resource-level requirement.
 
 ## Milestone disposition
 
-The scoped Session foundation remains an implementation checkpoint, and Identity / Eligibility may continue through work packages whose approved behavior is explicit. Slices that depend on the unresolved details above must not invent policy values, resource shapes, or identity-evidence semantics; those details require an explicit implementation decision or Change Request before that affected slice proceeds.
+Member phone authentication and session/device management are implemented checkpoints on `main`; the earlier wire/storage-contract gaps for those operations are no longer open. Identity / Eligibility remains incomplete because the OTP verify-attempt binding is not aligned with Ticket 13, anomalous-device risk behavior and onboarding readiness remain unresolved/unfinished, and Ticket 16 acceptance evidence is not complete. Slices that depend on those gaps must not invent policy values or identity-evidence semantics; any required specification change must be recorded explicitly rather than inferred from the implementation.

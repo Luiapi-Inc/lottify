@@ -36,7 +36,7 @@ describe("member OTP purpose", () => {
 });
 
 describe("member OTP policy binding", () => {
-  it("binds the Ticket 06/13 control values without allowing a bad purpose", () => {
+  it("binds the configured control values without allowing a bad purpose", () => {
     const policy = buildMemberOtpPolicy("LOGIN", {
       codeLength: 6,
       ttlSeconds: 300,

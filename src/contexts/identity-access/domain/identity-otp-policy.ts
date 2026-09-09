@@ -22,10 +22,10 @@ export function newOtpDeliveryId(): string {
   return randomBytes(16).toString("hex");
 }
 
-// Member OTP policy bound by Ticket 06 (purpose/attempt/cooldown/rate controls)
-// and Ticket 13 locked baselines (request 5/15 min per phone+IP; verify attempt
-// cap). Concrete value bindings are made explicit here as an implementation
-// decision for Issue 31 and are not re-derived elsewhere.
+// Member OTP policy implements the Ticket 06 purpose/attempt/cooldown/rate
+// controls. Ticket 13 separately locks the release baselines; the current
+// implementation bindings must be checked against those baselines before
+// acceptance rather than treating an environment default as the requirement.
 export interface MemberOtpPolicy {
   purpose: MemberOtpPurpose;
   codeLength: number;
