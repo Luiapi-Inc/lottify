@@ -1,5 +1,5 @@
-import AccountingPeriodWorkspace from "./accounting-period-workspace";
+import OverviewPage from "./control-plane/overview";
 
-export default function AdminAccountingPeriodPage() {
-  return <AccountingPeriodWorkspace />;
+export default function AdminOverviewPage() {
+  return <OverviewPage />;
 }
