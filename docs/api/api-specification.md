@@ -918,6 +918,56 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 - **Responses:**
   - `201`
 
+<a id="admin--member-terms"></a>
+### `/admin/member-terms`
+
+#### `GET /api/v1/admin/member-terms`
+
+*List Member Terms versions*
+
+| param | in | type | required |
+|---|---|---|---|
+| `state` | query | string | no |
+| `cursor` | query | string | no |
+| `limit` | query | number | no |
+
+- **Responses:**
+  - `200` → `TermsVersionListBody`
+
+#### `POST /api/v1/admin/member-terms`
+
+*Author a DRAFT Member Terms version*
+
+- **Request** `application/json`: `CreateTermsVersionBody`
+
+- **Responses:**
+  - `201` → `TermsVersionBody`
+
+#### `GET /api/v1/admin/member-terms/{id}`
+
+*Read a Member Terms version*
+
+- **Responses:**
+  - `200` → `TermsVersionBody`
+
+#### `POST /api/v1/admin/member-terms/{id}/publish`
+
+*Approve and publish a Member Terms version (fresh MFA required)*
+
+- **Request** `application/json`: `ExpectedRevisionBody`
+
+- **Responses:**
+  - `200` → `TermsVersionBody`
+
+#### `POST /api/v1/admin/member-terms/{id}/retire`
+
+*Retire a published Member Terms version*
+
+- **Request** `application/json`: `ExpectedRevisionBody`
+
+- **Responses:**
+  - `200` → `TermsVersionBody`
+
 <a id="admin--products"></a>
 ### `/admin/products`
 
@@ -1202,10 +1252,12 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 
 ## Schemas
 
-121 component schemas (full definitions in the OpenAPI document).
+132 component schemas (full definitions in the OpenAPI document).
 
 | schema | shape |
 |---|---|
+| `AcceptTermsBody` | object · 9 fields · required: acceptanceId, memberId, documentId, documentCode, documentVersion, contentDigest, source, acceptedAt, alreadyAccepted |
+| `AcceptTermsRequestBody` | object · 1 fields · required: documentId |
 | `AccountingPeriodAcceptedExceptionReferenceBody` | object · 2 fields · required: discrepancyReference, exceptionReference |
 | `AccountingPeriodAcceptedExceptionReferenceResponse` | object · 2 fields · required: discrepancyReference, exceptionReference |
 | `AccountingPeriodCancellationResponse` | object · 1 fields · required: period |
@@ -1262,10 +1314,12 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 | `CreateBetTypeVersionBody` | object · 12 fields · required: version, canonicalNumberFormat, validationPattern, defaultPayout, minStakeMinor, maxStakeMinor |
 | `CreateCustomAccountingPeriodBody` | object · 3 fields · required: startDate, endDate, reason |
 | `CreateProductVersionBody` | object · 12 fields · required: version, timezone, scheduleTemplateRef, resultSchemaVersionRef, settlementRuleVersionRef, defaultPayoutPolicyRef |
+| `CreateTermsVersionBody` | object · 8 fields · required: version, title, body, policyVersion, effectiveFrom |
 | `CreateWithdrawalBody` | object · 3 fields · required: payoutDestinationId, amountMinor, currency |
 | `DepositBody` | object · 10 fields · required: id, memberId, providerCode, methodCode, amountMinor, currency |
 | `DepositInitiateBody` | object · 4 fields · required: providerCode, methodCode, amountMinor, currency |
 | `EnabledBetTypeReferenceBody` | object · 2 fields · required: betTypeId, betTypeVersionId |
+| `ExpectedRevisionBody` | object · 2 fields · required: expectedRevision |
 | `ExpectedVersionBody` | object · 1 fields · required: expectedVersion |
 | `GenerateDrawsBody` | object · 1 fields · required: baseOccurrences |
 | `MemberBetTypeDetailBody` | object · 3 fields · required: id, code, versions |
@@ -1283,11 +1337,13 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 | `MemberProductPageBody` | object · 2 fields · required: items, nextCursor |
 | `MemberProductSummaryBody` | object · 2 fields · required: id, versions |
 | `MemberProductVersionBody` | object · 14 fields · required: id, version, revision, state, effectiveFrom, effectiveUntil |
+| `MemberProfileBody` | object · 9 fields · required: memberId, phone, fullName, dateOfBirth, province, profileUpdatedAt, mandatoryFields, missingMandatoryFields, profileComplete |
 | `MemberRefreshResponse` | object · 1 fields · required: accessToken |
 | `MemberRevokedResponse` | object · 1 fields · required: revoked |
 | `MemberSessionResponse` | object · 4 fields · required: accessToken, memberId, accountCreated, deviceId |
 | `MemberSessionViewBody` | object · 3 fields · required: sessionId, deviceId, expiresAt |
 | `MemberSettlementOutcomeBody` | object · 5 fields · required: orderId, outcome, payoutMinor, batchState, authoritative |
+| `MemberTermsBody` | object · 5 fields · required: memberId, asOf, required, acceptances, satisfied |
 | `NotificationPreferenceBody` | object · 5 fields · required: topic, channel, enabled, version, updatedAt |
 | `NotificationPreferencesBody` | object · 2 fields · required: memberId, items |
 | `Object` | object · 0 fields |
@@ -1315,10 +1371,15 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 | `ReconciliationSourceCheckpointResponse` | object · 8 fields · required: checkpointKey, memberId, currency, asOf, latestLedgerPostingId, latestLedgerPostingAt |
 | `ReconciliationSourceRangeResponse` | object · 2 fields · required: ledgerPostedAt, reservationLifecycle |
 | `ReconciliationTotalsResponse` | object · 3 fields · required: expected, observed, difference |
+| `RequiredTermsBody` | object · 12 fields · required: documentId, code, version, title, body, contentDigest, policyVersion, effectiveFrom, effectiveUntil, accepted, acceptedAt, acceptanceId |
 | `SubmitAccountingPeriodBody` | object · 1 fields · required: expectedVersion |
+| `TermsAcceptanceBody` | object · 8 fields · required: id, memberId, documentId, documentCode, documentVersion, contentDigest, source, acceptedAt |
+| `TermsVersionBody` | object · 16 fields · required: id, code, version, revision, state, title, body, contentDigest, policyVersion, effectiveFrom, effectiveUntil, reason, publishedAt, approvalEvidenceRef, createdAt, updatedAt |
+| `TermsVersionListBody` | object · 2 fields · required: items, nextCursor |
 | `TransitionBody` | object · 2 fields · required: command, expectedVersion |
 | `TurnoverEntryBody` | object · 5 fields · required: betReference, entryKind, state, contributionMinor, occurredAt |
 | `TurnoverProgressBody` | object · 6 fields · required: provisionalMinor, finalizedMinor, progressMinor, targetMinor, remainingMinor, releaseReached |
+| `UpdateMemberProfileBody` | object · 3 fields |
 | `UpdateNotificationPreferencesBody` | object · 1 fields · required: preferences |
 | `WalletBalanceBody` | object · 4 fields · required: memberId, currency, dataAsOf, buckets |
 | `WalletBucketBody` | object · 4 fields · required: bucket, postedMinor, reservedMinor, availableMinor |
