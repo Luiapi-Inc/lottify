@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lottify — โปรโมชั่นและยอดเล่น</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <link rel="stylesheet" href="assets/promotion-turnover.css" />
+</head>
+<body data-page="home">
+  <a class="skip-link" href="#main">ข้ามไปเนื้อหา</a>
+  <main id="main">
+    <div class="breadcrumb"><a href="index.html">หน้าแรก</a><span>/</span><span>โปรโมชั่น</span></div>
+    <div class="page-head promotion-page-head">
+      <div>
+        <p class="pt-eyebrow">สิทธิ์โบนัสของฉัน</p>
+        <h1>โปรโมชั่นและยอดเล่น</h1>
+        <p>ดูโบนัสคงเหลือ ยอดเล่นที่ยืนยันแล้ว ยอดชั่วคราว ขอบเขตที่ใช้ได้ วันหมดอายุ และเงื่อนไขของสิทธิ์แต่ละรายการ</p>
+      </div>
+      <a class="button secondary" href="wallet.html">ดูกระเป๋า</a>
+    </div>
+
+    <section class="pt-balance-strip" aria-label="สรุปโบนัส">
+      <div><span>โบนัสคงเหลือ</span><strong>80.00 <small>บาท</small></strong></div>
+      <div><span>ยอดเล่นยืนยันแล้ว</span><strong>2,500 <small>/ 5,000 บาท</small></strong></div>
+      <div><span>ยอดเล่นชั่วคราว</span><strong class="pt-provisional-number">+320 <small>บาท</small></strong></div>
+      <div><span>หมดอายุ</span><strong>30 ก.ย. 2569</strong></div>
+    </section>
+
+    <div class="pt-layout">
+      <section class="pt-entitlement-card" aria-labelledby="promo-welcome-title">
+        <div class="pt-card-top">
+          <div>
+            <div class="pt-title-row">
+              <span class="pt-gift-mark" aria-hidden="true">✦</span>
+              <div>
+                <p class="pt-card-kicker">สิทธิ์ที่กำลังใช้งาน</p>
+                <h2 id="promo-welcome-title">สมาชิกใหม่ · โบนัส 100 บาท</h2>
+              </div>
+            </div>
+            <p class="pt-card-copy">ตัวอย่างข้อมูลสิทธิ์นี้แสดงเงื่อนไขที่ถูกบันทึกไว้ตอนคุณได้รับสิทธิ์ การเปลี่ยนเงื่อนไขของแคมเปญภายหลังจะไม่แก้ประวัติของสิทธิ์นี้</p>
+          </div>
+          <span class="status success">กำลังใช้งาน</span>
+        </div>
+
+        <div class="pt-progress-block" aria-labelledby="turnover-progress-title">
+          <div class="pt-progress-heading">
+            <div>
+              <span id="turnover-progress-title">ยอดเล่นที่ยืนยันแล้ว</span>
+              <strong>2,500 / 5,000 บาท</strong>
+            </div>
+            <strong class="pt-percent">50%</strong>
+          </div>
+          <div class="pt-progress-track" role="progressbar" aria-label="ยอดเล่นที่ยืนยันแล้ว" aria-valuemin="0" aria-valuemax="5000" aria-valuenow="2500">
+            <span style="width:50%"></span>
+          </div>
+          <div class="pt-provisional-callout">
+            <span class="pt-dot" aria-hidden="true"></span>
+            <div><strong>อีก 320 บาทเป็นยอดชั่วคราว</strong><span>เกิดจากรายการที่ยืนยันแล้วแต่ยังไม่ถึงผลสิ้นสุด จึงยังไม่รวมใน 50% ด้านบน</span></div>
+            <button type="button" class="pt-text-button" data-pt-open="history">ดูที่มา</button>
+          </div>
+        </div>
+
+        <div class="pt-segmented" role="tablist" aria-label="รายละเอียดโปรโมชั่น">
+          <button id="pt-tab-summary" class="pt-segment active" type="button" role="tab" aria-selected="true" aria-controls="pt-panel-summary" data-pt-tab="summary">ภาพรวม</button>
+          <button id="pt-tab-scope" class="pt-segment" type="button" role="tab" aria-selected="false" aria-controls="pt-panel-scope" data-pt-tab="scope">ใช้กับอะไรได้</button>
+          <button id="pt-tab-history" class="pt-segment" type="button" role="tab" aria-selected="false" aria-controls="pt-panel-history" data-pt-tab="history">ประวัติยอดเล่น</button>
+        </div>
+
+        <div class="pt-tab-panels">
+          <section id="pt-panel-summary" class="pt-tab-panel" role="tabpanel" aria-labelledby="pt-tab-summary" data-pt-panel="summary">
+            <div class="pt-fact-grid">
+              <div class="pt-fact"><span>โบนัสคงเหลือ</span><strong>80.00 บาท</strong><small>โบนัสไม่รวมในยอดที่ถอนได้โดยตรง</small></div>
+              <div class="pt-fact"><span>เป้าหมายยอดเล่น</span><strong>5,000 บาท</strong><small>นับจากยอดที่ผ่านเงื่อนไขและยืนยันแล้ว</small></div>
+              <div class="pt-fact"><span>หมดอายุ</span><strong>30 ก.ย. 2569</strong><small>โบนัสที่ยังเหลือและผูกกับสิทธิ์นี้อาจถูกนำออกเมื่อหมดอายุ</small></div>
+              <div class="pt-fact"><span>เงินรางวัลจากส่วน BONUS</span><strong>เข้า BONUS</strong><small>ใช้กติกาที่บันทึกไว้กับสิทธิ์นี้ ไม่อิงเงื่อนไขแคมเปญเวอร์ชันใหม่</small></div>
+            </div>
+
+            <div class="notice info pt-notice">
+              <b>i</b>
+              <div><strong>ทำยอดครบยังไม่เท่ากับถอนได้ทันที</strong>เมื่อยอดเล่นที่ยืนยันแล้วถึงเป้า สิทธิ์จะเสร็จสมบูรณ์หลังการเปลี่ยนมูลค่าที่เข้าเงื่อนไขจาก BONUS เป็น CASH สำเร็จเท่านั้น</div>
+            </div>
+
+            <section class="pt-lifecycle" aria-labelledby="pt-lifecycle-title">
+              <div class="pt-section-title"><div><p>วงจรของสิทธิ์</p><h3 id="pt-lifecycle-title">จากได้รับโบนัสจนเงื่อนไขสมบูรณ์</h3></div></div>
+              <ol class="pt-flow">
+                <li class="done"><span>1</span><div><strong>ได้รับสิทธิ์</strong><small>เงื่อนไขของสิทธิ์ถูกบันทึกไว้สำหรับสมาชิกคนนี้</small></div></li>
+                <li class="current"><span>2</span><div><strong>กำลังทำยอด</strong><small>รายการที่ยืนยันและเข้าเงื่อนไขเริ่มเป็นยอดชั่วคราว</small></div></li>
+                <li><span>3</span><div><strong>ยืนยันยอดเล่น</strong><small>ผลสิ้นสุดที่ไม่ถูกคืนเงินจึงเปลี่ยนส่วนที่เข้าเงื่อนไขเป็นยอดยืนยันแล้ว</small></div></li>
+                <li><span>4</span><div><strong>เปลี่ยน BONUS → CASH</strong><small>เมื่อถึงเป้า ระบบรอผลการเปลี่ยนมูลค่าที่มีผลจริงก่อนถือว่าสิทธิ์เสร็จสมบูรณ์</small></div></li>
+              </ol>
+            </section>
+          </section>
+
+          <section id="pt-panel-scope" class="pt-tab-panel" role="tabpanel" aria-labelledby="pt-tab-scope" data-pt-panel="scope" hidden>
+            <div class="pt-section-title">
+              <div><p>ขอบเขตของสิทธิ์ตัวอย่างนี้</p><h3>Products และ Bet Types ที่เข้าเงื่อนไข</h3></div>
+              <a class="text-link" href="buy.html">ไปหน้าซื้อหวย →</a>
+            </div>
+            <div class="pt-scope-list">
+              <article><div class="lottery-icon th">TH</div><div><strong>สลากกินแบ่งรัฐบาล</strong><span>3 ตัวตรง · 2 ตัวบน</span></div><span class="status success">ใช้ได้</span></article>
+              <article><div class="lottery-icon la">LA</div><div><strong>หวยลาวพัฒนา</strong><span>3 ตัวตรง</span></div><span class="status success">ใช้ได้</span></article>
+              <article><div class="lottery-icon vn">VN</div><div><strong>ฮานอยพิเศษ</strong><span>3 ตัวตรง</span></div><span class="status success">ใช้ได้</span></article>
+            </div>
+            <div class="notice warning pt-notice"><b>!</b><div><strong>รายการนอกขอบเขตนี้ไม่สร้างยอดเล่นให้สิทธิ์นี้</strong>ตอนยืนยันโพย ระบบใช้ Product, Bet Type, แหล่งเงิน และเงื่อนไขที่บันทึกไว้กับสิทธิ์เพื่อคำนวณส่วนที่เข้าเงื่อนไข</div></div>
+          </section>
+
+          <section id="pt-panel-history" class="pt-tab-panel" role="tabpanel" aria-labelledby="pt-tab-history" data-pt-panel="history" hidden>
+            <div class="pt-section-title">
+              <div><p>ประวัติที่เก็บย้อนหลัง</p><h3>ยอดชั่วคราว ยอดยืนยัน และการปรับแก้</h3></div>
+              <a class="text-link" href="slips.html">ดูโพยของฉัน →</a>
+            </div>
+            <ol class="pt-history" aria-label="ประวัติยอดเล่นของโปรโมชั่น">
+              <li>
+                <div class="pt-history-icon provisional" aria-hidden="true">…</div>
+                <div><strong>รายการ ORD-843201 เพิ่มยอดชั่วคราว +150 บาท</strong><span>10 ก.ย. 11:31 · ยืนยันโพยแล้ว และรายการอยู่ระหว่างรอผลสิ้นสุด</span></div>
+                <span class="pt-history-amount provisional">+150</span>
+              </li>
+              <li>
+                <div class="pt-history-icon removed" aria-hidden="true">↩</div>
+                <div><strong>ยกเลิกและคืนเงิน · เอายอดชั่วคราวออก −150 บาท</strong><span>10 ก.ย. 11:36 · ประวัติรายการเดิมยังอยู่และแสดงการนำยอดชั่วคราวออกเป็นเหตุการณ์ถัดมา</span></div>
+                <span class="pt-history-amount removed">−150</span>
+              </li>
+              <li>
+                <div class="pt-history-icon final" aria-hidden="true">✓</div>
+                <div><strong>รายการ ORD-842955 ยืนยันยอดเล่น +2,600 บาท</strong><span>9 ก.ย. 20:31 · รายการถึงผลสิ้นสุดโดยไม่ถูกคืนเงิน จึงถูกนับเป็นยอดยืนยันแล้ว</span></div>
+                <span class="pt-history-amount final">+2,600</span>
+              </li>
+              <li>
+                <div class="pt-history-icon correction" aria-hidden="true">±</div>
+                <div><strong>ปรับแก้ยอดเล่น −100 บาท</strong><span>9 ก.ย. 20:49 · การแก้ไขถูกเพิ่มเป็น adjustment ใหม่ อ้างถึงผลเดิม โดยไม่แก้หรือลบรายการ +2,600 บาท</span></div>
+                <span class="pt-history-amount correction">−100</span>
+              </li>
+              <li>
+                <div class="pt-history-icon provisional" aria-hidden="true">…</div>
+                <div><strong>รายการล่าสุดรอผล +320 บาท</strong><span>ยอดนี้ยังเป็นชั่วคราวและยังไม่รวมในยอดยืนยันแล้ว 2,500 บาท</span></div>
+                <span class="pt-history-amount provisional">+320</span>
+              </li>
+            </ol>
+
+            <div class="pt-history-total">
+              <div><span>ยอดยืนยันแล้วปัจจุบัน</span><strong>2,600 − 100 = 2,500 บาท</strong></div>
+              <div><span>ยอดชั่วคราวปัจจุบัน</span><strong>320 บาท</strong></div>
+            </div>
+
+            <div class="notice info pt-notice"><b>i</b><div><strong>Correction ไม่เขียนทับประวัติ</strong>ถ้าผลภายหลังเปลี่ยน ระบบเพิ่มรายการปรับแก้ชดเชยต่อจากข้อเท็จจริงเดิม คุณจึงเห็นทั้งผลเดิม เหตุผลการปรับ และยอดปัจจุบันตามลำดับ</div></div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="pt-side-stack">
+        <section class="pt-side-card">
+          <div class="pt-section-title"><div><p>สถานะยอดเล่น</p><h3>ต่างกันอย่างไร?</h3></div></div>
+          <div class="pt-legend-row"><span class="pt-legend-dot provisional"></span><div><strong>ชั่วคราว</strong><span>เกิดหลังยืนยันรายการที่เข้าเงื่อนไข แต่ยังรอผลสิ้นสุด ยกเลิกหรือคืนเงินแล้วส่วนนี้ถูกนำออก</span></div></div>
+          <div class="pt-legend-row"><span class="pt-legend-dot final"></span><div><strong>ยืนยันแล้ว</strong><span>มาจากรายการที่ถึงผลสิ้นสุดและไม่ถูกคืนเงิน ใช้คำนวณความคืบหน้าสู่เป้าหมาย</span></div></div>
+          <div class="pt-legend-row"><span class="pt-legend-dot correction"></span><div><strong>ปรับแก้</strong><span>เพิ่มหรือลดยอดด้วยเหตุการณ์ชดเชย โดยเก็บประวัติเดิมไว้</span></div></div>
+        </section>
+
+        <section class="pt-side-card pt-expiry-card">
+          <div class="pt-expiry-icon" aria-hidden="true">⌛</div>
+          <div><p>หมดอายุ 30 ก.ย. 2569</p><h3>รายการที่ยืนยันแล้วจะไม่ถูกดึงโบนัสกลับกลางทาง</h3><span>เมื่อสิทธิ์หมดอายุ ระบบนำออกเฉพาะ BONUS ที่ยังเหลือและไม่ได้ถูกใช้/พักไว้ในรายการที่ยืนยันแล้ว ส่วนรายการที่อยู่ระหว่างดำเนินการใช้เงื่อนไขเดิมจนจบ</span></div>
+        </section>
+
+        <section class="pt-side-card">
+          <div class="pt-section-title"><div><p>โปรโมชั่นอื่น</p><h3>คืนยอดเล่นประจำสัปดาห์</h3></div><span class="status info">กำลังคำนวณ</span></div>
+          <div class="pt-mini-metrics"><div><span>ยอดเบื้องต้น</span><strong>3,820 บาท</strong></div><div><span>ยอดยืนยันแล้ว</span><strong>2,950 บาท</strong></div></div>
+          <p class="pt-side-copy">ยอดเบื้องต้นยังอาจเปลี่ยนจากการยกเลิก คืนเงิน หรือการปรับแก้ ก่อนรอบถูกยืนยันตามเงื่อนไขของสิทธิ์</p>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <script src="assets/app.js"></script>
+  <script src="assets/promotion-turnover.js"></script>
+</body>
+</html>

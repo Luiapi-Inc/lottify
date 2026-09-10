@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lottify — ความปลอดภัย</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body data-page="account">
+  <main id="main">
+    <div class="breadcrumb"><a href="account.html">บัญชี</a><span>/</span><span>ความปลอดภัย</span></div>
+    <div class="page-head">
+      <div>
+        <h1>ความปลอดภัย</h1>
+        <p>ตรวจอุปกรณ์ที่เข้าใช้งาน ออกจากระบบรายอุปกรณ์ ออกจากระบบทั้งหมด และเริ่มกู้คืนบัญชีเมื่อจำเป็น</p>
+      </div>
+      <button class="button danger" type="button" data-security-action="logout-all">ออกจากระบบทุกอุปกรณ์</button>
+    </div>
+
+    <section class="grid-2">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-title"><h2>อุปกรณ์และการเข้าสู่ระบบ</h2><span id="session-count" class="status success">3 เซสชัน</span></div>
+          <div class="notice warning security-device-alert">
+            <b>!</b>
+            <div>
+              <strong>มีการเข้าสู่ระบบจาก Chrome on Android วันนี้ 08:10</strong>
+              หากเป็นคุณไม่ต้องทำอะไร หากไม่ใช่คุณให้ออกจากระบบอุปกรณ์นั้นและยืนยันตัวตนอีกครั้ง
+            </div>
+          </div>
+          <div class="device-list" data-device-list>
+            <div class="device-row" data-device-row="current">
+              <div class="device-icon">PC</div>
+              <div><strong>Hermes Desktop · อุปกรณ์นี้</strong><span>กรุงเทพฯ · ใช้งานล่าสุดเมื่อสักครู่</span></div>
+              <span class="status success">ปัจจุบัน</span>
+            </div>
+            <div class="device-row" data-device-row="android">
+              <div class="device-icon">MB</div>
+              <div><strong>Chrome on Android</strong><span>กรุงเทพฯ · 10 ก.ย. 08:10</span></div>
+              <button class="button danger" type="button" data-security-action="revoke" data-device="Chrome on Android" data-device-id="android">ออกจากระบบ</button>
+            </div>
+            <div class="device-row" data-device-row="ipad">
+              <div class="device-icon">TB</div>
+              <div><strong>Safari on iPad</strong><span>ปทุมธานี · 8 ก.ย. 19:44</span></div>
+              <button class="button danger" type="button" data-security-action="revoke" data-device="Safari on iPad" data-device-id="ipad">ออกจากระบบ</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="stack">
+        <section class="panel">
+          <div class="panel-title"><h2>การยืนยันสำหรับรายการสำคัญ</h2></div>
+          <div class="notice info"><b>i</b><div><strong>ระบบอาจขอ OTP หรือยืนยันซ้ำ</strong>ใช้สำหรับเปลี่ยนข้อมูลสำคัญ ถอนเงิน และจัดการอุปกรณ์ ตามสิทธิ์ที่คุณยังเข้าถึงได้</div></div>
+        </section>
+        <section class="panel" id="recovery">
+          <div class="panel-title"><h2>กู้คืนบัญชี</h2></div>
+          <p class="muted small" style="line-height:1.8">หากเข้าถึงเบอร์โทรเดิมไม่ได้ สามารถเริ่มคำขอกู้คืน ระบบจะขอข้อมูลหรือหลักฐานที่จำเป็นตามสถานการณ์ การยืนยันเบอร์ใหม่เพียงอย่างเดียวไม่ถือว่ากู้คืนสำเร็จ</p>
+          <button class="button secondary block" type="button" style="margin-top:14px" data-security-action="recovery">เริ่มคำขอกู้คืนบัญชี</button>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <div class="security-overlay" data-security-overlay hidden>
+    <section class="security-sheet" role="dialog" aria-modal="true" aria-labelledby="security-flow-title">
+      <button class="security-sheet-close" type="button" aria-label="ปิด" data-security-close>×</button>
+
+      <div class="security-flow-state" data-security-review>
+        <span class="security-step">ตรวจสอบรายการ</span>
+        <h2 id="security-flow-title" data-security-title>ยืนยันรายการ</h2>
+        <p data-security-copy></p>
+        <div class="notice warning" data-security-note><b>!</b><div><strong>รายการสำคัญ</strong><span data-security-note-copy></span></div></div>
+        <div class="security-sheet-actions">
+          <button class="button secondary" type="button" data-security-close>ยกเลิก</button>
+          <button class="button primary" type="button" data-security-start>ยืนยันตัวตน</button>
+        </div>
+      </div>
+
+      <div class="security-flow-state" data-security-verify hidden>
+        <span class="security-step">ขั้นตอนยืนยันตัวตน</span>
+        <h2>ยืนยันว่าเป็นคุณ</h2>
+        <p>กรอกรหัส OTP 6 หลักที่ส่งไปยังเบอร์โทรที่ยืนยันไว้ รหัสใช้ได้ครั้งเดียว</p>
+        <div class="otp-grid security-otp" data-security-otp>
+          <input inputmode="numeric" maxlength="1" aria-label="OTP หลักที่ 1" />
+          <input inputmode="numeric" maxlength="1" aria-label="OTP หลักที่ 2" />
+          <input inputmode="numeric" maxlength="1" aria-label="OTP หลักที่ 3" />
+          <input inputmode="numeric" maxlength="1" aria-label="OTP หลักที่ 4" />
+          <input inputmode="numeric" maxlength="1" aria-label="OTP หลักที่ 5" />
+          <input inputmode="numeric" maxlength="1" aria-label="OTP หลักที่ 6" />
+        </div>
+        <div class="field-error" data-security-error></div>
+        <div class="security-sheet-actions">
+          <button class="button secondary" type="button" data-security-back>ย้อนกลับ</button>
+          <button class="button primary" type="button" data-security-verify-button>ยืนยันและดำเนินการ</button>
+        </div>
+      </div>
+
+      <div class="security-flow-state security-flow-success" data-security-success hidden>
+        <div class="security-success-icon">✓</div>
+        <span class="security-step">ดำเนินการสำเร็จ</span>
+        <h2 data-security-success-title>เรียบร้อยแล้ว</h2>
+        <p data-security-success-copy></p>
+        <div class="security-reference" data-security-reference hidden></div>
+        <div class="security-sheet-actions">
+          <button class="button primary block" type="button" data-security-done>เสร็จสิ้น</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>

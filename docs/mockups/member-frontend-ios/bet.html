@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Lottify — ใส่เลขและจำนวนเงิน</title><link rel="stylesheet" href="assets/styles.css" /></head>
+<body data-page="buy">
+  <main id="main">
+    <div class="breadcrumb"><a href="index.html">หน้าแรก</a><span>/</span><a href="buy.html">ซื้อหวย</a><span>/</span><span>ใส่เลข</span></div>
+    <div class="page-head"><div><h1>สลากกินแบ่งรัฐบาล · งวด 16 ก.ย. 2569</h1><p>เลือกประเภท ใส่เลขและจำนวนเงิน ระบบจะรวมรายการที่ซ้ำกันก่อนสร้าง Quote</p></div><div class="countdown"><small>ปิดรับใน</small><span data-countdown="7234">02:00:34</span></div></div>
+    <div class="stepper"><div class="step done"><strong>1 · เลือกงวด</strong>เลือกแล้ว</div><div class="step active"><strong>2 · ใส่เลข</strong>กำลังกรอก</div><div class="step"><strong>3 · ตรวจ Quote</strong>รอสร้าง</div><div class="step"><strong>4 · ยืนยัน</strong>รับใบรับรายการ</div></div>
+    <section class="grid-2">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-title"><h2>เพิ่มรายการ</h2><span class="status success">เปิดรับ</span></div>
+          <form data-bet-builder>
+            <div class="form-grid">
+              <div class="field"><label for="bet-type">ประเภท</label><select id="bet-type" class="select"><option>3 ตัวตรง · จ่าย x900</option><option>3 ตัวโต๊ด · จ่าย x150</option><option>2 ตัวบน · จ่าย x95</option><option>2 ตัวล่าง · จ่าย x95</option></select><div class="hint">อัตราจ่ายสุดท้ายจะยืนยันอีกครั้งตอน Quote · รูดหน้า/หลังใช้กับประเภท 2 ตัว</div></div>
+              <div class="field number-entry"><label for="bet-number">เลข</label><input id="bet-number" class="input large" inputmode="numeric" maxlength="3" placeholder="" autocomplete="off" /><div class="number-keypad" data-number-keypad aria-label="แป้นตัวเลขสำหรับกรอกเลข"><button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button><button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button type="button" class="keypad-action" data-key-action="clear">ล้าง</button><button type="button" data-key="0">0</button><button type="button" class="keypad-action keypad-delete" data-key-action="backspace" aria-label="ลบตัวเลขล่าสุด">⌫</button></div><div class="hint keypad-hint">แตะตัวเลขเพื่อกรอกได้ทันที หรือพิมพ์จากคีย์บอร์ดตามปกติ</div><div id="bet-error" class="field-error"></div></div>
+              <div class="field"><label for="bet-amount">จำนวนเงินต่อรายการ</label><input id="bet-amount" class="input" type="number" min="10" value="100" /><div class="amount-chips" data-amount-group data-amount-target="bet-amount"><button class="chip-btn" type="button" data-amount="20">20</button><button class="chip-btn" type="button" data-amount="50">50</button><button class="chip-btn active" type="button" data-amount="100">100</button><button class="chip-btn" type="button" data-amount="500">500</button></div><button class="button secondary block apply-all-button" type="button" data-apply-amount-all>ใช้จำนวนนี้กับทุกเลข</button></div>
+              <div class="field"><label>ตัวช่วย</label><div class="amount-chips helper-actions"><button class="chip-btn" type="button" data-helper="reverse">กลับเลข</button><button class="chip-btn" type="button" data-helper="permute">สลับเลข</button><button class="chip-btn" type="button" data-helper="run-front">รูดหน้า</button><button class="chip-btn" type="button" data-helper="run-back">รูดหลัง</button></div><div id="helper-feedback" class="hint">ตัวช่วยจะแตกเป็นเลขจริงและแสดงใน “รายการของคุณ” ก่อน Quote</div></div>
+              <div class="field full bulk-entry"><label for="bet-bulk">เพิ่มหลายเลข</label><textarea id="bet-bulk" class="input bulk-input" rows="3" placeholder="วางเลขคั่นด้วยเว้นวรรค จุลภาค หรือขึ้นบรรทัดใหม่ เช่น 007 125 908"></textarea><div class="bulk-entry-actions"><div class="hint">ระบบเก็บเลขศูนย์นำหน้า เช่น 007 และรวมเลขซ้ำให้เห็นเป็นรายการเดียว</div><button class="button secondary" type="button" data-add-bulk>เพิ่มหลายเลข</button></div></div>
+              <div class="field full"><button class="button primary block" type="submit">+ เพิ่มลงโพย</button></div>
+            </div>
+          </form>
+        </section>
+        <section class="panel">
+          <div class="panel-title"><h2>รายการของคุณ</h2><span id="bet-count" class="status neutral">0 รายการ</span></div>
+          <div id="bet-lines" class="bet-lines"></div>
+        </section>
+      </div>
+      <aside class="stack">
+        <section class="summary-box">
+          <div class="summary-row"><span>ยอดรายการ</span><strong data-bet-total>0 บาท</strong></div>
+          <div class="summary-row"><span>เงินสดที่ใช้ได้</span><strong>12,450.00 บาท</strong></div>
+          <div class="summary-row"><span>โบนัสที่ใช้ได้กับงวดนี้</span><strong>80.00 บาท</strong></div>
+          <div class="summary-row total"><span>ประมาณการยอดซื้อ</span><span data-bet-total>150 บาท</span></div>
+          <a class="button lime block" href="quote.html" style="margin-top:12px">สร้าง Quote และตรวจรายการ →</a>
+        </section>
+        <section class="notice warning"><b>!</b><div><strong>เลขอั้นและข้อจำกัด</strong>ระบบจะตรวจ restriction และ exposure ล่าสุดตอนสร้าง Quote และตรวจซ้ำก่อน Confirm</div></section>
+      </aside>
+    </section>
+  </main>
+  <script src="assets/app.js"></script>
+</body></html>

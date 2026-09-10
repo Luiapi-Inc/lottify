@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lottify — หน้าแรก</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body data-page="home">
+  <a class="skip-link" href="#main">ข้ามไปเนื้อหา</a>
+  <main id="main">
+    <div class="wallet-hero">
+      <div class="wallet-hero-top">
+        <h2>ยอดเงินในกระเป๋า</h2>
+        <a class="button ghost" href="wallet.html">จัดการกระเป๋า →</a>
+      </div>
+      <div class="wallet-grid">
+        <div class="wallet-cell"><div class="wallet-label">เงินสด</div><div class="wallet-amount">12,450.00<small>บาท</small></div><div class="wallet-actions"><a class="button secondary" href="deposit.html">เติมเงิน</a></div></div>
+        <div class="wallet-cell"><div class="wallet-label">โบนัส</div><div class="wallet-amount">300.00<small>บาท</small></div><div class="wallet-actions"><a class="button secondary" href="promotions.html">ดูเงื่อนไข</a></div></div>
+        <div class="wallet-cell"><div class="wallet-label">ยอดที่พักไว้</div><div class="wallet-amount">120.00<small>บาท</small></div><div class="wallet-actions"><a class="button secondary" href="wallet.html">ดูรายละเอียด</a></div></div>
+        <div class="wallet-cell"><div class="wallet-label">ถอนออกได้</div><div class="wallet-amount">12,330.00<small>บาท</small></div><div class="wallet-actions"><a class="button lime" href="withdraw.html">ถอนเงิน</a></div></div>
+      </div>
+    </div>
+
+    <section class="grid-2" style="margin-top:18px">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-title"><h2>งวดที่เปิดรับ</h2><a href="buy.html">ดูทั้งหมด →</a></div>
+          <div class="draw-list">
+            <div class="draw-row"><div class="lottery-icon th">TH</div><div class="draw-name"><strong>สลากกินแบ่งรัฐบาล</strong><span>งวดวันที่ 16 ก.ย. 2569 · ปิดรับ 15:15 น.</span></div><div class="countdown"><small>ปิดรับใน</small><span data-countdown="7234">02:00:34</span></div><a class="button primary" href="bet.html">ซื้อเลย</a></div>
+            <div class="draw-row"><div class="lottery-icon la">LA</div><div class="draw-name"><strong>หวยลาวพัฒนา</strong><span>งวดวันนี้ · ปิดรับ 20:00 น.</span></div><div class="countdown"><small>ปิดรับใน</small><span data-countdown="18840">05:14:00</span></div><a class="button primary" href="bet.html">ซื้อเลย</a></div>
+            <div class="draw-row"><div class="lottery-icon vn">VN</div><div class="draw-name"><strong>ฮานอยพิเศษ</strong><span>งวดวันนี้ · ปิดรับ 17:15 น.</span></div><div class="countdown"><small>ปิดรับใน</small><span data-countdown="8460">02:21:00</span></div><a class="button primary" href="bet.html">ซื้อเลย</a></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title"><h2>โพยล่าสุดของฉัน</h2><a href="slips.html">ดูทั้งหมด →</a></div>
+          <div class="activity-list">
+            <div class="activity-row"><span>10 ก.ย. 11:08</span><div><strong>สลากกินแบ่งรัฐบาล</strong><span class="small muted">312 · 2 รายการ</span></div><strong>200.00 บาท</strong><span class="status info">รอผล</span></div>
+            <div class="activity-row"><span>10 ก.ย. 09:42</span><div><strong>หวยลาวพัฒนา</strong><span class="small muted">27 · 1 รายการ</span></div><strong>100.00 บาท</strong><span class="status info">รอผล</span></div>
+            <div class="activity-row"><span>9 ก.ย. 20:15</span><div><strong>ฮานอยพิเศษ</strong><span class="small muted">640 · 3 รายการ</span></div><strong>300.00 บาท</strong><span class="status success">ถูกรางวัล</span></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="promo-card">
+          <div class="panel-title"><h2>โปรโมชั่น</h2><a href="promotions.html">ดูทั้งหมด →</a></div>
+          <strong>สมาชิกใหม่ รับโบนัส 100 บาท</strong>
+          <p class="muted small">โบนัสคงเหลือ 80 บาท · หมดอายุ 30 ก.ย. 2569</p>
+          <div class="progress"><span style="width:50%"></span></div>
+          <div class="progress-meta"><span>ทำยอดแล้ว 2,500 บาท</span><strong>50%</strong></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title"><h2>ทำรายการต่อ</h2></div>
+          <div class="menu-row"><div class="menu-icon">S</div><div><strong>สลากกินแบ่งรัฐบาล</strong><span>1 โพย · 6 รายการที่เตรียมไว้</span></div><a class="button primary" href="bet.html">ทำรายการต่อ</a></div>
+        </section>
+
+        <section class="panel" id="alerts">
+          <div class="panel-title"><h2>การแจ้งเตือนสำคัญ</h2></div>
+          <div class="alert-list">
+            <div class="alert-row"><div class="alert-icon danger">!</div><div><strong>ใกล้ปิดรับสลากกินแบ่งรัฐบาล</strong><span>งวด 16 ก.ย. ปิดรับในอีกประมาณ 2 ชั่วโมง</span></div><span class="small muted">วันนี้</span></div>
+            <div class="alert-row"><div class="alert-icon">i</div><div><strong>ยืนยันตัวตนเพื่อใช้งานการถอนเงิน</strong><span>ทำให้เรียบร้อยก่อนส่งคำขอถอนครั้งถัดไป</span></div><a class="text-link" href="kyc.html">ไปยืนยันตัวตน</a></div>
+            <div class="alert-row"><div class="alert-icon success">✓</div><div><strong>ผลฮานอยพิเศษได้รับการยืนยันแล้ว</strong><span>โพยของคุณได้รับเงินรางวัล 1,350 บาท</span></div><a class="text-link" href="slips.html">ดูโพย</a></div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Lottify — ใบรับรายการ</title><link rel="stylesheet" href="assets/styles.css" /></head>
+<body data-page="slips">
+  <main id="main">
+    <section class="receipt panel">
+      <div class="receipt-hero"><div class="success-check">✓</div><h1 style="margin:0 0 7px">ยืนยันรายการสำเร็จ</h1><p class="muted">ระบบยืนยันรายการแล้ว เก็บเลขอ้างอิงนี้ไว้สำหรับตรวจสอบภายหลัง</p><p class="receipt-ref">Order #ORD-20260910-843201 · ยืนยันเมื่อ 10 ก.ย. 2569 11:31:42 น.</p></div>
+      <div class="receipt-grid">
+        <div class="receipt-item"><span>หวย</span><strong>สลากกินแบ่งรัฐบาล</strong></div><div class="receipt-item"><span>งวด</span><strong>16 ก.ย. 2569</strong></div>
+        <div class="receipt-item"><span>ประเภท / เลข</span><strong>3 ตัวตรง · 312</strong></div><div class="receipt-item"><span>ยอดซื้อ / อัตราจ่าย</span><strong>100 บาท · x900</strong></div>
+        <div class="receipt-item"><span>ประเภท / เลข</span><strong>2 ตัวบน · 27</strong></div><div class="receipt-item"><span>ยอดซื้อ / อัตราจ่าย</span><strong>50 บาท · x95</strong></div>
+        <div class="receipt-item"><span>เงินสดที่ใช้</span><strong>120.00 บาท</strong></div><div class="receipt-item"><span>โบนัสที่ใช้</span><strong>30.00 บาท</strong></div>
+        <div class="receipt-item"><span>ปิดรับ</span><strong>16 ก.ย. 2569 · 15:15 น.</strong></div><div class="receipt-item"><span>สถานะ</span><span class="status info" data-order-status>ยืนยันแล้ว · รอผล</span></div>
+      </div>
+      <div class="notice info" style="margin-top:18px" data-order-notice><b>i</b><div><strong>ใบรับรายการนี้เก็บเงื่อนไขที่ยอมรับไว้</strong>หากภายหลังมีการยกเลิก คืนเงิน หรือแก้ไขผล คุณจะเห็นประวัติเป็นลำดับโดยไม่ลบข้อมูลเดิม</div></div><div class="cancel-history" data-cancel-history hidden><div class="panel-title"><h2>ประวัติการยกเลิก</h2></div><div class="stack"><div class="notice info"><b>1</b><div><strong>ยืนยันรายการ · 10 ก.ย. 11:31</strong>รับโพย ORD-20260910-843201 ยอดซื้อ 150.00 บาท</div></div><div class="notice warning"><b>2</b><div><strong>ขอยกเลิกโพย</strong>ระบบตรวจ cutoff และนโยบายการยกเลิกของงวดอีกครั้งก่อนคืนเงิน</div></div><div class="notice success"><b>3</b><div><strong>คืนเงินสำเร็จ · ยกเลิกแล้ว</strong>ยอดคืน 150.00 บาทถูกบันทึกแล้ว และโพยสิ้นสุดในสถานะยกเลิก</div></div></div></div>
+      <div class="receipt-actions"><button class="button danger" type="button" data-slip-cancel data-order-id="ORD-20260910-843201" data-order-total="150.00">ยกเลิกโพย</button><a class="button secondary" href="buy.html">ซื้อรายการใหม่</a><a class="button primary" href="slips.html">ไปโพยของฉัน</a><a class="button secondary" href="index.html">กลับหน้าแรก</a></div>
+    </section>
+  </main>
+  <div class="cancel-overlay" data-cancel-overlay hidden>
+    <section class="cancel-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-title">
+      <button class="cancel-sheet-close" type="button" aria-label="ปิด" data-cancel-close>×</button>
+      <div data-cancel-review>
+        <span class="status warning">ก่อน cutoff</span>
+        <h2 id="cancel-title">ยกเลิกโพยนี้?</h2>
+        <p class="muted">ระบบจะตรวจนโยบายของหวย/งวดและเวลาปิดรับอีกครั้งก่อนรับคำขอ</p>
+        <div class="cancel-summary">
+          <div><span>เลขอ้างอิง</span><strong>ORD-20260910-843201</strong></div>
+          <div><span>ยอดซื้อ</span><strong>150.00 บาท</strong></div>
+          <div><span>ปิดรับ</span><strong>16 ก.ย. 2569 · 15:15 น.</strong></div>
+          <div><span>ยอดคืนเมื่อสำเร็จ</span><strong>150.00 บาท</strong></div>
+        </div>
+        <div class="notice warning"><b>!</b><div><strong>การยกเลิกจะสมบูรณ์เมื่อคืนเงินสำเร็จ</strong>ระหว่างดำเนินการโพยจะแสดงสถานะ “กำลังยกเลิก” และยังไม่ถือว่ายกเลิกเสร็จ</div></div>
+        <div class="cancel-sheet-actions"><button class="button secondary" type="button" data-cancel-close>ยังไม่ยกเลิก</button><button class="button danger" type="button" data-cancel-confirm>ยืนยันยกเลิกโพย</button></div>
+      </div>
+      <div class="cancel-flow-state" data-cancel-pending hidden>
+        <div class="cancel-state-icon pending">…</div><h2>กำลังยกเลิกโพย</h2><p>รับคำขอแล้ว กำลังยืนยันการคืนเงิน 150.00 บาท</p><div class="notice info"><b>i</b><div><strong>ยังไม่ถือว่ายกเลิกเสร็จ</strong>สถานะจะเปลี่ยนเป็น “ยกเลิกแล้ว” เมื่อยอดคืนถูกบันทึกสำเร็จ</div></div>
+      </div>
+      <div class="cancel-flow-state" data-cancel-success hidden>
+        <div class="cancel-state-icon success">✓</div><h2>ยกเลิกโพยแล้ว</h2><p>คืนเงิน 150.00 บาทสำเร็จ และปิดโพยนี้ในสถานะยกเลิกแล้ว</p><div class="notice success"><b>✓</b><div><strong>เลขอ้างอิง ORD-20260910-843201</strong>ประวัติใบรับรายการเดิมและการยกเลิกยังดูย้อนหลังได้</div></div><div class="cancel-sheet-actions single"><button class="button primary" type="button" data-cancel-done>เสร็จสิ้น</button></div>
+      </div>
+    </section>
+  </div>
+  <script src="assets/app.js"></script>
+</body></html>

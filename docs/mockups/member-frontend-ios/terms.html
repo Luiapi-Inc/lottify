@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Lottify — ข้อตกลงที่ต้องยอมรับ</title><link rel="stylesheet" href="assets/styles.css" /></head>
+<body data-auth="true">
+  <div class="auth-shell">
+    <section class="auth-brand-side">
+      <a class="brand" href="index.html"><span class="brand-mark">L</span><span>Lottify</span></a>
+      <div class="auth-copy"><h1>อ่านก่อนใช้บริการ</h1><p>หลังยืนยันเบอร์ ระบบจะให้คุณตรวจและยอมรับข้อตกลงที่จำเป็นตามเวอร์ชันที่มีผล ก่อนกรอกข้อมูลพื้นฐานและประเมินสิทธิ์ของแต่ละบริการ</p></div>
+      <div class="small" style="color:#a9cabd">ขั้นตอน 3 จาก 5 · ข้อตกลง</div>
+    </section>
+    <section class="auth-form-side">
+      <form class="auth-card onboarding-card" data-terms-form action="profile.html">
+        <div class="onboarding-step">บัญชีถูกสร้างแล้ว</div>
+        <h2>ข้อตกลงและนโยบายที่จำเป็น</h2>
+        <p>Mockup นี้แสดงรูปแบบการยอมรับเท่านั้น เนื้อหาและเวอร์ชันจริงต้องมาจาก contract/policy ที่มีผลในระบบ</p>
+        <div class="terms-review-card">
+          <div><strong>ข้อตกลงที่มีผลกับบัญชีนี้</strong><span>ระบบต้องแสดงเนื้อหาและเวอร์ชันที่ใช้อ้างอิงได้ก่อนยอมรับ</span></div>
+          <span class="status info">ต้องยอมรับ</span>
+        </div>
+        <label class="terms-accept-row"><input type="checkbox" data-terms-accept /> <span>ฉันได้อ่านและยอมรับข้อตกลงเวอร์ชันที่ระบบแสดงสำหรับบัญชีนี้</span></label>
+        <div class="notice info" style="margin-top:14px"><b>i</b><div><strong>การยอมรับถูกบันทึกแยกจาก KYC</strong>การยอมรับ Terms ไม่ได้หมายความว่าทุกบริการพร้อมใช้ และไม่ถือเป็นการยืนยันตัวตนระดับ KYC</div></div>
+        <div class="field-error" data-terms-error></div>
+        <button class="button lime block disabled" type="submit" data-terms-submit style="margin-top:8px">ยอมรับและดำเนินการต่อ →</button>
+        <p class="small muted" style="margin-top:16px;text-align:center"><a class="text-link" href="login.html">ออกจากขั้นตอนสมัคร</a></p>
+      </form>
+    </section>
+  </div>
+  <script src="assets/app.js"></script>
+</body></html>
