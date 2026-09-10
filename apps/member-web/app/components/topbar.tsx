@@ -1,0 +1,27 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BellIcon } from "./navigation";
+
+const titles: Record<string, [string, string]> = {
+  "/": ["สวัสดีครับ", "ขอให้วันนี้เป็นวันที่ดี"],
+  "/buy": ["ซื้อหวย", "เลือกงวด ตรวจราคา แล้วค่อยยืนยัน"],
+  "/slips": ["โพยของฉัน", "ใบรับรายการ ผล และประวัติ"],
+  "/wallet": ["กระเป๋า", "เงินสด โบนัส และรายการทั้งหมด"],
+  "/account": ["บัญชีของฉัน", "ข้อมูลสมาชิกและความปลอดภัย"],
+};
+
+export function Topbar() {
+  const pathname = usePathname();
+  const base = Object.keys(titles).find((key) => key !== "/" && pathname.startsWith(key)) ?? "/";
+  const [title, subtitle] = titles[base] ?? titles["/"]!;
+  return <header className="topbar">
+    <div className="topbar-title"><strong>{title}</strong><span>{subtitle}</span></div>
+    <div className="topbar-actions">
+      <input className="search" aria-label="ค้นหา" placeholder="ค้นหาหวย งวด หรือเมนู..." />
+      <Link className="icon-btn" href="/#alerts" aria-label="การแจ้งเตือน"><BellIcon /><i className="notification-dot" /></Link>
+      <Link className="member-chip" href="/account"><span className="avatar">ล</span><div><strong>คุณสมาชิก</strong><small>ระดับทั่วไป</small></div></Link>
+    </div>
+  </header>;
+}
