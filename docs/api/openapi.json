@@ -1,0 +1,7263 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1": {
+      "get": {
+        "operationId": "ApiV1Controller_root",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Lottify v1 API contract root",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/admin/accounting-periods": {
+      "get": {
+        "operationId": "AdminAccountingPeriodController_list",
+        "parameters": [
+          {
+            "name": "effectiveTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "effectiveFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "AUTOMATIC_WEEKLY",
+                "CUSTOM"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "PENDING_APPROVAL",
+                "SCHEDULED",
+                "OPEN",
+                "CLOSING",
+                "CLOSED",
+                "CANCELLED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List authoritative Accounting Periods",
+        "tags": [
+          "Admin Accounting Periods"
+        ]
+      }
+    },
+    "/api/v1/admin/accounting-periods/{id}": {
+      "get": {
+        "operationId": "AdminAccountingPeriodController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Opaque immutable Accounting Period identity",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get one authoritative Accounting Period",
+        "tags": [
+          "Admin Accounting Periods"
+        ]
+      }
+    },
+    "/api/v1/admin/accounting-periods/create-custom": {
+      "post": {
+        "operationId": "AdminAccountingPeriodController_createCustom",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomAccountingPeriodBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a governed Custom Accounting Period DRAFT and replacement preview",
+        "tags": [
+          "Admin Accounting Periods"
+        ]
+      }
+    },
+    "/api/v1/admin/accounting-periods/{id}/submit": {
+      "post": {
+        "operationId": "AdminAccountingPeriodController_submit",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Opaque Accounting Period identity",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitAccountingPeriodBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submit a Custom Accounting Period DRAFT for approval",
+        "tags": [
+          "Admin Accounting Periods"
+        ]
+      }
+    },
+    "/api/v1/admin/accounting-periods/{id}/approve": {
+      "post": {
+        "operationId": "AdminAccountingPeriodController_approve",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Opaque Accounting Period identity",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveAccountingPeriodBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and schedule a pending Custom Accounting Period",
+        "tags": [
+          "Admin Accounting Periods"
+        ]
+      }
+    },
+    "/api/v1/admin/accounting-periods/{id}/cancel": {
+      "post": {
+        "operationId": "AdminAccountingPeriodController_cancel",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Opaque Accounting Period identity",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelAccountingPeriodBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodCancellationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel or withdraw a pre-OPEN Custom Accounting Period",
+        "tags": [
+          "Admin Accounting Periods"
+        ]
+      }
+    },
+    "/api/v1/admin/accounting-periods/{id}/close": {
+      "post": {
+        "operationId": "AdminAccountingPeriodController_close",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Opaque Accounting Period identity",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseAccountingPeriodBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodCloseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Request or approve governed close for a CLOSING Accounting Period",
+        "tags": [
+          "Admin Accounting Periods"
+        ]
+      }
+    },
+    "/api/v1/admin/draws": {
+      "get": {
+        "operationId": "AdminDrawController_listDraws",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "SCHEDULED",
+                "OPEN",
+                "CLOSED",
+                "RESULT_PENDING",
+                "RESULT_CONFIRMED",
+                "SETTLING",
+                "SETTLED",
+                "CANCELLING",
+                "CANCELLED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "productId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Lottery Draws",
+        "tags": [
+          "admin-lottery-draws"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{id}": {
+      "get": {
+        "operationId": "AdminDrawController_getDraw",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a Lottery Draw detail",
+        "tags": [
+          "admin-lottery-draws"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{productId}/draws/generate": {
+      "post": {
+        "operationId": "AdminDrawController_generateDraws",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateDrawsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Idempotent rolling Draw generation from schedule occurrences",
+        "tags": [
+          "admin-lottery-draws"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{id}/transition": {
+      "post": {
+        "operationId": "AdminDrawController_transition",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Transition a Draw through its lifecycle state machine",
+        "tags": [
+          "admin-lottery-draws"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{id}/override": {
+      "post": {
+        "operationId": "AdminDrawController_applyOverride",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Apply a governed versioned Draw Override",
+        "tags": [
+          "admin-lottery-draws"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/products": {
+      "get": {
+        "operationId": "AdminLotteryConfigurationController_listProducts",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "REVIEW",
+                "PUBLISHED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Lottery Products and configuration version summaries",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      },
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_createProduct",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a Lottery Product identity",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/products/{id}": {
+      "get": {
+        "operationId": "AdminLotteryConfigurationController_getProduct",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "REVIEW",
+                "PUBLISHED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a Lottery Product and its configuration versions",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/bet-types": {
+      "get": {
+        "operationId": "AdminLotteryConfigurationController_listBetTypes",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "REVIEW",
+                "PUBLISHED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Lottery Bet Types and configuration version summaries",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      },
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_createBetType",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBetTypeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a Lottery Bet Type identity",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/bet-types/{id}": {
+      "get": {
+        "operationId": "AdminLotteryConfigurationController_getBetType",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "REVIEW",
+                "PUBLISHED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a Lottery Bet Type and its configuration versions",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/bet-types/{id}/versions": {
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_createBetTypeVersion",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBetTypeVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a Lottery Bet Type DRAFT version",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/products/{id}/versions": {
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_createProductVersion",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a Lottery Product DRAFT version",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/bet-type-versions/{id}/submit": {
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_submitBetTypeVersion",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submit a Lottery Bet Type version for approval",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/product-versions/{id}/submit": {
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_submitProductVersion",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submit a Lottery Product version for approval",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/bet-type-versions/{id}/approve": {
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_approveBetTypeVersion",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and publish a Lottery Bet Type version",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/lottery/product-versions/{id}/approve": {
+      "post": {
+        "operationId": "AdminLotteryConfigurationController_approveProductVersion",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and publish a Lottery Product version",
+        "tags": [
+          "admin-lottery-configuration"
+        ]
+      }
+    },
+    "/api/v1/admin/promotions": {
+      "post": {
+        "operationId": "AdminPromotionController_createVersion",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a DRAFT Promotion Campaign version",
+        "tags": [
+          "admin-promotions"
+        ]
+      },
+      "get": {
+        "operationId": "AdminPromotionController_list",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "VALIDATED",
+                "PUBLISHED",
+                "RETIRED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Promotion Campaign versions",
+        "tags": [
+          "admin-promotions"
+        ]
+      }
+    },
+    "/api/v1/admin/promotions/{id}": {
+      "get": {
+        "operationId": "AdminPromotionController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read a Promotion Campaign version",
+        "tags": [
+          "admin-promotions"
+        ]
+      }
+    },
+    "/api/v1/admin/promotions/{id}/validate": {
+      "post": {
+        "operationId": "AdminPromotionController_validate",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Validate a DRAFT Promotion Campaign version",
+        "tags": [
+          "admin-promotions"
+        ]
+      }
+    },
+    "/api/v1/admin/promotions/{id}/preview": {
+      "post": {
+        "operationId": "AdminPromotionController_preview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preview the eligibility decision for one Member",
+        "tags": [
+          "admin-promotions"
+        ]
+      }
+    },
+    "/api/v1/admin/promotions/{id}/approve": {
+      "post": {
+        "operationId": "AdminPromotionController_approve",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and publish a validated Promotion Campaign version (fresh MFA required)",
+        "tags": [
+          "admin-promotions"
+        ]
+      }
+    },
+    "/api/v1/admin/promotions/{id}/retire": {
+      "post": {
+        "operationId": "AdminPromotionController_retire",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retire a published Promotion Campaign version",
+        "tags": [
+          "admin-promotions"
+        ]
+      }
+    },
+    "/api/v1/admin/reconciliation/runs": {
+      "get": {
+        "operationId": "AdminReconciliationController_listRuns",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive upper bound of the half-open `asOf` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound of the half-open `asOf` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "MATCHED",
+                "MISMATCH"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "currency",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "THB"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationRunListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR"
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Ledger ↔ Wallet reconciliation runs with their inspected window and result",
+        "tags": [
+          "admin-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/admin/reconciliation/runs/{id}": {
+      "get": {
+        "operationId": "AdminReconciliationController_getRun",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationRunResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read one reconciliation run with its full inspected evidence",
+        "tags": [
+          "admin-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/admin/reconciliation/discrepancies": {
+      "get": {
+        "operationId": "AdminReconciliationController_listDiscrepancies",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive upper bound of the half-open `detectedAt` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound of the half-open `detectedAt` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "ERROR",
+                "CRITICAL"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DETECTED",
+                "INVESTIGATING",
+                "RESOLUTION_PENDING",
+                "RESOLVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "currency",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "THB"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationDiscrepancyListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR"
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List durable reconciliation discrepancies with their lifecycle state",
+        "tags": [
+          "admin-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/admin/reconciliation/discrepancies/{id}": {
+      "get": {
+        "operationId": "AdminReconciliationController_getDiscrepancy",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationDiscrepancyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read one discrepancy with expected/observed facts, age, owner and resolution evidence",
+        "tags": [
+          "admin-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/admin/reports/accounting-period-financial": {
+      "get": {
+        "operationId": "AdminReportingController_accountingPeriodFinancial",
+        "parameters": [
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "Declared reporting timezone",
+            "schema": {
+              "enum": [
+                "Asia/Bangkok"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive upper bound of the half-open window (with `from`)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound of the half-open window (with `to`)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountingPeriodId",
+            "required": false,
+            "in": "query",
+            "description": "Authoritative Accounting Period identity; its stored bounds become the window",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingPeriodFinancialReportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR / UNSUPPORTED_REPORTING_TIME_ZONE"
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Accounting-period financial report for a declared half-open window with freshness state",
+        "tags": [
+          "admin-reports"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/login": {
+      "post": {
+        "operationId": "AdminAuthController_login",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Authenticate Admin credentials and start mandatory MFA",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/mfa/setup": {
+      "post": {
+        "operationId": "AdminAuthController_mfaSetup",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Create an Admin TOTP enrollment secret",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/mfa/confirm": {
+      "post": {
+        "operationId": "AdminAuthController_mfaConfirm",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Confirm and enable mandatory Admin TOTP MFA",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/mfa/verify": {
+      "post": {
+        "operationId": "AdminAuthController_mfaVerify",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAccessTokenResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Verify Admin MFA and establish the authenticated session",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/refresh": {
+      "post": {
+        "operationId": "AdminAuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAccessTokenResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Rotate the HttpOnly Admin refresh credential",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/logout": {
+      "post": {
+        "operationId": "AdminAuthController_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRevokedResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Revoke the current Admin refresh-token family",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/revoke-all": {
+      "post": {
+        "operationId": "AdminAuthController_revokeAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRevokedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revoke every active session for the current Admin",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/me": {
+      "post": {
+        "operationId": "AdminAuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMeResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Return server-authoritative Admin identity and capabilities",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/admin/auth/reauth": {
+      "post": {
+        "operationId": "AdminAuthController_reauth",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReauthBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReauthResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create scoped fresh-MFA evidence for a sensitive action class",
+        "tags": [
+          "Admin Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/otp/request": {
+      "post": {
+        "operationId": "MemberAuthController_requestOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpRequestResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Request a purpose-scoped OTP for a Member phone",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/otp/verify": {
+      "post": {
+        "operationId": "MemberAuthController_verifyOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpVerifyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberSessionResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Verify an OTP and establish a Member session",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/refresh": {
+      "post": {
+        "operationId": "MemberAuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberSessionResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Rotate the Member refresh credential",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/logout": {
+      "post": {
+        "operationId": "MemberAuthController_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRevokedResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Revoke the current Member refresh session",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/revoke-all": {
+      "post": {
+        "operationId": "MemberAuthController_revokeAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRevokedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revoke every active session for the Member",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/me": {
+      "get": {
+        "operationId": "MemberAuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberMeResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Return server-authoritative Member identity",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/products/{productId}/draws": {
+      "get": {
+        "operationId": "MemberDrawController_listDraws",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "SCHEDULED",
+                "OPEN",
+                "CLOSED",
+                "RESULT_PENDING",
+                "RESULT_CONFIRMED",
+                "SETTLING",
+                "SETTLED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Lottery Draws for a Product (betting discovery)",
+        "tags": [
+          "Member Lottery Draws"
+        ]
+      }
+    },
+    "/api/v1/member/draws/{id}": {
+      "get": {
+        "operationId": "MemberDrawController_getDraw",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a Lottery Draw detail with status, cutoff and server time",
+        "tags": [
+          "Member Lottery Draws"
+        ]
+      }
+    },
+    "/api/v1/member/draws/{id}/eligibility": {
+      "get": {
+        "operationId": "MemberDrawController_eligibility",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cutoff eligibility: strictly-before eligible; exact/beyond rejected",
+        "tags": [
+          "Member Lottery Draws"
+        ]
+      }
+    },
+    "/api/v1/member/draws/{drawId}/quotes": {
+      "post": {
+        "operationId": "MemberQuoteController_create",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key. Same key + same payload returns the prior Quote; same key + different payload conflicts.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuoteCreateBody"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a betting Quote: server-authoritative resolution of bet lines",
+        "tags": [
+          "Member Betting Quotes"
+        ]
+      }
+    },
+    "/api/v1/member/quotes/{id}": {
+      "get": {
+        "operationId": "MemberQuoteController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read a Member betting Quote by id",
+        "tags": [
+          "Member Betting Quotes"
+        ]
+      }
+    },
+    "/api/v1/member/quotes/{quoteId}/orders": {
+      "post": {
+        "description": "Creates the Order that accepts a Quote. No money moves at creation; only Confirm has a financial effect.",
+        "operationId": "MemberOrderController_create",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key. Replaying it returns the same Bet Order; the same key with a different Quote conflicts.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a Bet Order from an authorised Quote",
+        "tags": [
+          "Member Betting Orders"
+        ]
+      }
+    },
+    "/api/v1/member/orders/{id}": {
+      "get": {
+        "operationId": "MemberOrderController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read a Member Bet Order by id",
+        "tags": [
+          "Member Betting Orders"
+        ]
+      }
+    },
+    "/api/v1/member/orders/{id}/confirm": {
+      "post": {
+        "description": "Revalidates the Quote and the authoritative Draw cutoff, then requires the durable Wallet & Ledger stake reserve/commit before the Order becomes CONFIRMED. Denials resolve to REJECTED with no money moved.",
+        "operationId": "MemberOrderController_confirm",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key for the Confirm command.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BetOrderCommandBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm a Bet Order (explicit command)",
+        "tags": [
+          "Member Betting Orders"
+        ]
+      }
+    },
+    "/api/v1/member/orders/{id}/cancel": {
+      "post": {
+        "description": "A Member may cancel before the Draw cutoff. The Order becomes CANCELLED only after the refund posting is durable.",
+        "operationId": "MemberOrderController_cancel",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key for the Cancel command.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BetOrderCommandBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a confirmed Bet Order (explicit command)",
+        "tags": [
+          "Member Betting Orders"
+        ]
+      }
+    },
+    "/api/v1/member/orders/{id}/receipt": {
+      "get": {
+        "operationId": "MemberOrderController_receipt",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the immutable Bet Receipt of a confirmed Order",
+        "tags": [
+          "Member Betting Orders"
+        ]
+      }
+    },
+    "/api/v1/member/orders/{id}/settlement": {
+      "get": {
+        "description": "The outcome is authoritative only once the settlement batch has COMPLETED; an in-flight or failed batch reports authoritative=false and never exposes a partial financial outcome.",
+        "operationId": "MemberSettlementController_settlementOutcome",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the settlement outcome of a Member Bet Order",
+        "tags": [
+          "Member Betting Settlement"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{drawId}/result": {
+      "post": {
+        "operationId": "AdminResultSettlementController_intake",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Intake a Result revision for a Draw",
+        "tags": [
+          "admin-result-settlement"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{drawId}/result/ingest-from-provider": {
+      "post": {
+        "operationId": "AdminResultSettlementController_ingestFromProvider",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ingest the authoritative Result from the configured provider",
+        "tags": [
+          "admin-result-settlement"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{drawId}/results/{revision}/confirm": {
+      "post": {
+        "operationId": "AdminResultSettlementController_confirm",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm a Result revision (governed command)",
+        "tags": [
+          "admin-result-settlement"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{drawId}/results/{revision}/correct": {
+      "post": {
+        "operationId": "AdminResultSettlementController_correct",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Immutable Result correction (new revision, compensating postings)",
+        "tags": [
+          "admin-result-settlement"
+        ]
+      }
+    },
+    "/api/v1/admin/draws/{drawId}/settlement": {
+      "post": {
+        "operationId": "AdminResultSettlementController_runSettlement",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Run (or resume) the durable Settlement Batch for a Draw",
+        "tags": [
+          "admin-result-settlement"
+        ]
+      },
+      "get": {
+        "operationId": "AdminResultSettlementController_getBatch",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the Settlement Batch for a Draw",
+        "tags": [
+          "admin-result-settlement"
+        ]
+      }
+    },
+    "/api/v1/admin/settlement/{batchId}/orders": {
+      "get": {
+        "operationId": "AdminResultSettlementController_listOrders",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the per-Order settlement checkpoints of a batch",
+        "tags": [
+          "admin-result-settlement"
+        ]
+      }
+    },
+    "/api/v1/member/sessions": {
+      "get": {
+        "operationId": "MemberSessionDeviceController_sessions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberSessionViewBody"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the Member's active sessions",
+        "tags": [
+          "Member Sessions & Devices"
+        ]
+      }
+    },
+    "/api/v1/member/sessions/{id}": {
+      "delete": {
+        "operationId": "MemberSessionDeviceController_revokeSession",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRevokedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revoke one of the Member's sessions",
+        "tags": [
+          "Member Sessions & Devices"
+        ]
+      }
+    },
+    "/api/v1/member/devices": {
+      "get": {
+        "operationId": "MemberSessionDeviceController_devices",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberDeviceViewBody"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the Member's logical devices",
+        "tags": [
+          "Member Sessions & Devices"
+        ]
+      }
+    },
+    "/api/v1/member/devices/{id}": {
+      "delete": {
+        "operationId": "MemberSessionDeviceController_revokeDevice",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRevokedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revoke all sessions for one of the Member's devices",
+        "tags": [
+          "Member Sessions & Devices"
+        ]
+      }
+    },
+    "/api/v1/member/wallet": {
+      "get": {
+        "operationId": "MemberWalletController_balance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletBalanceBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the Member's Wallet balances (bounded buckets)",
+        "tags": [
+          "Member Wallet"
+        ]
+      }
+    },
+    "/api/v1/member/wallet/transactions": {
+      "get": {
+        "operationId": "MemberWalletController_transactions",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletTransactionPageBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the Member's Ledger-backed transaction history with cursor pagination",
+        "tags": [
+          "Member Wallet"
+        ]
+      }
+    },
+    "/api/v1/member/deposits": {
+      "post": {
+        "operationId": "MemberDepositController_initiate",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key. Same key + same payload returns the prior result.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepositInitiateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Member Deposits"
+        ]
+      }
+    },
+    "/api/v1/member/deposits/{id}/reconcile": {
+      "post": {
+        "operationId": "MemberDepositController_reconcile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reconcile a Deposit against the provider; credits only on proven APPROVED",
+        "tags": [
+          "Member Deposits"
+        ]
+      }
+    },
+    "/api/v1/member/deposits/{id}": {
+      "get": {
+        "operationId": "MemberDepositController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read a Member Deposit by id",
+        "tags": [
+          "Member Deposits"
+        ]
+      }
+    },
+    "/api/v1/member/withdrawals": {
+      "post": {
+        "operationId": "MemberWithdrawalController_create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key. Same key + same payload returns the prior result.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWithdrawalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Member Withdrawals"
+        ]
+      },
+      "get": {
+        "operationId": "MemberWithdrawalController_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalListBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the Member's Withdrawals",
+        "tags": [
+          "Member Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/member/withdrawals/{id}": {
+      "get": {
+        "operationId": "MemberWithdrawalController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read one Withdrawal owned by the Member",
+        "tags": [
+          "Member Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/member/withdrawals/{id}/cancel": {
+      "post": {
+        "operationId": "MemberWithdrawalController_cancel",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key for the Withdrawal cancel command",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a Withdrawal before payout; releases the Reservation through Wallet & Ledger",
+        "tags": [
+          "Member Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/member/payout-destinations": {
+      "post": {
+        "operationId": "MemberPayoutDestinationController_add",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPayoutDestinationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutDestinationBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Register a Member-linked Payout Destination pending verification",
+        "tags": [
+          "Member Payout Destinations"
+        ]
+      },
+      "get": {
+        "operationId": "MemberPayoutDestinationController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutDestinationListBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the Member's Payout Destinations",
+        "tags": [
+          "Member Payout Destinations"
+        ]
+      }
+    },
+    "/api/v1/member/payout-destinations/{id}": {
+      "get": {
+        "operationId": "MemberPayoutDestinationController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutDestinationBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read one Payout Destination owned by the Member",
+        "tags": [
+          "Member Payout Destinations"
+        ]
+      }
+    },
+    "/api/v1/member/payout-destinations/{id}/verify": {
+      "post": {
+        "operationId": "MemberPayoutDestinationController_verify",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutDestinationBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Request independent verification of the Payout Destination; only normalized evidence crosses the seam",
+        "tags": [
+          "Member Payout Destinations"
+        ]
+      }
+    },
+    "/api/v1/admin/withdrawals": {
+      "get": {
+        "operationId": "AdminWithdrawalController_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "REQUESTED",
+                "RESERVING",
+                "REVIEWING",
+                "APPROVED",
+                "PAYOUT_PROCESSING",
+                "PAYOUT_CONFIRMED",
+                "FINALIZING",
+                "COMPLETED",
+                "CANCELLING",
+                "CANCELLED",
+                "REJECTED",
+                "FAILED",
+                "RECONCILING"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "REVIEW",
+                "APPROVAL",
+                "PAYOUT",
+                "RECONCILIATION"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWithdrawalListBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the withdrawal review, approval, payout and reconciliation queues with severity and evidence",
+        "tags": [
+          "Admin Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/admin/withdrawals/{id}": {
+      "get": {
+        "operationId": "AdminWithdrawalController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWithdrawalDetailBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Withdrawal detail with eligibility evidence and the workflow timeline",
+        "tags": [
+          "Admin Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/admin/withdrawals/{id}/approve": {
+      "post": {
+        "operationId": "AdminWithdrawalController_approve",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawalCommandBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWithdrawalBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve the withdrawal review and release it for payout",
+        "tags": [
+          "Admin Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/admin/withdrawals/{id}/reject": {
+      "post": {
+        "operationId": "AdminWithdrawalController_reject",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawalCommandBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWithdrawalBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reject the withdrawal review; the Reservation is released authoritatively",
+        "tags": [
+          "Admin Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/admin/withdrawals/{id}/payout": {
+      "post": {
+        "operationId": "AdminWithdrawalController_payout",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawalCommandBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWithdrawalBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Request the external payout for an approved withdrawal; an unknown outcome enters reconciliation",
+        "tags": [
+          "Admin Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/admin/withdrawals/{id}/reconcile": {
+      "post": {
+        "operationId": "AdminWithdrawalController_reconcile",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawalCommandBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWithdrawalBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reconcile an in-flight or ambiguous payout by provider reference; never re-initiates payout",
+        "tags": [
+          "Admin Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/admin/withdrawals/{id}/finalize": {
+      "post": {
+        "operationId": "AdminWithdrawalController_finalize",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawalCommandBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWithdrawalBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Finalize a confirmed payout: consume the Reservation and post WITHDRAWAL_FINALIZE exactly once",
+        "tags": [
+          "Admin Withdrawals"
+        ]
+      }
+    },
+    "/api/v1/member/promotions": {
+      "get": {
+        "operationId": "MemberPromotionController_discover",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionDiscoveryBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Discover published Promotions with the Member's eligibility decision",
+        "tags": [
+          "Member Promotions"
+        ]
+      }
+    },
+    "/api/v1/member/promotions/entitlements": {
+      "get": {
+        "operationId": "MemberPromotionController_listEntitlements",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "ACTIVE",
+                "RELEASE_PENDING",
+                "COMPLETED",
+                "EXPIRED",
+                "REVOKED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionEntitlementPageBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the Member's Promotion Entitlements with turnover progress",
+        "tags": [
+          "Member Promotions"
+        ]
+      },
+      "post": {
+        "operationId": "MemberPromotionController_claim",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key. Same key + same payload returns the prior result.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimPromotionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionEntitlementBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Member Promotions"
+        ]
+      }
+    },
+    "/api/v1/member/promotions/entitlements/{id}": {
+      "get": {
+        "operationId": "MemberPromotionController_getEntitlement",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionEntitlementBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read one Promotion Entitlement with its turnover trail",
+        "tags": [
+          "Member Promotions"
+        ]
+      }
+    },
+    "/api/v1/member/notification-preferences": {
+      "get": {
+        "operationId": "MemberNotificationPreferenceController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the Member's complete notification preference matrix",
+        "tags": [
+          "Member Notification Preferences"
+        ]
+      },
+      "put": {
+        "operationId": "MemberNotificationPreferenceController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationPreferencesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Member Notification Preferences"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Lottify v1 API",
+    "description": "Authoritative REST/OpenAPI contract for Lottify v1",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "AccountingPeriodAcceptedExceptionReferenceResponse": {
+        "type": "object",
+        "properties": {
+          "discrepancyReference": {
+            "type": "string"
+          },
+          "exceptionReference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "discrepancyReference",
+          "exceptionReference"
+        ]
+      },
+      "AccountingPeriodCloseEvidenceResponse": {
+        "type": "object",
+        "properties": {
+          "closedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvalId": {
+            "type": "string"
+          },
+          "reconciliationReferences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checkpointReferences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockingDiscrepancyReferences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptedExceptionReferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodAcceptedExceptionReferenceResponse"
+            }
+          },
+          "actorAdminId": {
+            "type": "string"
+          },
+          "auditRecordId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "closedAt",
+          "approvalId",
+          "reconciliationReferences",
+          "checkpointReferences",
+          "blockingDiscrepancyReferences",
+          "acceptedExceptionReferences",
+          "actorAdminId",
+          "auditRecordId"
+        ]
+      },
+      "AccountingPeriodResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque immutable Accounting Period identity"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "AUTOMATIC_WEEKLY",
+              "CUSTOM"
+            ]
+          },
+          "generationKind": {
+            "type": "string",
+            "enum": [
+              "NOMINAL_WEEK",
+              "DERIVED_FRAGMENT",
+              "CUSTOM"
+            ]
+          },
+          "effectiveStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "accountingTimezone": {
+            "type": "string",
+            "enum": [
+              "Asia/Bangkok"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PENDING_APPROVAL",
+              "SCHEDULED",
+              "OPEN",
+              "CLOSING",
+              "CLOSED",
+              "CANCELLED"
+            ]
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdByAdminId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Admin actor that created the Custom proposal"
+          },
+          "activationApprovalId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Immutable Approval evidence reference for Custom activation"
+          },
+          "cancellationRequestedByAdminId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Admin actor that initiated governed SCHEDULED cancellation"
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Immutable reason for a pending or completed governed cancellation"
+          },
+          "cancellationRequestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeRequestedByAdminId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Admin actor that initiated governed CLOSING period close"
+          },
+          "closeReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "closeRequestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeReconciliationReferences": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "closeCheckpointReferences": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "closeBlockingDiscrepancyReferences": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "closeAcceptedExceptionReferences": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "closeEvidence": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AccountingPeriodCloseEvidenceResponse"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "allowedActions": {
+            "description": "Currently permitted explicit commands",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "mode",
+          "generationKind",
+          "effectiveStart",
+          "effectiveEnd",
+          "accountingTimezone",
+          "state",
+          "version",
+          "reason",
+          "createdByAdminId",
+          "activationApprovalId",
+          "cancellationRequestedByAdminId",
+          "cancellationReason",
+          "cancellationRequestedAt",
+          "closeRequestedByAdminId",
+          "closeReason",
+          "closeRequestedAt",
+          "closeReconciliationReferences",
+          "closeCheckpointReferences",
+          "closeBlockingDiscrepancyReferences",
+          "closeAcceptedExceptionReferences",
+          "closeEvidence",
+          "createdAt",
+          "updatedAt",
+          "allowedActions"
+        ]
+      },
+      "AccountingPeriodListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodResponse"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Opaque cursor for the next page"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "WITHDRAWAL_STATE_CONFLICT"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlationId"
+        ]
+      },
+      "CreateCustomAccountingPeriodBody": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-08"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-18"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Align the future close window with an operational cycle"
+          }
+        },
+        "required": [
+          "startDate",
+          "endDate",
+          "reason"
+        ]
+      },
+      "AccountingPeriodPreviewPeriodResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Persisted Automatic period id when already generated"
+          },
+          "effectiveStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generationKind": {
+            "type": "string",
+            "enum": [
+              "NOMINAL_WEEK"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "effectiveStart",
+          "effectiveEnd",
+          "generationKind"
+        ]
+      },
+      "AccountingPeriodResidualFragmentResponse": {
+        "type": "object",
+        "properties": {
+          "sourcePeriodId": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generationKind": {
+            "type": "string",
+            "enum": [
+              "DERIVED_FRAGMENT"
+            ]
+          }
+        },
+        "required": [
+          "sourcePeriodId",
+          "effectiveStart",
+          "effectiveEnd",
+          "generationKind"
+        ]
+      },
+      "AccountingPeriodReplacementPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "affectedAutomaticPeriods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodPreviewPeriodResponse"
+            }
+          },
+          "residualFragments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodResidualFragmentResponse"
+            }
+          }
+        },
+        "required": [
+          "affectedAutomaticPeriods",
+          "residualFragments"
+        ]
+      },
+      "AccountingPeriodCommandResponse": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/AccountingPeriodResponse"
+          },
+          "replacementPreview": {
+            "$ref": "#/components/schemas/AccountingPeriodReplacementPreviewResponse"
+          }
+        },
+        "required": [
+          "period",
+          "replacementPreview"
+        ]
+      },
+      "SubmitAccountingPeriodBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "number",
+            "minimum": 1,
+            "example": 1
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
+      "ApproveAccountingPeriodBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "number",
+            "minimum": 1,
+            "example": 2
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
+      "CancelAccountingPeriodBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "number",
+            "minimum": 1,
+            "example": 2
+          },
+          "reason": {
+            "type": "string",
+            "example": "Operational exception no longer requires the Custom window"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "reason"
+        ]
+      },
+      "AccountingPeriodCancellationResponse": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/AccountingPeriodResponse"
+          }
+        },
+        "required": [
+          "period"
+        ]
+      },
+      "AccountingPeriodAcceptedExceptionReferenceBody": {
+        "type": "object",
+        "properties": {
+          "discrepancyReference": {
+            "type": "string",
+            "example": "discrepancy:ledger-wallet:2026-W36:001"
+          },
+          "exceptionReference": {
+            "type": "string",
+            "example": "accepted-exception:approval:001"
+          }
+        },
+        "required": [
+          "discrepancyReference",
+          "exceptionReference"
+        ]
+      },
+      "CloseAccountingPeriodBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "number",
+            "minimum": 1,
+            "example": 4
+          },
+          "reason": {
+            "type": "string",
+            "example": "Weekly close after reconciliation completed"
+          },
+          "reconciliationReferences": {
+            "example": [
+              "reconciliation-run:2026-W36"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checkpointReferences": {
+            "example": [
+              "ledger-checkpoint:2026-W36:end"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockingDiscrepancyReferences": {
+            "example": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptedExceptionReferences": {
+            "example": [],
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodAcceptedExceptionReferenceBody"
+            }
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "reason",
+          "reconciliationReferences",
+          "checkpointReferences",
+          "blockingDiscrepancyReferences",
+          "acceptedExceptionReferences"
+        ]
+      },
+      "AccountingPeriodCloseResponse": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/AccountingPeriodResponse"
+          }
+        },
+        "required": [
+          "period"
+        ]
+      },
+      "OccurrenceBody": {
+        "type": "object",
+        "properties": {
+          "occurrenceIdentity": {
+            "type": "string"
+          },
+          "localDate": {
+            "type": "string",
+            "example": "2026-09-10"
+          },
+          "openAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cutoffAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "drawAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "provenance": {
+            "type": "string",
+            "enum": [
+              "SCHEDULE_GENERATED",
+              "MANUAL_EXCEPTION"
+            ]
+          }
+        },
+        "required": [
+          "occurrenceIdentity",
+          "localDate",
+          "openAt",
+          "cutoffAt",
+          "drawAt",
+          "provenance"
+        ]
+      },
+      "GenerateDrawsBody": {
+        "type": "object",
+        "properties": {
+          "baseOccurrences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OccurrenceBody"
+            }
+          }
+        },
+        "required": [
+          "baseOccurrences"
+        ]
+      },
+      "TransitionBody": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "SCHEDULE",
+              "OPEN",
+              "CLOSE",
+              "MARK_RESULT_PENDING",
+              "CONFIRM_RESULT",
+              "START_SETTLEMENT",
+              "COMPLETE_SETTLEMENT",
+              "REQUEST_CANCELLATION",
+              "COMPLETE_CANCELLATION",
+              "REOPEN"
+            ]
+          },
+          "expectedVersion": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "command",
+          "expectedVersion"
+        ]
+      },
+      "OverrideBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "effectiveAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changes": {
+            "type": "object"
+          },
+          "approvalEvidenceRef": {
+            "type": "string"
+          },
+          "auditEvidenceRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "changes",
+          "approvalEvidenceRef",
+          "auditEvidenceRef"
+        ]
+      },
+      "CreateBetTypeBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "TWO_DIGIT"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "CreateBetTypeVersionBody": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "example": 1
+          },
+          "canonicalNumberFormat": {
+            "type": "string",
+            "example": "00"
+          },
+          "validationPattern": {
+            "type": "string",
+            "example": "^\\d{2}$"
+          },
+          "defaultPayout": {
+            "type": "object",
+            "example": {
+              "kind": "FIXED",
+              "amountMinor": 9000
+            }
+          },
+          "minStakeMinor": {
+            "type": "string",
+            "example": "100"
+          },
+          "maxStakeMinor": {
+            "type": "string",
+            "example": "100000"
+          },
+          "limitPolicyRef": {
+            "type": "string",
+            "example": "limit-v1"
+          },
+          "restrictionPolicyRef": {
+            "type": "string",
+            "example": "restriction-v1"
+          },
+          "settlementRuleVersionRef": {
+            "type": "string",
+            "example": "settlement-v1"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2099-01-01T00:00:00.000Z"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "example": "2099-06-01T00:00:00.000Z"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "canonicalNumberFormat",
+          "validationPattern",
+          "defaultPayout",
+          "minStakeMinor",
+          "maxStakeMinor",
+          "limitPolicyRef",
+          "restrictionPolicyRef",
+          "settlementRuleVersionRef",
+          "effectiveFrom"
+        ]
+      },
+      "EnabledBetTypeReferenceBody": {
+        "type": "object",
+        "properties": {
+          "betTypeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "betTypeVersionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "betTypeId",
+          "betTypeVersionId"
+        ]
+      },
+      "CreateProductVersionBody": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "example": 1
+          },
+          "timezone": {
+            "type": "string",
+            "example": "Asia/Bangkok"
+          },
+          "scheduleTemplateRef": {
+            "type": "string",
+            "example": "schedule-v1"
+          },
+          "resultSchemaVersionRef": {
+            "type": "string",
+            "example": "result-v1"
+          },
+          "settlementRuleVersionRef": {
+            "type": "string",
+            "example": "settlement-v1"
+          },
+          "defaultPayoutPolicyRef": {
+            "type": "string",
+            "example": "payout-v1"
+          },
+          "defaultLimitPolicyRef": {
+            "type": "string",
+            "example": "limit-v1"
+          },
+          "defaultRestrictionPolicyRef": {
+            "type": "string",
+            "example": "restriction-v1"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2099-01-01T00:00:00.000Z"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "example": "2099-06-01T00:00:00.000Z"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "enabledBetTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnabledBetTypeReferenceBody"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "timezone",
+          "scheduleTemplateRef",
+          "resultSchemaVersionRef",
+          "settlementRuleVersionRef",
+          "defaultPayoutPolicyRef",
+          "defaultLimitPolicyRef",
+          "defaultRestrictionPolicyRef",
+          "effectiveFrom",
+          "enabledBetTypes"
+        ]
+      },
+      "ExpectedVersionBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
+      "ReconciliationSourceRangeResponse": {
+        "type": "object",
+        "properties": {
+          "ledgerPostedAt": {
+            "type": "object",
+            "description": "Half-open inspected Ledger posting window, expressed as an upper bound"
+          },
+          "reservationLifecycle": {
+            "type": "object",
+            "description": "Half-open inspected Reservation lifecycle window, expressed as an upper bound"
+          }
+        },
+        "required": [
+          "ledgerPostedAt",
+          "reservationLifecycle"
+        ]
+      },
+      "ReconciliationSourceCheckpointResponse": {
+        "type": "object",
+        "properties": {
+          "checkpointKey": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "latestLedgerPostingId": {
+            "type": "string",
+            "nullable": true
+          },
+          "latestLedgerPostingAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "latestReservationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "latestReservationCreatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "checkpointKey",
+          "memberId",
+          "currency",
+          "asOf",
+          "latestLedgerPostingId",
+          "latestLedgerPostingAt",
+          "latestReservationId",
+          "latestReservationCreatedAt"
+        ]
+      },
+      "ReconciliationInspectedCountsResponse": {
+        "type": "object",
+        "properties": {
+          "ledgerAccounts": {
+            "type": "number",
+            "minimum": 0
+          },
+          "ledgerPostings": {
+            "type": "number",
+            "minimum": 0
+          },
+          "activeReservationAllocations": {
+            "type": "number",
+            "minimum": 0
+          },
+          "walletBuckets": {
+            "type": "number",
+            "minimum": 0
+          },
+          "discrepancies": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "ledgerAccounts",
+          "ledgerPostings",
+          "activeReservationAllocations",
+          "walletBuckets",
+          "discrepancies"
+        ]
+      },
+      "ReconciliationTotalsResponse": {
+        "type": "object",
+        "properties": {
+          "expected": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Integer minor units per bucket metric, expected by the authoritative Ledger"
+          },
+          "observed": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Integer minor units per bucket metric observed from the Wallet projection"
+          },
+          "difference": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "observed - expected, integer minor units per bucket metric"
+          }
+        },
+        "required": [
+          "expected",
+          "observed",
+          "difference"
+        ]
+      },
+      "ReconciliationResultSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "matched": {
+            "type": "boolean"
+          },
+          "discrepancyCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "bucketCount": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "matched",
+          "discrepancyCount",
+          "bucketCount"
+        ]
+      },
+      "ReconciliationRunResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pair": {
+            "type": "string",
+            "enum": [
+              "LEDGER_WALLET"
+            ]
+          },
+          "checkpointKey": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Snapshot instant the run inspected"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceRange": {
+            "$ref": "#/components/schemas/ReconciliationSourceRangeResponse"
+          },
+          "sourceCheckpoint": {
+            "$ref": "#/components/schemas/ReconciliationSourceCheckpointResponse"
+          },
+          "inspectedCounts": {
+            "$ref": "#/components/schemas/ReconciliationInspectedCountsResponse"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ReconciliationTotalsResponse"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "MATCHED",
+              "MISMATCH"
+            ]
+          },
+          "resultSummary": {
+            "$ref": "#/components/schemas/ReconciliationResultSummaryResponse"
+          },
+          "discrepancyCount": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "pair",
+          "checkpointKey",
+          "memberId",
+          "currency",
+          "asOf",
+          "createdAt",
+          "sourceRange",
+          "sourceCheckpoint",
+          "inspectedCounts",
+          "totals",
+          "result",
+          "resultSummary",
+          "discrepancyCount"
+        ]
+      },
+      "ReconciliationRunListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReconciliationRunResponse"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataAsOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Report data-freshness instant"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "dataAsOf"
+        ]
+      },
+      "ReconciliationDiscrepancyFactsResponse": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "bucket": {
+            "type": "string",
+            "description": "Wallet bucket the difference was observed in"
+          },
+          "metric": {
+            "type": "string",
+            "description": "Compared metric"
+          },
+          "amountMinor": {
+            "type": "string",
+            "description": "Integer minor units on this side of the comparison"
+          }
+        },
+        "required": [
+          "memberId",
+          "currency",
+          "bucket",
+          "metric",
+          "amountMinor"
+        ]
+      },
+      "ReconciliationDiscrepancySourceReferencesResponse": {
+        "type": "object",
+        "properties": {
+          "pair": {
+            "type": "string",
+            "enum": [
+              "LEDGER_WALLET"
+            ]
+          },
+          "checkpointKey": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ledgerAccountId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "pair",
+          "checkpointKey",
+          "memberId",
+          "ledgerAccountId"
+        ]
+      },
+      "ReconciliationDiscrepancyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reconciliationRunId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pair": {
+            "type": "string",
+            "enum": [
+              "LEDGER_WALLET"
+            ]
+          },
+          "identityKey": {
+            "type": "string",
+            "description": "Bucket:metric identity inside the run"
+          },
+          "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DETECTED",
+              "INVESTIGATING",
+              "RESOLUTION_PENDING",
+              "RESOLVED"
+            ],
+            "description": "DETECTED → INVESTIGATING → RESOLUTION_PENDING → RESOLVED"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "ERROR",
+              "CRITICAL"
+            ]
+          },
+          "expectedFacts": {
+            "$ref": "#/components/schemas/ReconciliationDiscrepancyFactsResponse"
+          },
+          "observedFacts": {
+            "$ref": "#/components/schemas/ReconciliationDiscrepancyFactsResponse"
+          },
+          "amountDifferenceMinor": {
+            "type": "string",
+            "nullable": true,
+            "description": "observed - expected in integer minor units"
+          },
+          "sourceReferences": {
+            "$ref": "#/components/schemas/ReconciliationDiscrepancySourceReferencesResponse"
+          },
+          "detectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ageMs": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Detection age against `dataAsOf`"
+          },
+          "ownerReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "resolutionTrail": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "resolutionEvidence": {
+            "type": "object",
+            "nullable": true
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "FALSE_POSITIVE",
+              "ACCEPTED_EXCEPTION"
+            ],
+            "nullable": true,
+            "description": "Governed resolution outcome when the discrepancy is RESOLVED"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "reconciliationRunId",
+          "pair",
+          "identityKey",
+          "memberId",
+          "currency",
+          "status",
+          "severity",
+          "expectedFacts",
+          "observedFacts",
+          "amountDifferenceMinor",
+          "sourceReferences",
+          "detectedAt",
+          "ageMs",
+          "ownerReference",
+          "resolutionTrail",
+          "resolutionEvidence",
+          "outcome",
+          "resolvedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ReconciliationDiscrepancyListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReconciliationDiscrepancyResponse"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataAsOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Report data-freshness instant"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "dataAsOf"
+        ]
+      },
+      "AccountingPeriodReportRangeResponse": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inclusive lower bound"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Exclusive upper bound"
+          },
+          "boundary": {
+            "type": "string",
+            "enum": [
+              "half-open"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "EXPLICIT",
+              "ACCOUNTING_PERIOD"
+            ],
+            "description": "Whether the window came from explicit instants or an authoritative Accounting Period"
+          },
+          "accountingPeriodId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "boundary",
+          "source",
+          "accountingPeriodId"
+        ]
+      },
+      "AccountingPeriodReportCoverageGapResponse": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      },
+      "AccountingPeriodReportCoverageResponse": {
+        "type": "object",
+        "properties": {
+          "authoritativePeriodCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "uncoveredRanges": {
+            "description": "Observable spans of the window no authoritative Accounting Period covers",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodReportCoverageGapResponse"
+            }
+          },
+          "unobservedRange": {
+            "nullable": true,
+            "description": "Span of the window later than `dataAsOf`, therefore not yet observable",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AccountingPeriodReportCoverageGapResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "authoritativePeriodCount",
+          "uncoveredRanges",
+          "unobservedRange"
+        ]
+      },
+      "AccountingPeriodReportGroupResponse": {
+        "type": "object",
+        "properties": {
+          "accountingPeriodId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "type": "string",
+            "description": "Authoritative Accounting Period mode"
+          },
+          "generationKind": {
+            "type": "string",
+            "description": "Authoritative Accounting Period generation kind"
+          },
+          "effectiveStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "description": "Authoritative Accounting Period state"
+          },
+          "transactionCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "debitAmountMinor": {
+            "type": "string",
+            "description": "Total DEBIT postings in integer minor units"
+          },
+          "creditAmountMinor": {
+            "type": "string",
+            "description": "Total CREDIT postings in integer minor units"
+          }
+        },
+        "required": [
+          "accountingPeriodId",
+          "mode",
+          "generationKind",
+          "effectiveStart",
+          "effectiveEnd",
+          "state",
+          "transactionCount",
+          "debitAmountMinor",
+          "creditAmountMinor"
+        ]
+      },
+      "AccountingPeriodCorrectionLineageResponse": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "correctionKind": {
+            "type": "string"
+          },
+          "accountingPeriodId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "correctsTransactionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "originalAccountingPeriodId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "transactionId",
+          "correctionKind",
+          "accountingPeriodId",
+          "correctsTransactionId",
+          "originalAccountingPeriodId"
+        ]
+      },
+      "AccountingPeriodFinancialReportResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dataAsOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "projectionLagMs": {
+            "type": "number",
+            "enum": [
+              0
+            ],
+            "description": "Always 0: this report reads authoritative facts directly, with no projection"
+          },
+          "completeness": {
+            "type": "string",
+            "enum": [
+              "CURRENT",
+              "LAGGING",
+              "PARTIAL",
+              "REBUILDING"
+            ],
+            "description": "CURRENT when the whole window is observable and covered by authoritative Accounting Periods; LAGGING when the window extends past `dataAsOf`; PARTIAL when the observable window is not fully covered; REBUILDING is reserved for projection-backed Reporting outputs and is never returned by this authoritative read. Partial/lagging output is never definitive."
+          },
+          "reportingTimezone": {
+            "type": "string",
+            "enum": [
+              "Asia/Bangkok"
+            ]
+          },
+          "range": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AccountingPeriodReportRangeResponse"
+              }
+            ]
+          },
+          "coverage": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AccountingPeriodReportCoverageResponse"
+              }
+            ]
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodReportGroupResponse"
+            }
+          },
+          "corrections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingPeriodCorrectionLineageResponse"
+            }
+          }
+        },
+        "required": [
+          "generatedAt",
+          "dataAsOf",
+          "projectionLagMs",
+          "completeness",
+          "reportingTimezone",
+          "range",
+          "coverage",
+          "periods",
+          "corrections"
+        ]
+      },
+      "AdminAccessTokenResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken"
+        ]
+      },
+      "AdminRevokedResponse": {
+        "type": "object",
+        "properties": {
+          "revoked": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "revoked"
+        ]
+      },
+      "AdminMeResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SUPER_ADMIN",
+              "ADMIN",
+              "AUDITOR"
+            ]
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "accounting-period.read",
+                "accounting-period.create-custom",
+                "accounting-period.submit",
+                "accounting-period.approve",
+                "accounting-period.cancel",
+                "accounting-period.close",
+                "lottery-configuration.read",
+                "lottery-configuration.create",
+                "lottery-configuration.submit",
+                "lottery-configuration.approve",
+                "lottery-draw.read",
+                "lottery-draw.manage",
+                "result.read",
+                "result.manage",
+                "settlement.read",
+                "settlement.manage",
+                "withdrawal.read",
+                "withdrawal.review",
+                "withdrawal.payout",
+                "promotion.read",
+                "promotion.manage",
+                "promotion.approve",
+                "reconciliation.read",
+                "report.read"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "capabilities"
+        ]
+      },
+      "AdminReauthBody": {
+        "type": "object",
+        "properties": {
+          "actionClass": {
+            "type": "string",
+            "example": "accounting-period.close"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "example": "123456"
+          }
+        },
+        "required": [
+          "actionClass",
+          "code"
+        ]
+      },
+      "AdminReauthResponse": {
+        "type": "object",
+        "properties": {
+          "actionClass": {
+            "type": "string"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "actionClass",
+          "verifiedAt",
+          "expiresAt"
+        ]
+      },
+      "OtpRequestBody": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "LOGIN",
+              "REGISTER"
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "example": "+66812345678"
+          }
+        },
+        "required": [
+          "purpose",
+          "phone"
+        ]
+      },
+      "OtpRequestResponse": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "LOGIN",
+              "REGISTER"
+            ]
+          },
+          "deliveredTo": {
+            "type": "string",
+            "description": "Masked delivery target"
+          },
+          "retryAfterSeconds": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "purpose",
+          "deliveredTo",
+          "retryAfterSeconds"
+        ]
+      },
+      "OtpVerifyBody": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "LOGIN",
+              "REGISTER"
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "example": "+66812345678"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{4,8}$",
+            "example": "123456"
+          },
+          "deviceName": {
+            "type": "string",
+            "example": "My Phone"
+          }
+        },
+        "required": [
+          "purpose",
+          "phone",
+          "code"
+        ]
+      },
+      "MemberSessionResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "accountCreated": {
+            "type": "boolean"
+          },
+          "deviceId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "accessToken",
+          "memberId",
+          "accountCreated",
+          "deviceId"
+        ]
+      },
+      "MemberRevokedResponse": {
+        "type": "object",
+        "properties": {
+          "revoked": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "revoked"
+        ]
+      },
+      "MemberMeResponse": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
+          }
+        },
+        "required": [
+          "memberId",
+          "phone",
+          "status"
+        ]
+      },
+      "QuoteCreateBody": {
+        "type": "object",
+        "properties": {
+          "betTypeCode": {
+            "type": "string"
+          },
+          "canonicalNumber": {
+            "type": "string",
+            "example": "42"
+          },
+          "stakeMinor": {
+            "type": "string",
+            "description": "Stake in integer minor units"
+          }
+        },
+        "required": [
+          "betTypeCode",
+          "canonicalNumber",
+          "stakeMinor"
+        ]
+      },
+      "BetOrderCommandBody": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "description": "Expected Bet Order version"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "MemberSessionViewBody": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "sessionId",
+          "deviceId",
+          "expiresAt"
+        ]
+      },
+      "MemberDeviceViewBody": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "deviceId",
+          "name",
+          "createdAt",
+          "lastUsedAt"
+        ]
+      },
+      "WalletBucketBody": {
+        "type": "object",
+        "properties": {
+          "bucket": {
+            "type": "string",
+            "enum": [
+              "CASH",
+              "BONUS",
+              "LOCKED"
+            ]
+          },
+          "postedMinor": {
+            "type": "string",
+            "description": "Posted balance in integer minor units"
+          },
+          "reservedMinor": {
+            "type": "string",
+            "description": "Active reservations in integer minor units"
+          },
+          "availableMinor": {
+            "type": "string",
+            "description": "Spendable balance in integer minor units"
+          }
+        },
+        "required": [
+          "bucket",
+          "postedMinor",
+          "reservedMinor",
+          "availableMinor"
+        ]
+      },
+      "WalletBalanceBody": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "dataAsOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WalletBucketBody"
+            }
+          }
+        },
+        "required": [
+          "memberId",
+          "currency",
+          "dataAsOf",
+          "buckets"
+        ]
+      },
+      "WalletTransactionBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "businessTransactionId": {
+            "type": "string"
+          },
+          "operationType": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "postedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "netImpactMinor": {
+            "type": "string",
+            "description": "Signed net impact to the Member in minor units"
+          }
+        },
+        "required": [
+          "id",
+          "businessTransactionId",
+          "operationType",
+          "correlationId",
+          "postedAt",
+          "effectiveAt",
+          "netImpactMinor"
+        ]
+      },
+      "WalletTransactionPageBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WalletTransactionBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "DepositInitiateBody": {
+        "type": "object",
+        "properties": {
+          "providerCode": {
+            "type": "string",
+            "example": "corridor"
+          },
+          "methodCode": {
+            "type": "string",
+            "example": "bank-transfer"
+          },
+          "amountMinor": {
+            "type": "number",
+            "description": "Positive amount in integer minor units"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          }
+        },
+        "required": [
+          "providerCode",
+          "methodCode",
+          "amountMinor",
+          "currency"
+        ]
+      },
+      "DepositBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "providerCode": {
+            "type": "string"
+          },
+          "methodCode": {
+            "type": "string"
+          },
+          "amountMinor": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INITIATED",
+              "PENDING",
+              "REVIEW_REQUIRED",
+              "COMPLETED",
+              "REJECTED"
+            ]
+          },
+          "ledgerTransactionId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Ledger transaction id when the deposit was credited"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "providerCode",
+          "methodCode",
+          "amountMinor",
+          "currency",
+          "status",
+          "ledgerTransactionId",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateWithdrawalBody": {
+        "type": "object",
+        "properties": {
+          "payoutDestinationId": {
+            "type": "string",
+            "description": "Opaque Payout Destination identity"
+          },
+          "amountMinor": {
+            "type": "number",
+            "description": "Positive amount in integer minor units"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          }
+        },
+        "required": [
+          "payoutDestinationId",
+          "amountMinor",
+          "currency"
+        ]
+      },
+      "WithdrawalBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "payoutDestinationId": {
+            "type": "string"
+          },
+          "amountMinor": {
+            "type": "string",
+            "description": "Integer minor units"
+          },
+          "feeMinor": {
+            "type": "string",
+            "description": "Integer minor units"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "RESERVING",
+              "REVIEWING",
+              "APPROVED",
+              "PAYOUT_PROCESSING",
+              "PAYOUT_CONFIRMED",
+              "FINALIZING",
+              "COMPLETED",
+              "CANCELLING",
+              "CANCELLED",
+              "REJECTED",
+              "FAILED",
+              "RECONCILING"
+            ]
+          },
+          "version": {
+            "type": "number"
+          },
+          "eligibilityOutcome": {
+            "type": "string",
+            "enum": [
+              "ALLOW",
+              "REVIEW_REQUIRED",
+              "DENY"
+            ]
+          },
+          "eligibilityReasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiresApproval": {
+            "type": "boolean"
+          },
+          "ledgerTransactionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "payoutEvidenceRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "decisionReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowedActions": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Only commands the caller is currently permitted to issue"
+          },
+          "eligibilityEvidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "payoutDestinationId",
+          "amountMinor",
+          "feeMinor",
+          "currency",
+          "state",
+          "version",
+          "eligibilityOutcome",
+          "eligibilityReasonCodes",
+          "requiresApproval",
+          "ledgerTransactionId",
+          "payoutEvidenceRef",
+          "failureReason",
+          "decisionReason",
+          "allowedActions",
+          "eligibilityEvidenceRefs",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "WithdrawalListBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WithdrawalBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "AddPayoutDestinationBody": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "BANK_ACCOUNT"
+            ],
+            "example": "BANK_ACCOUNT"
+          },
+          "bankCode": {
+            "type": "string",
+            "example": "KBANK"
+          },
+          "accountNumber": {
+            "type": "string",
+            "description": "Raw account reference; never persisted as-is"
+          },
+          "accountHolderName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "bankCode",
+          "accountNumber",
+          "accountHolderName"
+        ]
+      },
+      "PayoutDestinationBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "BANK_ACCOUNT"
+            ]
+          },
+          "bankCode": {
+            "type": "string"
+          },
+          "accountNumberMasked": {
+            "type": "string",
+            "description": "Masked display value only"
+          },
+          "accountHolderName": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "VERIFIED",
+              "REJECTED"
+            ]
+          },
+          "verificationEvidenceRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "version": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "type",
+          "bankCode",
+          "accountNumberMasked",
+          "accountHolderName",
+          "currency",
+          "status",
+          "verificationEvidenceRef",
+          "verifiedAt",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PayoutDestinationListBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayoutDestinationBody"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "AdminWithdrawalBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "payoutDestinationId": {
+            "type": "string"
+          },
+          "amountMinor": {
+            "type": "string",
+            "description": "Integer minor units"
+          },
+          "feeMinor": {
+            "type": "string",
+            "description": "Integer minor units"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "RESERVING",
+              "REVIEWING",
+              "APPROVED",
+              "PAYOUT_PROCESSING",
+              "PAYOUT_CONFIRMED",
+              "FINALIZING",
+              "COMPLETED",
+              "CANCELLING",
+              "CANCELLED",
+              "REJECTED",
+              "FAILED",
+              "RECONCILING"
+            ]
+          },
+          "version": {
+            "type": "number"
+          },
+          "eligibilityOutcome": {
+            "type": "string",
+            "enum": [
+              "ALLOW",
+              "REVIEW_REQUIRED",
+              "DENY"
+            ]
+          },
+          "eligibilityReasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "eligibilityEvidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiresApproval": {
+            "type": "boolean",
+            "description": "True when the Approval queue owns the item"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "queue": {
+            "type": "string",
+            "enum": [
+              "REVIEW",
+              "APPROVAL",
+              "PAYOUT",
+              "RECONCILIATION"
+            ],
+            "nullable": true
+          },
+          "allowedActions": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Currently allowed commands; never inferred from status alone"
+          },
+          "reconciliationAttempts": {
+            "type": "number",
+            "description": "Recorded reconciliation attempts"
+          },
+          "providerTransactionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "payoutEvidenceRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "ledgerTransactionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "decidedByAdminId": {
+            "type": "string",
+            "nullable": true
+          },
+          "decisionReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "incomingProviderError": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "payoutDestinationId",
+          "amountMinor",
+          "feeMinor",
+          "currency",
+          "state",
+          "version",
+          "eligibilityOutcome",
+          "eligibilityReasonCodes",
+          "eligibilityEvidenceRefs",
+          "requiresApproval",
+          "severity",
+          "queue",
+          "allowedActions",
+          "reconciliationAttempts",
+          "providerTransactionId",
+          "payoutEvidenceRef",
+          "ledgerTransactionId",
+          "decidedByAdminId",
+          "decisionReason",
+          "failureReason",
+          "incomingProviderError",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "AdminWithdrawalListBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminWithdrawalBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "AdminWithdrawalTimelineEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fromState": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "RESERVING",
+              "REVIEWING",
+              "APPROVED",
+              "PAYOUT_PROCESSING",
+              "PAYOUT_CONFIRMED",
+              "FINALIZING",
+              "COMPLETED",
+              "CANCELLING",
+              "CANCELLED",
+              "REJECTED",
+              "FAILED",
+              "RECONCILING"
+            ],
+            "nullable": true
+          },
+          "toState": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "RESERVING",
+              "REVIEWING",
+              "APPROVED",
+              "PAYOUT_PROCESSING",
+              "PAYOUT_CONFIRMED",
+              "FINALIZING",
+              "COMPLETED",
+              "CANCELLING",
+              "CANCELLED",
+              "REJECTED",
+              "FAILED",
+              "RECONCILING"
+            ]
+          },
+          "actorType": {
+            "type": "string",
+            "enum": [
+              "MEMBER",
+              "ADMIN",
+              "SYSTEM",
+              "PROVIDER"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "evidenceRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "fromState",
+          "toState",
+          "actorType",
+          "actorId",
+          "reason",
+          "evidenceRef",
+          "correlationId",
+          "createdAt"
+        ]
+      },
+      "AdminWithdrawalDetailBody": {
+        "type": "object",
+        "properties": {
+          "withdrawal": {
+            "$ref": "#/components/schemas/AdminWithdrawalBody"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminWithdrawalTimelineEntry"
+            }
+          }
+        },
+        "required": [
+          "withdrawal",
+          "timeline"
+        ]
+      },
+      "WithdrawalCommandBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Destination and payout evidence verified by review"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "PromotionDiscoveryItemBody": {
+        "type": "object",
+        "properties": {
+          "campaignVersionId": {
+            "type": "string"
+          },
+          "campaignCode": {
+            "type": "string"
+          },
+          "campaignVersion": {
+            "type": "number"
+          },
+          "rewardAmountMinor": {
+            "type": "string",
+            "description": "Reward in integer minor units"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "turnoverTargetMinor": {
+            "type": "string",
+            "description": "Turnover target in integer minor units"
+          },
+          "contributionBps": {
+            "type": "number",
+            "description": "Contribution in basis points"
+          },
+          "winningsDestination": {
+            "type": "string",
+            "enum": [
+              "BONUS",
+              "CASH",
+              "PROPORTIONAL"
+            ]
+          },
+          "stackingMode": {
+            "type": "string",
+            "enum": [
+              "EXCLUSIVE",
+              "STACKABLE"
+            ]
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eligible": {
+            "type": "boolean"
+          },
+          "ineligibilityReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "campaignVersionId",
+          "campaignCode",
+          "campaignVersion",
+          "rewardAmountMinor",
+          "currency",
+          "turnoverTargetMinor",
+          "contributionBps",
+          "winningsDestination",
+          "stackingMode",
+          "effectiveFrom",
+          "effectiveUntil",
+          "expiresAt",
+          "eligible",
+          "ineligibilityReasons"
+        ]
+      },
+      "PromotionDiscoveryBody": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionDiscoveryItemBody"
+            }
+          }
+        },
+        "required": [
+          "memberId",
+          "asOf",
+          "items"
+        ]
+      },
+      "TurnoverProgressBody": {
+        "type": "object",
+        "properties": {
+          "provisionalMinor": {
+            "type": "string"
+          },
+          "finalizedMinor": {
+            "type": "string"
+          },
+          "progressMinor": {
+            "type": "string"
+          },
+          "targetMinor": {
+            "type": "string"
+          },
+          "remainingMinor": {
+            "type": "string"
+          },
+          "releaseReached": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provisionalMinor",
+          "finalizedMinor",
+          "progressMinor",
+          "targetMinor",
+          "remainingMinor",
+          "releaseReached"
+        ]
+      },
+      "TurnoverEntryBody": {
+        "type": "object",
+        "properties": {
+          "betReference": {
+            "type": "string"
+          },
+          "entryKind": {
+            "type": "string",
+            "enum": [
+              "BET",
+              "ADJUSTMENT"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PROVISIONAL",
+              "FINALIZED",
+              "REMOVED"
+            ]
+          },
+          "contributionMinor": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "betReference",
+          "entryKind",
+          "state",
+          "contributionMinor",
+          "occurredAt"
+        ]
+      },
+      "PromotionEntitlementBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "campaignCode": {
+            "type": "string"
+          },
+          "campaignVersionId": {
+            "type": "string"
+          },
+          "campaignVersion": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "RELEASE_PENDING",
+              "COMPLETED",
+              "EXPIRED",
+              "REVOKED"
+            ]
+          },
+          "version": {
+            "type": "number"
+          },
+          "terms": {
+            "type": "object",
+            "description": "Snapshotted Campaign terms"
+          },
+          "rewardMinor": {
+            "type": "string"
+          },
+          "turnoverTargetMinor": {
+            "type": "string"
+          },
+          "releasedMinor": {
+            "type": "string"
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "grantLedgerTransactionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "releaseLedgerTransactionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "turnover": {
+            "$ref": "#/components/schemas/TurnoverProgressBody"
+          },
+          "turnoverEntries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TurnoverEntryBody"
+            }
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "campaignCode",
+          "campaignVersionId",
+          "campaignVersion",
+          "state",
+          "version",
+          "terms",
+          "rewardMinor",
+          "turnoverTargetMinor",
+          "releasedMinor",
+          "grantedAt",
+          "expiresAt",
+          "completedAt",
+          "grantLedgerTransactionId",
+          "releaseLedgerTransactionId",
+          "turnover",
+          "turnoverEntries",
+          "allowedActions"
+        ]
+      },
+      "PromotionEntitlementPageBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionEntitlementBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "ClaimPromotionBody": {
+        "type": "object",
+        "properties": {
+          "campaignVersionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "campaignVersionId"
+        ]
+      },
+      "NotificationPreferenceBody": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "TRANSACTIONAL",
+              "SECURITY",
+              "PROMOTIONAL",
+              "RESULT"
+            ]
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "PUSH",
+              "SMS",
+              "EMAIL"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "number",
+            "description": "0 when the preference was never stored"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "topic",
+          "channel",
+          "enabled",
+          "version",
+          "updatedAt"
+        ]
+      },
+      "NotificationPreferencesBody": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationPreferenceBody"
+            }
+          }
+        },
+        "required": [
+          "memberId",
+          "items"
+        ]
+      },
+      "UpdateNotificationPreferencesBody": {
+        "type": "object",
+        "properties": {
+          "preferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationPreferenceBody"
+            }
+          }
+        },
+        "required": [
+          "preferences"
+        ]
+      }
+    }
+  }
+}
