@@ -21,6 +21,11 @@ import {
   SETTLEMENT_WALLET_PORT,
 } from "./result-settlement/application/settlement.ports";
 import { WITHDRAWAL_LEDGER_PORT } from "./payments/application/withdrawal-ledger.port";
+import { NotificationPreferenceService } from "./promotion/application/notification-preference.service";
+import { PromotionCampaignService } from "./promotion/application/promotion-campaign.service";
+import { PromotionEntitlementService } from "./promotion/application/promotion-entitlement.service";
+import { PROMOTION_LEDGER_PORT } from "./promotion/application/promotion-ledger.port";
+import { PROMOTION_MEMBER_FACTS_PORT } from "./promotion/application/promotion-member-facts.port";
 import { PromotionModule } from "./promotion/promotion.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { LedgerWalletReconciliationService } from "./reporting/ledger-wallet-reconciliation.service";
@@ -36,6 +41,8 @@ import { SettlementWalletAdapter } from "../platform/integration/settlement-wall
 import { SettlementDrawAdapter } from "../platform/integration/settlement-draw.adapter";
 import { SettlementOrdersAdapter } from "../platform/integration/settlement-orders.adapter";
 import { WithdrawalLedgerAdapter } from "../platform/integration/withdrawal-ledger.adapter";
+import { PromotionLedgerAdapter } from "../platform/integration/promotion-ledger.adapter";
+import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-member-facts.adapter";
 
 @Module({
   imports: [
@@ -102,6 +109,22 @@ import { WithdrawalLedgerAdapter } from "../platform/integration/withdrawal-ledg
       provide: WITHDRAWAL_LEDGER_PORT,
       useExisting: WithdrawalLedgerAdapter,
     },
+    // Promotion monetary effects flow through the Wallet & Ledger financial
+    // core, never through a mutable balance; Member facts are resolved through
+    // identity-access rather than re-derived from its storage.
+    PromotionLedgerAdapter,
+    {
+      provide: PROMOTION_LEDGER_PORT,
+      useExisting: PromotionLedgerAdapter,
+    },
+    PromotionMemberFactsAdapter,
+    {
+      provide: PROMOTION_MEMBER_FACTS_PORT,
+      useExisting: PromotionMemberFactsAdapter,
+    },
+    PromotionCampaignService,
+    PromotionEntitlementService,
+    NotificationPreferenceService,
     DepositService,
     WithdrawalService,
     PayoutDestinationService,
@@ -113,6 +136,9 @@ import { WithdrawalLedgerAdapter } from "../platform/integration/withdrawal-ledg
     BettingModule,
     WalletLedgerModule,
     PaymentsModule,
+    PromotionCampaignService,
+    PromotionEntitlementService,
+    NotificationPreferenceService,
     DepositService,
     WithdrawalService,
     PayoutDestinationService,

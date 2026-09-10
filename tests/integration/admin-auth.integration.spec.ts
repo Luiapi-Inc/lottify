@@ -114,6 +114,9 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
         "withdrawal.read",
         "withdrawal.review",
         "withdrawal.payout",
+        "promotion.read",
+        "promotion.manage",
+        "promotion.approve",
       ],
     });
 
@@ -189,6 +192,7 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
       "result.read",
       "settlement.read",
       "withdrawal.read",
+      "promotion.read",
     ]);
   });
 

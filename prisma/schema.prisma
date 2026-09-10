@@ -991,3 +991,141 @@ model PaymentWithdrawalEvent {
   @@index([withdrawalId, createdAt])
   @@map("payment_withdrawal_events")
 }
+// Promotion context. A Promotion Campaign is the versioned configuration root
+// for eligibility, reward, turnover, stacking, expiry and anti-abuse terms; a
+// published Campaign version is immutable so historical decisions stay
+// reproducible. A Member Entitlement snapshots the exact Campaign version and
+// the resolved Member-specific terms at grant time and is never rewritten by a
+// later Campaign change. Monetary grant/completion states are only reachable
+// with the durable Ledger linkage recorded on the row.
+model PromotionCampaign {
+  id           String                    @id @default(uuid()) @db.Uuid
+  code         String                    @unique
+  createdAt    DateTime                  @default(now()) @map("created_at")
+  updatedAt    DateTime                  @updatedAt @map("updated_at")
+  versions     PromotionCampaignVersion[]
+  entitlements PromotionEntitlement[]
+
+  @@map("promotion_campaigns")
+}
+
+model PromotionCampaignVersion {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  campaignId          String                 @map("campaign_id") @db.Uuid
+  version             Int
+  revision            Int                    @default(1)
+  state               String
+  terms               Json
+  termsDigest         String                 @map("terms_digest")
+  effectiveFrom       DateTime               @map("effective_from")
+  effectiveUntil      DateTime?              @map("effective_until")
+  reason              String?
+  createdByAdminId    String?                @map("created_by_admin_id") @db.Uuid
+  publishedAt         DateTime?              @map("published_at")
+  publishedByAdminId  String?                @map("published_by_admin_id") @db.Uuid
+  approvalEvidenceRef String?                @map("approval_evidence_ref")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  campaign            PromotionCampaign      @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  entitlements        PromotionEntitlement[]
+
+  @@unique([campaignId, version])
+  @@index([state, effectiveFrom, effectiveUntil])
+  @@map("promotion_campaign_versions")
+}
+
+model PromotionEntitlement {
+  id                         String                  @id @default(uuid()) @db.Uuid
+  memberId                   String                  @map("member_id") @db.Uuid
+  campaignId                 String                  @map("campaign_id") @db.Uuid
+  campaignVersionId          String                  @map("campaign_version_id") @db.Uuid
+  campaignVersion            Int                     @map("campaign_version")
+  state                      String
+  version                    Int                     @default(1)
+  termsSnapshot              Json                    @map("terms_snapshot")
+  stackingDecision           Json                    @map("stacking_decision")
+  currency                   String                  @default("THB")
+  rewardMinor                BigInt                  @map("reward_minor")
+  turnoverTargetMinor        BigInt                  @map("turnover_target_minor")
+  releasedMinor              BigInt                  @default(0) @map("released_minor")
+  expiredMinor               BigInt                  @default(0) @map("expired_minor")
+  grantedAt                  DateTime                @map("granted_at")
+  expiresAt                  DateTime                @map("expires_at")
+  completedAt                DateTime?               @map("completed_at")
+  expiredAt                  DateTime?               @map("expired_at")
+  revokedAt                  DateTime?               @map("revoked_at")
+  grantLedgerTransactionId   String?                 @map("grant_ledger_transaction_id") @db.Uuid
+  releaseLedgerTransactionId String?                 @map("release_ledger_transaction_id") @db.Uuid
+  expiryLedgerTransactionId  String?                 @map("expiry_ledger_transaction_id") @db.Uuid
+  idempotencyScope           String                  @map("idempotency_scope")
+  idempotencyKey             String                  @map("idempotency_key")
+  fingerprint                String
+  correlationId              String                  @map("correlation_id")
+  createdAt                  DateTime                @default(now()) @map("created_at")
+  updatedAt                  DateTime                @updatedAt @map("updated_at")
+  campaign                   PromotionCampaign       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  campaignVersionRef         PromotionCampaignVersion @relation(fields: [campaignVersionId], references: [id], onDelete: Restrict)
+  turnoverEntries            PromotionTurnoverEntry[]
+
+  @@unique([idempotencyScope, idempotencyKey])
+  @@unique([memberId, campaignVersionId])
+  @@index([memberId, state, expiresAt])
+  @@index([campaignVersionId])
+  @@map("promotion_entitlements")
+}
+
+// Turnover contribution ledger. A confirmed eligible Bet creates one
+// PROVISIONAL entry; cancellation/refund removes it; a terminal non-refunded
+// outcome finalizes it; later corrections add compensating adjustment entries
+// instead of rewriting history. Only FINALIZED contributions can release a
+// promotion (see promotion-turnover.ts).
+model PromotionTurnoverEntry {
+  id                String                   @id @default(uuid()) @db.Uuid
+  entitlementId     String                   @map("entitlement_id") @db.Uuid
+  memberId          String                   @map("member_id") @db.Uuid
+  betReference      String                   @map("bet_reference")
+  entryKind         String                   @map("entry_kind")
+  state             String
+  contributionMinor BigInt                   @map("contribution_minor")
+  stakeMinor        BigInt                   @map("stake_minor")
+  currency          String                   @default("THB")
+  scopeReference    Json                     @map("scope_reference")
+  sourceAllocation  Json                     @map("source_allocation")
+  correctsEntryId   String?                  @map("corrects_entry_id") @db.Uuid
+  idempotencyScope  String                   @map("idempotency_scope")
+  idempotencyKey    String                   @map("idempotency_key")
+  fingerprint       String
+  correlationId     String                   @map("correlation_id")
+  occurredAt        DateTime                 @map("occurred_at")
+  finalizedAt       DateTime?                @map("finalized_at")
+  removedAt         DateTime?                @map("removed_at")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  entitlement       PromotionEntitlement     @relation(fields: [entitlementId], references: [id], onDelete: Restrict)
+  corrects          PromotionTurnoverEntry?  @relation("PromotionTurnoverCorrection", fields: [correctsEntryId], references: [id], onDelete: Restrict)
+  corrections       PromotionTurnoverEntry[] @relation("PromotionTurnoverCorrection")
+
+  @@unique([entitlementId, betReference, entryKind])
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([memberId, betReference])
+  @@index([entitlementId, state])
+  @@map("promotion_turnover_entries")
+}
+
+// Member notification preferences as a first-class Member resource. Preference
+// rows are per topic/channel and carry a version so updates are optimistic and
+// never silently last-write-wins.
+model MemberNotificationPreference {
+  id        String   @id @default(uuid()) @db.Uuid
+  memberId  String   @map("member_id") @db.Uuid
+  topic     String
+  channel   String
+  enabled   Boolean  @default(true)
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([memberId, topic, channel])
+  @@index([memberId])
+  @@map("member_notification_preferences")
+}
