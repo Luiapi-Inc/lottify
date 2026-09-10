@@ -63,6 +63,46 @@ export interface MemberProfilePatch {
   province?: string | null;
 }
 
+export type ReadinessCapability = "BET" | "WITHDRAWAL" | "DEPOSIT" | "PROMOTION";
+export type EligibilityOutcome =
+  | "ALLOW"
+  | "DENY"
+  | "REVIEW_REQUIRED"
+  | "CHALLENGE/REAUTH_REQUIRED";
+export type KycReadinessStatus =
+  | "VERIFIED"
+  | "REJECTED"
+  | "REVIEW_REQUIRED"
+  | "MORE_INFO_REQUIRED"
+  | null;
+
+export interface CapabilityReadiness {
+  capability: ReadinessCapability;
+  outcome: EligibilityOutcome;
+  reasonCodes: string[];
+  evaluatedAt: string;
+  validUntil: string;
+}
+
+export interface MemberReadinessResponse {
+  memberId: string;
+  asOf: string;
+  policyVersion: string;
+  capabilities: CapabilityReadiness[];
+  requirements: {
+    termsSatisfied: boolean;
+    profileComplete: boolean;
+    missingProfileFields: Array<"fullName" | "dateOfBirth" | "province">;
+    kyc: {
+      required: boolean;
+      status: KycReadinessStatus;
+      verified: boolean;
+      expired: boolean;
+    };
+    outstandingRequirements: string[];
+  };
+}
+
 export class MemberApiFailure extends Error {
   constructor(
     public code: string,
@@ -128,6 +168,10 @@ class MemberApiClient {
       method: "PATCH",
       body: patch,
     });
+  }
+
+  getReadiness(): Promise<MemberReadinessResponse> {
+    return this.request<MemberReadinessResponse>("readiness");
   }
 
   private async publicRequest<T>(path: string, body?: unknown): Promise<T> {
