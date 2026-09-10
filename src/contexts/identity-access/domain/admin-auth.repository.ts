@@ -27,6 +27,8 @@ export const ADMIN_CAPABILITIES = [
   "member-terms.read",
   "member-terms.manage",
   "member-terms.approve",
+  "member-readiness.read",
+  "member-readiness.manage",
   "reconciliation.read",
   "report.read",
   "audit.read",

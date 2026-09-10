@@ -2,9 +2,9 @@
 
 Generated from the live OpenAPI 3.0.0 contract (`apps/api/openapi/openapi.json`).
 
-**108 paths · 118 operations · 132 schemas**
+**110 paths · 121 operations · 139 schemas**
 
-Source: `main @ 6391102` · generated 2026-09-10 18:42 (+07)
+Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 ---
 ## Contents
@@ -22,6 +22,7 @@ Source: `main @ 6391102` · generated 2026-09-10 18:42 (+07)
   - [`/member/profile`](#member--profile)
   - [`/member/promotions`](#member--promotions)
   - [`/member/quotes`](#member--quotes)
+  - [`/member/readiness`](#member--readiness)
   - [`/member/sessions`](#member--sessions)
   - [`/member/terms`](#member--terms)
   - [`/member/wallet`](#member--wallet)
@@ -34,6 +35,7 @@ Source: `main @ 6391102` · generated 2026-09-10 18:42 (+07)
   - [`/admin/draws`](#admin--draws)
   - [`/admin/lottery`](#admin--lottery)
   - [`/admin/member-terms`](#admin--member-terms)
+  - [`/admin/member-capability-restrictions`](#admin--member-capability-restrictions)
   - [`/admin/products`](#admin--products)
   - [`/admin/promotions`](#admin--promotions)
   - [`/admin/reconciliation`](#admin--reconciliation)
@@ -342,6 +344,16 @@ Source: `main @ 6391102` · generated 2026-09-10 18:42 (+07)
 
 - **Responses:**
   - `200` → `MemberProfileBody`
+
+<a id="member--readiness"></a>
+### `/member/readiness`
+
+#### `GET /api/v1/member/readiness`
+
+*Read the Member's capability readiness and KYC state*
+
+- **Responses:**
+  - `200` → `MemberReadinessBody`
 
 <a id="member--promotions"></a>
 ### `/member/promotions`
@@ -1008,6 +1020,25 @@ Source: `main @ 6391102` · generated 2026-09-10 18:42 (+07)
 
 - **Responses:**
   - `200` → `TermsVersionBody`
+
+<a id="admin--member-capability-restrictions"></a>
+### `/admin/member-capability-restrictions`
+
+#### `POST /api/v1/admin/member-capability-restrictions`
+
+*Apply an independent per-capability restriction to a Member*
+
+- **Request** `application/json`: `SetRestrictionBody`
+
+- **Responses:**
+  - `201` → `CapabilityRestrictionBody`
+
+#### `DELETE /api/v1/admin/member-capability-restrictions/{id}`
+
+*Remove a capability restriction an Admin set*
+
+- **Responses:**
+  - `200` → `ClearRestrictionBody`
 
 <a id="admin--products"></a>
 ### `/admin/products`

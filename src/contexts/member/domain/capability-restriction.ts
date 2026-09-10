@@ -39,6 +39,13 @@ const RESTRICTION_TYPE_BY_CAPABILITY: Record<
   PROMOTION: "PROMOTION_BLOCKED",
 };
 
+/** The locked capability -> restriction-type mapping (Ticket 06). */
+export function restrictionTypeForCapability(
+  capability: MemberCapability,
+): MemberCapabilityRestrictionType {
+  return RESTRICTION_TYPE_BY_CAPABILITY[capability];
+}
+
 export function isCapabilityRestrictionEffective(
   restriction: MemberCapabilityRestriction,
   at: Date,

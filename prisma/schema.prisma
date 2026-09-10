@@ -44,6 +44,9 @@ model Member {
   payoutDestinations PayoutDestination[]
   withdrawals PaymentWithdrawal[]
   termsAcceptances MemberTermsAcceptance[]
+  capabilityRestrictions CapabilityRestriction[]
+  verificationRecords MemberVerificationRecord[]
+  kycStatus MemberKycStatus?
 
   @@map("members")
 }
@@ -97,6 +100,69 @@ model MemberTermsAcceptance {
   @@unique([memberId, documentId])
   @@index([memberId, acceptedAt])
   @@map("member_terms_acceptances")
+}
+
+/// KYC/Risk persistence for Member capability readiness (Ticket 06). A
+/// Capability Restriction is an independent per-capability control — never one
+/// overloaded account status — carrying source, reason, effective period and an
+/// actor-or-policy reference so the restriction is reproducible. It maps to the
+/// locked `BET_BLOCKED`/`WITHDRAWAL_BLOCKED`/`DEPOSIT_BLOCKED`/`LOGIN_BLOCKED`/
+/// `PROMOTION_BLOCKED` set via the Member context domain rules.
+model CapabilityRestriction {
+  id               String   @id @default(uuid()) @db.Uuid
+  memberId         String   @map("member_id") @db.Uuid
+  type             String
+  source           String
+  reason           String
+  effectiveFrom    DateTime @map("effective_from")
+  effectiveUntil   DateTime? @map("effective_until")
+  actorOrPolicyRef String   @map("actor_or_policy_ref")
+  createdByAdminId String?  @map("created_by_admin_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  member           Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([memberId, type, effectiveFrom])
+  @@map("member_capability_restrictions")
+}
+
+/// Verification records (Ticket 06). Verification freshness is explicit per
+/// verification type: each record carries `verifiedAt`, source, evidence
+/// references, an optional expiry and an optional reverification-policy
+/// reference, and an expired verification is never treated as valid.
+model MemberVerificationRecord {
+  id                     String   @id @default(uuid()) @db.Uuid
+  memberId               String   @map("member_id") @db.Uuid
+  type                   String
+  verifiedAt             DateTime @map("verified_at")
+  source                 String
+  evidenceRefs           Json     @map("evidence_refs")
+  expiresAt              DateTime? @map("expires_at")
+  reverificationPolicyRef String?  @map("reverification_policy_ref")
+  createdAt              DateTime @default(now()) @map("created_at")
+  member                 Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([memberId, type, verifiedAt])
+  @@map("member_verification_records")
+}
+
+/// Normalized KYC state (Ticket 06). The latest canonical, provider-independent
+/// outcome for a Member — never a vendor status. One row per Member (upsert).
+model MemberKycStatus {
+  id            String   @id @default(uuid()) @db.Uuid
+  memberId      String   @unique @map("member_id") @db.Uuid
+  outcome       String
+  policyVersion String   @map("policy_version")
+  evidenceRefs  Json     @map("evidence_refs")
+  source        String
+  evaluatedAt   DateTime @map("evaluated_at")
+  version       Int      @default(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  member        Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("member_kyc_status")
 }
 
 model MemberDevice {

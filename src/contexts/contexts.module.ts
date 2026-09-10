@@ -45,6 +45,12 @@ import { SettlementOrdersAdapter } from "../platform/integration/settlement-orde
 import { WithdrawalLedgerAdapter } from "../platform/integration/withdrawal-ledger.adapter";
 import { PromotionLedgerAdapter } from "../platform/integration/promotion-ledger.adapter";
 import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-member-facts.adapter";
+import { CapabilityRestrictionAdapter } from "../platform/integration/capability-restriction.adapter";
+import { MemberReadinessFactsAdapter } from "../platform/integration/member-readiness-facts.adapter";
+import { CAPABILITY_RESTRICTION_PORT } from "./kyc-risk/application/capability-restriction.port";
+import { MEMBER_READINESS_FACTS_PORT } from "./kyc-risk/application/member-readiness-facts.port";
+import { EligibilityService } from "./kyc-risk/application/eligibility.service";
+import { CapabilityRestrictionAdminService } from "./member/application/capability-restriction-admin.service";
 
 @Module({
   imports: [
@@ -132,6 +138,21 @@ import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-m
     // than being derived by another context.
     TermsService,
     ProfileService,
+    // Member capability readiness + KYC eligibility (Issue 66). KYC/Risk owns
+    // the eligibility decision; the Member-owned restriction and onboarding
+    // facts it reads are resolved through cross-context adapters.
+    CapabilityRestrictionAdapter,
+    {
+      provide: CAPABILITY_RESTRICTION_PORT,
+      useExisting: CapabilityRestrictionAdapter,
+    },
+    MemberReadinessFactsAdapter,
+    {
+      provide: MEMBER_READINESS_FACTS_PORT,
+      useExisting: MemberReadinessFactsAdapter,
+    },
+    EligibilityService,
+    CapabilityRestrictionAdminService,
     DepositService,
     WithdrawalService,
     PayoutDestinationService,
@@ -148,6 +169,8 @@ import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-m
     NotificationPreferenceService,
     TermsService,
     ProfileService,
+    CapabilityRestrictionAdminService,
+    EligibilityService,
     DepositService,
     WithdrawalService,
     PayoutDestinationService,
