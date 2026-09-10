@@ -13,7 +13,7 @@ import type { AdminCapability } from "../../../src/contexts/identity-access/doma
 import type { AdminAuthenticatedRequest } from "./admin-auth.guard";
 import { currentCorrelationId } from "./correlation";
 
-const ADMIN_CAPABILITIES_METADATA = "lottify.admin.required-capabilities";
+export const ADMIN_CAPABILITIES_METADATA = "lottify.admin.required-capabilities";
 
 export const RequireAdminCapabilities = (...capabilities: AdminCapability[]) =>
   SetMetadata(ADMIN_CAPABILITIES_METADATA, capabilities);
