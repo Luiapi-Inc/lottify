@@ -890,6 +890,93 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
     expect(pending).toEqual([]);
   });
 
+  // ---------------------------------------------------------------------------
+  // Member Bet Order history ("my slips") — keyset pagination
+
+  it("lists only the requesting Member's Orders, newest first", async () => {
+    const { drawId, betTypeCode } = await openDraw("O_LIST", "2099-10-05");
+    const owner = await newMember();
+    const other = await newMember();
+    const quoteAt = new Date("2099-10-05T08:00:00.000Z");
+
+    const quoteA = await authorisedQuote({ memberId: owner, drawId, betTypeCode, serverNow: quoteAt });
+    const first = await createOrderForQuote(owner, quoteA.id);
+    const quoteB = await authorisedQuote({ memberId: owner, drawId, betTypeCode, serverNow: quoteAt });
+    const second = await createOrderForQuote(owner, quoteB.id);
+    const otherQuote = await authorisedQuote({ memberId: other, drawId, betTypeCode, serverNow: quoteAt });
+    const otherOrder = await createOrderForQuote(other, otherQuote.id);
+
+    const page = await orders.listOrders(owner, { limit: 20 });
+    const ids = page.items.map((item) => item.id);
+    expect(ids).toContain(first.id);
+    expect(ids).toContain(second.id);
+    // Ownership is enforced by the query, not by the caller.
+    expect(ids).not.toContain(otherOrder.id);
+    for (const item of page.items) expect(item.memberId).toBe(owner);
+    // Deterministic (createdAt DESC, id DESC): the newest insert is not later
+    // than the previous one.
+    for (let i = 1; i < page.items.length; i += 1) {
+      const prev = page.items[i - 1]!;
+      const cur = page.items[i]!;
+      const prevKey = `${prev.createdAt.toISOString()}|${prev.id}`;
+      const curKey = `${cur.createdAt.toISOString()}|${cur.id}`;
+      expect(prevKey >= curKey).toBe(true);
+    }
+  });
+
+  it("pages the Member history with a stable cursor and no duplicates or gaps", async () => {
+    const { drawId, betTypeCode } = await openDraw("O_PAGE", "2099-11-05");
+    const memberId = await newMember();
+    const quoteAt = new Date("2099-11-05T08:00:00.000Z");
+    const created: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+      created.push((await createOrderForQuote(memberId, quote.id)).id);
+    }
+
+    const seen: string[] = [];
+    let cursor: Awaited<ReturnType<typeof orders.listOrders>>["nextCursor"] = null;
+    for (let guard = 0; guard < 10; guard += 1) {
+      const page: Awaited<ReturnType<typeof orders.listOrders>> = await orders.listOrders(memberId, {
+        limit: 1,
+        cursor,
+      });
+      for (const item of page.items) seen.push(item.id);
+      cursor = page.nextCursor;
+      if (!cursor) break;
+    }
+    // Every own Order appears exactly once across the pages.
+    for (const id of created) expect(seen.filter((seenId) => seenId === id)).toHaveLength(1);
+    expect(new Set(seen).size).toBe(seen.length);
+  });
+
+  it("filters the Member history by state", async () => {
+    const { drawId, betTypeCode } = await openDraw("O_FILTER", "2099-12-05");
+    const memberId = await newMember();
+    const quoteAt = new Date("2099-12-05T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const quoted = await createOrderForQuote(memberId, quote.id);
+
+    const quotedPage = await orders.listOrders(memberId, { limit: 20, state: "QUOTED" });
+    expect(quotedPage.items.map((item) => item.id)).toContain(quoted.id);
+
+    const settledPage = await orders.listOrders(memberId, { limit: 20, state: "SETTLED" });
+    expect(settledPage.items.map((item) => item.id)).not.toContain(quoted.id);
+    for (const item of settledPage.items) expect(item.state).toBe("SETTLED");
+  });
+
+  it("rejects an out-of-range history limit with the canonical error contract", async () => {
+    const memberId = await newMember();
+    await expect(orders.listOrders(memberId, { limit: 0 })).rejects.toMatchObject({
+      code: "INVALID_STATE",
+      status: 400,
+    });
+    await expect(orders.listOrders(memberId, { limit: 101 })).rejects.toMatchObject({
+      code: "INVALID_STATE",
+      status: 400,
+    });
+  });
+
   it("exposes the canonical error contract on the domain error type", () => {
     expect(new BettingOrderError("VERSION_CONFLICT", "stale", 409, {}).status).toBe(409);
     expect(new BettingOrderError("INVALID_STATE", "late", 409, {}).code).toBe(

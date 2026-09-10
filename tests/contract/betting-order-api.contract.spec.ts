@@ -65,6 +65,29 @@ describe("Bet Order API contract", () => {
     expect(receipt?.security).toEqual([{ bearer: [] }]);
   });
 
+  it("publishes the Member Bet Order history route with a declared page schema", () => {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("test").setVersion("1").addBearerAuth().build(),
+    );
+
+    const list = document.paths["/api/v1/member/orders"]?.get;
+    expect(list).toBeDefined();
+    expect(list?.security).toEqual([{ bearer: [] }]);
+    // The list route is distinct from the detail route and carries filters.
+    const names = (list?.parameters ?? []).map((p) => (p as { name: string }).name);
+    expect(names).toContain("limit");
+    expect(names).toContain("cursor");
+    expect(names).toContain("state");
+    expect(list?.responses["200"]).toMatchObject({
+      content: {
+        "application/json": {
+          schema: { $ref: expect.stringContaining("BetOrderListBody") },
+        },
+      },
+    });
+  });
+
   it("exposes explicit commands only: no generic status mutation on a Bet Order", () => {
     const document = SwaggerModule.createDocument(
       app,

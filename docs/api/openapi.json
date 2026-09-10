@@ -2985,6 +2985,72 @@
         ]
       }
     },
+    "/api/v1/member/orders": {
+      "get": {
+        "description": "Deterministic keyset pagination over (createdAt DESC, id DESC). Only the requesting Member's Orders are ever returned.",
+        "operationId": "MemberOrderController_list",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Optional Bet Order state filter",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "QUOTED",
+                "CONFIRMING",
+                "CONFIRMED",
+                "CANCELLING",
+                "CANCELLED",
+                "EXPIRED",
+                "REJECTED",
+                "SETTLED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetOrderListBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the Member's own Bet Orders (my slips)",
+        "tags": [
+          "Member Betting Orders"
+        ]
+      }
+    },
     "/api/v1/member/orders/{id}": {
       "get": {
         "operationId": "MemberOrderController_get",
@@ -7874,6 +7940,25 @@
           "lines",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "BetOrderListBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BetOrderBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
         ]
       },
       "BetOrderCommandBody": {
