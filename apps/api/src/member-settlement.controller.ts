@@ -7,7 +7,13 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiProperty,
+  ApiTags,
+} from "@nestjs/swagger";
 import {
   SettlementError,
   SettlementService,
@@ -48,6 +54,7 @@ export class MemberSettlementController {
     description:
       "The outcome is authoritative only once the settlement batch has COMPLETED; an in-flight or failed batch reports authoritative=false and never exposes a partial financial outcome.",
   })
+  @ApiOkResponse({ type: MemberSettlementOutcomeBody })
   async settlementOutcome(
     @Req() request: MemberAuthenticatedRequest,
     @Param("id") id: string,

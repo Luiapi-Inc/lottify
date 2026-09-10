@@ -16,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiHeader,
+  ApiOkResponse,
   ApiOperation,
   ApiProperty,
   ApiTags,
@@ -65,7 +66,10 @@ class QuoteLineBody {
   @ApiProperty({ type: String, description: "Stake in integer minor units" })
   stakeMinor!: string;
 
-  @ApiProperty({ description: "Server-resolved payout for the line" })
+  @ApiProperty({
+    type: Object,
+    description: "Server-resolved payout for the line (opaque configuration value)",
+  })
   resolvedPayout!: unknown;
 
   @ApiProperty({ enum: ["DRAW_OVERRIDE", "DRAW_SNAPSHOT"] })
@@ -147,6 +151,7 @@ export class MemberQuoteController {
       "Scoped Idempotency-Key. Same key + same payload returns the prior Quote; same key + different payload conflicts.",
   })
   @ApiBody({ type: [QuoteCreateBody] })
+  @ApiOkResponse({ type: BettingQuoteBody })
   async create(
     @Req() request: MemberAuthenticatedRequest,
     @Param("drawId") drawId: string,
@@ -179,6 +184,7 @@ export class MemberQuoteController {
   @Get("quotes/:id")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Read a Member betting Quote by id" })
+  @ApiOkResponse({ type: BettingQuoteBody })
   async get(
     @Req() request: MemberAuthenticatedRequest,
     @Param("id") id: string,
