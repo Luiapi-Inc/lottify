@@ -36,6 +36,7 @@ model Member {
   deposits  PaymentDeposit[]
   quotes    BettingQuote[]
   betOrders BetOrder[]
+  settlementOrders SettlementOrder[]
 
   @@map("members")
 }
@@ -326,6 +327,8 @@ model LotteryDraw {
   createdByAdmin              AdminUser?               @relation("LotteryDrawCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   betTypes                    LotteryDrawBetType[]
   overrides                   LotteryDrawOverride[]
+  resultRevisions             ResultRevision[]
+  settlementBatches           SettlementBatch[]
   quotes                      BettingQuote[]
   betOrders                   BetOrder[]
 
@@ -531,6 +534,85 @@ model BetReceipt {
 
   @@index([memberId, issuedAt])
   @@map("bet_receipts")
+}
+
+// Result & Settlement context (vertical 4). A ResultRevision is the validated,
+// immutable Product-shaped winning data for a Draw; a correction NEVER edits a
+// confirmed Result — it creates a new revision that relationally SUPERSEDES the
+// prior one. A SettlementBatch is the durable execution unit whose Member-visible
+// outcome is authoritative only on COMPLETED; SettlementOrder rows are the
+// per-Order checkpoints that make a crashed batch resumable without re-posting.
+model ResultRevision {
+  id                     String          @id @default(uuid()) @db.Uuid
+  drawId                 String          @map("draw_id") @db.Uuid
+  revision               Int
+  state                  String
+  resultSchemaVersionRef String          @map("result_schema_version_ref")
+  resultSourceRef        String?         @map("result_source_ref")
+  resultData             Json            @map("result_data")
+  winningNumbers         Json            @map("winning_numbers")
+  supersedesRevisionId   String?         @unique @map("supersedes_revision_id") @db.Uuid
+  correlationId          String          @map("correlation_id")
+  confirmedAt            DateTime?       @map("confirmed_at")
+  confirmedByAdminId     String?         @map("confirmed_by_admin_id") @db.Uuid
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
+  draw                   LotteryDraw     @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  supersedes             ResultRevision? @relation("ResultRevisionChain", fields: [supersedesRevisionId], references: [id], onDelete: Restrict)
+  supersededBy           ResultRevision? @relation("ResultRevisionChain")
+  batches                SettlementBatch[]
+
+  @@unique([drawId, revision])
+  @@index([drawId, state])
+  @@map("result_revisions")
+}
+
+model SettlementBatch {
+  id                 String            @id @default(uuid()) @db.Uuid
+  drawId             String            @map("draw_id") @db.Uuid
+  resultRevisionId   String            @map("result_revision_id") @db.Uuid
+  state              String
+  version            Int               @default(1)
+  correlationId      String            @map("correlation_id")
+  totalStakeMinor    BigInt            @default(0) @map("total_stake_minor")
+  totalPayoutMinor   BigInt            @default(0) @map("total_payout_minor")
+  winningOrderCount  Int               @default(0) @map("winning_order_count")
+  losingOrderCount   Int               @default(0) @map("losing_order_count")
+  idempotencyScope   String            @map("idempotency_scope")
+  idempotencyKey     String            @map("idempotency_key")
+  fingerprint        String
+  startedAt          DateTime          @default(now()) @map("started_at")
+  completedAt        DateTime?         @map("completed_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  draw               LotteryDraw       @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  resultRevision     ResultRevision    @relation(fields: [resultRevisionId], references: [id], onDelete: Restrict)
+  orders             SettlementOrder[]
+
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([drawId, state])
+  @@map("settlement_batches")
+}
+
+model SettlementOrder {
+  id                  String          @id @default(uuid()) @db.Uuid
+  batchId             String          @map("batch_id") @db.Uuid
+  orderId             String          @unique @map("order_id") @db.Uuid
+  memberId            String          @map("member_id") @db.Uuid
+  outcome             String
+  stakeMinor          BigInt          @map("stake_minor")
+  payoutMinor         BigInt          @default(0) @map("payout_minor")
+  status              String          @default("POSTED")
+  payoutTransactionId String?         @map("payout_transaction_id") @db.Uuid
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  batch               SettlementBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  member              Member          @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, orderId])
+  @@index([memberId, createdAt])
+  @@index([batchId, outcome])
+  @@map("settlement_orders")
 }
 
 model IdempotencyRecord {

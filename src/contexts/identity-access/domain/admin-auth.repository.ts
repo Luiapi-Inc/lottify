@@ -14,6 +14,10 @@ export const ADMIN_CAPABILITIES = [
   "lottery-configuration.approve",
   "lottery-draw.read",
   "lottery-draw.manage",
+  "result.read",
+  "result.manage",
+  "settlement.read",
+  "settlement.manage",
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 

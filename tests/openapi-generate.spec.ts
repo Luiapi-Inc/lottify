@@ -45,7 +45,14 @@ describe("openapi spec generator (vitest boot)", () => {
     expect(spec).toContain("\"/api/v1/member/orders/{id}/confirm\"");
     expect(spec).toContain("\"/api/v1/member/orders/{id}/cancel\"");
     expect(spec).toContain("\"/api/v1/member/orders/{id}/receipt\"");
+    expect(spec).toContain("\"/api/v1/member/orders/{id}/settlement\"");
+    expect(spec).toContain("\"/api/v1/admin/draws/{drawId}/result\"");
+    expect(spec).toContain("\"/api/v1/admin/draws/{drawId}/result/ingest-from-provider\"");
+    expect(spec).toContain("\"/api/v1/admin/draws/{drawId}/results/{revision}/confirm\"");
+    expect(spec).toContain("\"/api/v1/admin/draws/{drawId}/results/{revision}/correct\"");
+    expect(spec).toContain("\"/api/v1/admin/draws/{drawId}/settlement\"");
+    expect(spec).toContain("\"/api/v1/admin/settlement/{batchId}/orders\"");
     // No persistence/entity internals leak into the generated contract.
-    expect(spec.toLowerCase()).not.toMatch(/prisma|lottery_draw|lotteryDrawBetType|lotteryDrawOverride/);
+    expect(spec.toLowerCase()).not.toMatch(/prisma|lottery_draw|lotteryDrawBetType|lotteryDrawOverride|result_revisions|settlement_orders/);
   });
 });
