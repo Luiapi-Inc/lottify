@@ -59,6 +59,7 @@ import { DepositLedgerAdapter } from "../platform/integration/deposit-ledger.ada
   exports: [
     IdentityAccessModule,
     LotteryModule,
+    BettingModule,
     WalletLedgerModule,
     PaymentsModule,
     DepositService,
