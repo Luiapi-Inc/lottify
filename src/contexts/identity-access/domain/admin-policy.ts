@@ -22,6 +22,9 @@ const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
     "result.manage",
     "settlement.read",
     "settlement.manage",
+    "withdrawal.read",
+    "withdrawal.review",
+    "withdrawal.payout",
   ],
   ADMIN: [
     "accounting-period.read",
@@ -40,8 +43,18 @@ const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
     "result.manage",
     "settlement.read",
     "settlement.manage",
+    "withdrawal.read",
+    "withdrawal.review",
+    "withdrawal.payout",
   ],
-  AUDITOR: ["accounting-period.read", "lottery-configuration.read", "lottery-draw.read", "result.read", "settlement.read"],
+  AUDITOR: [
+    "accounting-period.read",
+    "lottery-configuration.read",
+    "lottery-draw.read",
+    "result.read",
+    "settlement.read",
+    "withdrawal.read",
+  ],
 };
 
 export function parseAdminRole(value: string): AdminRole | null {

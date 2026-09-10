@@ -18,6 +18,9 @@ export const ADMIN_CAPABILITIES = [
   "result.manage",
   "settlement.read",
   "settlement.manage",
+  "withdrawal.read",
+  "withdrawal.review",
+  "withdrawal.payout",
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 
