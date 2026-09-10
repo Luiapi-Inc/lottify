@@ -6,6 +6,8 @@ import { AdminAccountingPeriodController } from "./admin-accounting-period.contr
 import { AdminDrawController } from "./admin-draw.controller";
 import { AdminLotteryConfigurationController } from "./admin-lottery-configuration.controller";
 import { AdminPromotionController } from "./admin-promotion.controller";
+import { AdminReconciliationController } from "./admin-reconciliation.controller";
+import { AdminReportingController } from "./admin-reporting.controller";
 import { AdminAuthController } from "./admin-auth.controller";
 import { AdminAuthGuard } from "./admin-auth.guard";
 import { AdminCapabilityGuard } from "./admin-capability.guard";
@@ -43,6 +45,8 @@ collectDefaultMetrics({ prefix: "lottify_" });
     AdminDrawController,
     AdminLotteryConfigurationController,
     AdminPromotionController,
+    AdminReconciliationController,
+    AdminReportingController,
     AdminAuthController,
     MemberAuthController,
     MemberDrawController,

@@ -143,6 +143,9 @@ import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-m
     WithdrawalService,
     PayoutDestinationService,
     LedgerWalletReconciliationService,
+    // Reporting exports its own read/reconciliation services; re-exporting the
+    // module keeps a single instance per service instead of duplicating providers.
+    ReportingModule,
     BettingOrderService,
     SettlementService,
   ],
