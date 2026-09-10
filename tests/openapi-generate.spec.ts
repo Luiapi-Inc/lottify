@@ -34,5 +34,13 @@ describe("openapi spec generator (vitest boot)", () => {
     const spec = `${JSON.stringify(document, null, 2)}\n`;
     await writeFile(resolve(outputDirectory, "openapi.json"), spec, "utf8");
     expect(spec).toContain("\"/api/v1/member/wallet\"");
+    expect(spec).toContain("\"/api/v1/admin/draws\"");
+    expect(spec).toContain("\"/api/v1/admin/draws/{id}\"");
+    expect(spec).toContain("\"/api/v1/admin/draws/{id}/transition\"");
+    expect(spec).toContain("\"/api/v1/admin/products/{productId}/draws/generate\"");
+    expect(spec).toContain("\"/api/v1/member/draws/{id}\"");
+    expect(spec).toContain("\"/api/v1/member/products/{productId}/draws\"");
+    // No persistence/entity internals leak into the generated contract.
+    expect(spec.toLowerCase()).not.toMatch(/prisma|lottery_draw|lotteryDrawBetType|lotteryDrawOverride/);
   });
 });
