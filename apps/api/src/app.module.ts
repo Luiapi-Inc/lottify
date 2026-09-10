@@ -21,6 +21,7 @@ import { HealthService } from "./health.service";
 import { HttpMetricsMiddleware } from "./http-metrics.middleware";
 import { MemberAuthController } from "./member-auth.controller";
 import { MemberAuthGuard } from "./member-auth.guard";
+import { MemberCatalogController } from "./member-catalog.controller";
 import { MemberDrawController } from "./member-draw.controller";
 import { MemberQuoteController } from "./member-quote.controller";
 import { MemberOrderController } from "./member-order.controller";
@@ -53,6 +54,7 @@ collectDefaultMetrics({ prefix: "lottify_" });
     AdminReportingController,
     AdminAuthController,
     MemberAuthController,
+    MemberCatalogController,
     MemberDrawController,
     MemberQuoteController,
     MemberOrderController,

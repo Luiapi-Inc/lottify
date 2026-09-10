@@ -2605,6 +2605,153 @@
         ]
       }
     },
+    "/api/v1/member/products": {
+      "get": {
+        "description": "Discovery exposes only PUBLISHED configuration; DRAFT/REVIEW work in progress is never visible to a Member.",
+        "operationId": "MemberCatalogController_listProducts",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberProductPageBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List published Lottery Products available to the Member",
+        "tags": [
+          "Member Lottery Catalog"
+        ]
+      }
+    },
+    "/api/v1/member/products/{id}": {
+      "get": {
+        "operationId": "MemberCatalogController_getProduct",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberProductDetailBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a published Lottery Product with its enabled Bet Types",
+        "tags": [
+          "Member Lottery Catalog"
+        ]
+      }
+    },
+    "/api/v1/member/bet-types": {
+      "get": {
+        "operationId": "MemberCatalogController_listBetTypes",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberBetTypePageBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List published Lottery Bet Types available to the Member",
+        "tags": [
+          "Member Lottery Catalog"
+        ]
+      }
+    },
+    "/api/v1/member/bet-types/{id}": {
+      "get": {
+        "operationId": "MemberCatalogController_getBetType",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberBetTypeDetailBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a published Lottery Bet Type with its published versions",
+        "tags": [
+          "Member Lottery Catalog"
+        ]
+      }
+    },
     "/api/v1/member/products/{productId}/draws": {
       "get": {
         "operationId": "MemberDrawController_listDraws",
@@ -6814,6 +6961,347 @@
           "memberId",
           "phone",
           "status"
+        ]
+      },
+      "CatalogVersionBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "REVIEW",
+              "PUBLISHED"
+            ]
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "revision",
+          "state",
+          "effectiveFrom",
+          "effectiveUntil"
+        ]
+      },
+      "MemberProductSummaryBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogVersionBody"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "versions"
+        ]
+      },
+      "MemberProductPageBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberProductSummaryBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "CatalogEnabledBetTypeBody": {
+        "type": "object",
+        "properties": {
+          "betTypeId": {
+            "type": "string"
+          },
+          "betTypeCode": {
+            "type": "string"
+          },
+          "betTypeVersionId": {
+            "type": "string"
+          },
+          "betTypeVersion": {
+            "type": "number"
+          },
+          "betTypeVersionState": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "REVIEW",
+              "PUBLISHED"
+            ]
+          },
+          "betTypeVersionRevision": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "betTypeId",
+          "betTypeCode",
+          "betTypeVersionId",
+          "betTypeVersion",
+          "betTypeVersionState",
+          "betTypeVersionRevision"
+        ]
+      },
+      "MemberProductVersionBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "REVIEW",
+              "PUBLISHED"
+            ]
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "scheduleTemplateRef": {
+            "type": "string"
+          },
+          "resultSchemaVersionRef": {
+            "type": "string"
+          },
+          "settlementRuleVersionRef": {
+            "type": "string"
+          },
+          "defaultPayoutPolicyRef": {
+            "type": "string"
+          },
+          "defaultLimitPolicyRef": {
+            "type": "string"
+          },
+          "defaultRestrictionPolicyRef": {
+            "type": "string"
+          },
+          "enabledBetTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogEnabledBetTypeBody"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "revision",
+          "state",
+          "effectiveFrom",
+          "effectiveUntil",
+          "timezone",
+          "scheduleTemplateRef",
+          "resultSchemaVersionRef",
+          "settlementRuleVersionRef",
+          "defaultPayoutPolicyRef",
+          "defaultLimitPolicyRef",
+          "defaultRestrictionPolicyRef",
+          "enabledBetTypes"
+        ]
+      },
+      "MemberProductDetailBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberProductVersionBody"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "versions"
+        ]
+      },
+      "MemberBetTypeSummaryBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogVersionBody"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "versions"
+        ]
+      },
+      "MemberBetTypePageBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberBetTypeSummaryBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "MemberBetTypeVersionBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "REVIEW",
+              "PUBLISHED"
+            ]
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "canonicalNumberFormat": {
+            "type": "string"
+          },
+          "validationPattern": {
+            "type": "string"
+          },
+          "defaultPayout": {
+            "type": "object",
+            "description": "Default payout configuration (opaque configuration value)."
+          },
+          "minStakeMinor": {
+            "type": "string",
+            "description": "Minimum stake in minor units."
+          },
+          "maxStakeMinor": {
+            "type": "string",
+            "description": "Maximum stake in minor units."
+          },
+          "limitPolicyRef": {
+            "type": "string"
+          },
+          "restrictionPolicyRef": {
+            "type": "string"
+          },
+          "settlementRuleVersionRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "revision",
+          "state",
+          "effectiveFrom",
+          "effectiveUntil",
+          "canonicalNumberFormat",
+          "validationPattern",
+          "defaultPayout",
+          "minStakeMinor",
+          "maxStakeMinor",
+          "limitPolicyRef",
+          "restrictionPolicyRef",
+          "settlementRuleVersionRef"
+        ]
+      },
+      "MemberBetTypeDetailBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberBetTypeVersionBody"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "versions"
         ]
       },
       "MemberDrawCutoffBody": {

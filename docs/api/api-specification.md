@@ -2,15 +2,16 @@
 
 Generated from the live OpenAPI 3.0.0 contract (`apps/api/openapi/openapi.json`).
 
-**96 paths · 104 operations · 110 schemas**
+**100 paths · 108 operations · 120 schemas**
 
-Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
+Source: `main @ e2cf283` · generated 2026-09-10 17:30 (+07)
 
 ---
 ## Contents
 
 - **Member API**
   - [`/member/auth`](#member--auth)
+  - [`/member/bet-types`](#member--bet-types)
   - [`/member/deposits`](#member--deposits)
   - [`/member/devices`](#member--devices)
   - [`/member/draws`](#member--draws)
@@ -90,6 +91,28 @@ Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
 
 - **Responses:**
   - `200` → `MemberRevokedResponse`
+
+<a id="member--bet-types"></a>
+### `/member/bet-types`
+
+#### `GET /api/v1/member/bet-types`
+
+*List published Lottery Bet Types available to the Member*
+
+| param | in | type | required |
+|---|---|---|---|
+| `cursor` | query | string | no |
+| `limit` | query | number | no |
+
+- **Responses:**
+  - `200` → `MemberBetTypePageBody`
+
+#### `GET /api/v1/member/bet-types/{id}`
+
+*Get a published Lottery Bet Type with its published versions*
+
+- **Responses:**
+  - `200` → `MemberBetTypeDetailBody`
 
 <a id="member--deposits"></a>
 ### `/member/deposits`
@@ -252,6 +275,25 @@ Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
 
 <a id="member--products"></a>
 ### `/member/products`
+
+#### `GET /api/v1/member/products`
+
+*List published Lottery Products available to the Member*
+
+| param | in | type | required |
+|---|---|---|---|
+| `cursor` | query | string | no |
+| `limit` | query | number | no |
+
+- **Responses:**
+  - `200` → `MemberProductPageBody`
+
+#### `GET /api/v1/member/products/{id}`
+
+*Get a published Lottery Product with its enabled Bet Types*
+
+- **Responses:**
+  - `200` → `MemberProductDetailBody`
 
 #### `GET /api/v1/member/products/{productId}/draws`
 
@@ -1135,18 +1177,19 @@ Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
 
 - **Base** `/api/v1`. JSON in/out. Errors: canonical `{ code, message, correlationId }`.
 - **Auth** — Member/Admin token spaces are mutually exclusive; `Authorization: Bearer <access>`.
-  - Member: phone identity; purpose-scoped OTP → short-lived access + rotating refresh (set as an httpOnly cookie); refresh reuse revokes the session family; sessions/devices first-class.
+  - Member: phone identity; purpose-scoped OTP → short-lived access + rotating refresh (httpOnly cookie); refresh reuse revokes the session family; sessions/devices first-class.
   - Admin: password + mandatory TOTP MFA; `auth/reauth` yields fresh-MFA evidence; `auth/revoke-all` kills admin sessions.
 - **Idempotency** — critical mutations require `Idempotency-Key`. Same key + same payload → prior result; changed payload → `IDEMPOTENCY_CONFLICT`.
 - **Optimistic concurrency** — versioned aggregates return `version` + `allowedActions`; stale writes → `VERSION_CONFLICT`.
 - **Pagination** — deterministic keyset/cursor with stable sort; allowlisted filters per resource.
+- **Member visibility** — Member discovery only ever exposes PUBLISHED lottery configuration; a Product/Bet Type with no PUBLISHED version is not part of the Member catalog.
 - **Time** — half-open `[from,to)`; server-authoritative instants; read models expose `dataAsOf`/`generatedAt` + completeness state.
 - **Status codes** — 400 validation · 401 no auth · 403 capability denied · 404 missing · 409 idempotency/version conflict · 429 rate limit.
 
 
 ## Schemas
 
-110 component schemas (full definitions in the OpenAPI document).
+120 component schemas (full definitions in the OpenAPI document).
 
 | schema | shape |
 |---|---|
@@ -1197,6 +1240,8 @@ Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
 | `BetReceiptTermsBody` | object · 9 fields · required: productId, productVersionId, drawReference, drawCutoffAt, currency, totalStakeMinor |
 | `BettingQuoteBody` | object · 12 fields · required: id, memberId, drawId, productId, productVersionId, currency |
 | `CancelAccountingPeriodBody` | object · 2 fields · required: expectedVersion, reason |
+| `CatalogEnabledBetTypeBody` | object · 6 fields · required: betTypeId, betTypeCode, betTypeVersionId, betTypeVersion, betTypeVersionState, betTypeVersionRevision |
+| `CatalogVersionBody` | object · 6 fields · required: id, version, revision, state, effectiveFrom, effectiveUntil |
 | `ClaimPromotionBody` | object · 1 fields · required: campaignVersionId |
 | `CloseAccountingPeriodBody` | object · 6 fields · required: expectedVersion, reason, reconciliationReferences, checkpointReferences, blockingDiscrepancyReferences, acceptedExceptionReferences |
 | `CreateBetTypeBody` | object · 1 fields · required: code |
@@ -1209,6 +1254,10 @@ Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
 | `EnabledBetTypeReferenceBody` | object · 2 fields · required: betTypeId, betTypeVersionId |
 | `ExpectedVersionBody` | object · 1 fields · required: expectedVersion |
 | `GenerateDrawsBody` | object · 1 fields · required: baseOccurrences |
+| `MemberBetTypeDetailBody` | object · 3 fields · required: id, code, versions |
+| `MemberBetTypePageBody` | object · 2 fields · required: items, nextCursor |
+| `MemberBetTypeSummaryBody` | object · 3 fields · required: id, code, versions |
+| `MemberBetTypeVersionBody` | object · 14 fields · required: id, version, revision, state, effectiveFrom, effectiveUntil |
 | `MemberDeviceViewBody` | object · 4 fields · required: deviceId, name, createdAt, lastUsedAt |
 | `MemberDrawBetTypeBody` | object · 11 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumberFormat, validationPattern, payout |
 | `MemberDrawCutoffBody` | object · 1 fields · required: cutoffAt |
@@ -1216,6 +1265,10 @@ Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
 | `MemberDrawEligibilityBody` | object · 3 fields · required: eligible, cutoffAt, serverNow |
 | `MemberDrawPageBody` | object · 2 fields · required: items, nextCursor |
 | `MemberMeResponse` | object · 3 fields · required: memberId, phone, status |
+| `MemberProductDetailBody` | object · 2 fields · required: id, versions |
+| `MemberProductPageBody` | object · 2 fields · required: items, nextCursor |
+| `MemberProductSummaryBody` | object · 2 fields · required: id, versions |
+| `MemberProductVersionBody` | object · 14 fields · required: id, version, revision, state, effectiveFrom, effectiveUntil |
 | `MemberRefreshResponse` | object · 1 fields · required: accessToken |
 | `MemberRevokedResponse` | object · 1 fields · required: revoked |
 | `MemberSessionResponse` | object · 4 fields · required: accessToken, memberId, accountCreated, deviceId |
