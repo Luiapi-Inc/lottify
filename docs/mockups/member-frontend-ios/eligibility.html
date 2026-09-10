@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Lottify — ความพร้อมของบริการ</title><link rel="stylesheet" href="assets/styles.css" /></head>
+<body data-auth="true">
+  <div class="auth-shell">
+    <section class="auth-brand-side">
+      <a class="brand" href="index.html"><span class="brand-mark">L</span><span>Lottify</span></a>
+      <div class="auth-copy"><h1>แต่ละบริการ<br>พร้อมไม่พร้อมแยกกัน</h1><p>ระบบประเมินความพร้อมตามข้อกำหนดของแต่ละ capability ไม่ใช้สถานะบัญชีเดียวบล็อกทุกอย่าง</p></div>
+      <div class="small" style="color:#a9cabd">ขั้นตอน 5 จาก 5 · Eligibility</div>
+    </section>
+    <section class="auth-form-side eligibility-form-side">
+      <div class="auth-card onboarding-card eligibility-card" data-eligibility-page>
+        <div class="onboarding-step">ตรวจความพร้อมก่อนเริ่มใช้งาน</div>
+        <h2>บัญชีพร้อมสำหรับอะไรบ้าง</h2>
+        <p>ตัวอย่างนี้แสดงการประเมินแบบ capability-specific หลังยืนยันเบอร์ ยอมรับ Terms และกรอกข้อมูลพื้นฐานแล้ว</p>
+
+        <div class="readiness-checklist">
+          <div class="readiness-row" data-readiness="phone"><span class="readiness-icon success" data-readiness-icon>✓</span><div><strong>ยืนยันเบอร์โทรแล้ว</strong><span>ผ่าน OTP สำหรับการสมัคร</span></div><span class="status success" data-readiness-status>ครบแล้ว</span></div>
+          <div class="readiness-row" data-readiness="terms"><span class="readiness-icon success" data-readiness-icon>✓</span><div><strong>ยอมรับ Terms แล้ว</strong><span>อ้างอิงเวอร์ชันที่มีผล ณ เวลายอมรับ</span></div><span class="status success" data-readiness-status>ครบแล้ว</span></div>
+          <div class="readiness-row" data-readiness="profile"><span class="readiness-icon success" data-readiness-icon>✓</span><div><strong>ข้อมูลพื้นฐานครบ</strong><span>ระบบใช้ข้อมูลที่จำเป็นตาม policy ที่มีผล</span></div><span class="status success" data-readiness-status>ครบแล้ว</span></div>
+        </div>
+
+        <div class="capability-grid">
+          <article class="capability-card" data-capability="bet"><div class="capability-head"><span class="capability-icon">B</span><span class="status success" data-capability-status>ใช้งานได้</span></div><h3>ซื้อหวย</h3><p data-capability-copy>พร้อมเริ่มเลือกงวด แต่ระบบจะตรวจ Eligibility/Restriction ซ้ำก่อน Quote และ Confirm</p><a class="text-link" href="buy.html" data-capability-action>ไปซื้อหวย →</a></article>
+          <article class="capability-card" data-capability="deposit"><div class="capability-head"><span class="capability-icon">D</span><span class="status success" data-capability-status>ใช้งานได้</span></div><h3>ฝากเงิน</h3><p data-capability-copy>พร้อมในตัวอย่างนี้ โดยสถานะรายการเงินจริงยังต้องรอการยืนยันจาก Payments และ Wallet</p><a class="text-link" href="deposit.html" data-capability-action>ไปฝากเงิน →</a></article>
+          <article class="capability-card warning" data-capability="withdraw"><div class="capability-head"><span class="capability-icon">W</span><span class="status warning" data-capability-status>มีเงื่อนไข</span></div><h3>ถอนเงิน</h3><p data-capability-copy>ตัวอย่างปัจจุบันต้องยืนยันตัวตนสำหรับการถอน การขาด KYC ไม่บล็อกการซื้อหวยหรือฝากเงินโดยอัตโนมัติ</p><a class="text-link" href="account.html" data-capability-action>ดูสิ่งที่ต้องทำ →</a></article>
+        </div>
+
+        <div class="notice info"><b>i</b><div><strong>ระบบประเมินซ้ำเมื่อทำรายการสำคัญ</strong>Eligibility เป็นผล ณ เวลาหนึ่ง ไม่ใช่สิทธิ์ถาวร หาก policy/restriction เปลี่ยน ระบบต้องอธิบาย action ถัดไปเฉพาะบริการที่ได้รับผล</div></div>
+        <a class="button lime block" href="index.html" style="margin-top:18px">ไปหน้าแรก →</a>
+      </div>
+    </section>
+  </div>
+  <script src="assets/app.js"></script>
+</body></html>

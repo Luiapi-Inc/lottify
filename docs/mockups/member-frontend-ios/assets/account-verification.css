@@ -1,0 +1,28 @@
+.account-verification-layout { align-items: start; }
+.verification-capabilities { margin-top: -4px; }
+.verification-row { display:grid; grid-template-columns:42px minmax(0,1fr) auto; gap:12px; align-items:center; padding:14px 0; border-top:1px solid rgba(60,60,67,.10); }
+.verification-row:first-child { border-top:0; }
+.verification-row strong, .bank-destination-card strong { display:block; font-size:13px; }
+.verification-row div > span, .bank-destination-card div > span { display:block; margin-top:3px; color:var(--muted); font-size:11px; line-height:1.6; }
+.verification-state-switcher { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.verification-state { margin-top:8px; }
+.verification-state-card { padding:18px; border-radius:20px; background:rgba(118,118,128,.07); }
+.verification-state-card h3 { margin:0 0 7px; font-size:18px; }
+.verification-state-card p { margin:0 0 14px; color:var(--muted); font-size:12px; line-height:1.7; }
+.verification-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.bank-destination-card { display:grid; grid-template-columns:48px minmax(0,1fr) auto; gap:12px; align-items:center; padding:4px 0; }
+.bank-mark { width:46px; height:46px; display:grid; place-items:center; border-radius:14px; background:#eaf8ee; color:#248a3d; font-weight:900; }
+.bank-flow-steps { display:grid; gap:10px; }
+.bank-flow-step { padding:14px; border-radius:16px; background:rgba(118,118,128,.07); }
+.bank-flow-step strong { display:block; margin-bottom:3px; font-size:13px; }
+.bank-flow-step span { color:var(--muted); font-size:11px; line-height:1.6; }
+.reauth-code { display:grid; grid-template-columns:repeat(6,1fr); gap:7px; margin:14px 0; }
+.reauth-code input { width:100%; min-width:0; height:48px; border:1px solid rgba(60,60,67,.14); border-radius:12px; text-align:center; font-size:20px; font-weight:800; }
+@media (max-width:760px) {
+  .verification-row { grid-template-columns:42px minmax(0,1fr); }
+  .verification-row > .status { grid-column:2; justify-self:start; }
+  .verification-state-switcher { justify-content:flex-start; }
+  .bank-destination-card { grid-template-columns:48px minmax(0,1fr); }
+  .bank-destination-card > .status { grid-column:2; justify-self:start; }
+  .verification-actions .button { width:100%; }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Lottify — บัญชีรับเงิน</title><link rel="stylesheet" href="assets/styles.css" /><link rel="stylesheet" href="assets/account-verification.css" /></head>
+<body data-page="account">
+  <main id="main">
+    <div class="breadcrumb"><a href="account.html">บัญชี</a><span>/</span><span>บัญชีรับเงิน</span></div>
+    <div class="page-head"><div><h1>บัญชีรับเงิน</h1><p>จัดการปลายทางรับเงินที่ยืนยันแล้ว การเพิ่มหรือเปลี่ยนปลายทางเป็นรายการสำคัญและอาจต้องยืนยันซ้ำก่อนส่งตรวจ</p></div><span class="status success" data-bank-status>ยืนยันแล้ว</span></div>
+    <section class="grid-2 account-verification-layout">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-title"><h2>ปลายทางปัจจุบัน</h2></div>
+          <div class="bank-destination-card"><div class="bank-mark" data-bank-current-mark>K</div><div><strong data-bank-current-name>กสิกรไทย ••••4821</strong><span>ปลายทางปัจจุบัน · ผ่านการตรวจสำหรับการใช้งานในตัวอย่างนี้</span></div><span class="status success">ใช้งานได้</span></div>
+          <button class="button secondary block" type="button" data-bank-change style="margin-top:14px">เปลี่ยนบัญชีรับเงิน</button>
+        </section>
+        <section class="panel" data-bank-flow hidden>
+          <div class="panel-title"><h2>เปลี่ยนบัญชีรับเงิน</h2><span class="status warning" data-bank-flow-badge>ต้องยืนยันซ้ำ</span></div>
+          <div data-bank-flow-view></div>
+        </section>
+      </div>
+      <aside class="stack">
+        <section class="panel"><div class="panel-title"><h2>การตรวจแยกกัน</h2></div><div class="notice info"><b>i</b><div><strong>ยืนยันปลายทาง ≠ KYC</strong>สถานะของบัญชีรับเงินเป็นคนละ verification กับ Member/KYC และระบบจะตรวจ eligibility ของปลายทางอีกครั้งก่อนจ่ายเงินจริง</div></div><div class="notice warning" style="margin-top:10px"><b>!</b><div><strong>OTP เป็นเพียง re-auth</strong>การกรอก OTP สำเร็จไม่ได้แปลว่าปลายทางใหม่ได้รับอนุมัติ ระบบยังต้องตรวจสถานะและ policy ของปลายทาง</div></div></section>
+        <a class="button secondary block" href="account.html">← กลับบัญชี</a>
+      </aside>
+    </section>
+  </main>
+  <script src="assets/app.js"></script><script src="assets/account-verification.js"></script>
+</body></html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Lottify — ตรวจ Quote</title><link rel="stylesheet" href="assets/styles.css" /></head>
+<body data-page="buy">
+  <main id="main">
+    <div class="breadcrumb"><a href="index.html">หน้าแรก</a><span>/</span><a href="buy.html">ซื้อหวย</a><span>/</span><a href="bet.html">ใส่เลข</a><span>/</span><span>Quote</span></div>
+    <div class="page-head"><div><h1>ตรวจสอบข้อเสนอก่อนยืนยัน</h1><p>ราคา รายการ และแหล่งเงินด้านล่างคือข้อมูลที่ระบบยอมรับ ณ เวลาที่สร้าง Quote หากมีการเปลี่ยนแปลงสำคัญ คุณจะต้องตรวจใหม่ก่อนยืนยัน</p></div></div>
+    <div class="stepper"><div class="step done"><strong>1 · เลือกงวด</strong>เลือกแล้ว</div><div class="step done"><strong>2 · ใส่เลข</strong>2 รายการ</div><div class="step active"><strong>3 · ตรวจ Quote</strong><span data-quote-step-status>เหลือเวลาจำกัด</span></div><div class="step"><strong>4 · ยืนยัน</strong>ยังไม่ยืนยัน</div></div>
+
+    <section class="quote-demo panel" aria-label="ตัวอย่างสถานะ Quote สำหรับ mockup">
+      <div class="panel-title"><div><h2>ทดสอบสถานะ Quote</h2><p class="muted small">สำหรับ mockup: เลือกสถานการณ์เพื่อดูข้อความและ action ที่ Member จะได้รับ</p></div><span class="status info">Mockup</span></div>
+      <div class="quote-demo-actions" data-quote-demo>
+        <button class="chip-btn active" type="button" data-quote-state="normal">ปกติ</button>
+        <button class="chip-btn" type="button" data-quote-state="expired">Quote หมดอายุ</button>
+        <button class="chip-btn" type="button" data-quote-state="closed">งวดปิดแล้ว</button>
+        <button class="chip-btn" type="button" data-quote-state="changed">อัตราจ่ายเปลี่ยน</button>
+        <button class="chip-btn" type="button" data-quote-state="funds">เงินไม่พอ</button>
+        <button class="chip-btn" type="button" data-quote-state="eligibility">ติดเงื่อนไข</button>
+      </div>
+    </section>
+
+    <div class="quote-failure" data-quote-failure hidden aria-live="polite"></div>
+
+    <section class="quote-box" data-quote-box>
+      <div class="quote-head"><div><strong data-quote-id>Quote #QT-20260910-001842</strong><div class="small" style="color:#cde4da;margin-top:4px">สลากกินแบ่งรัฐบาล · งวด 16 ก.ย. 2569</div></div><div><div class="small" style="color:#cde4da">Quote หมดอายุใน</div><div class="quote-timer" data-quote-timer data-quote-seconds="118">00:01:58</div></div></div>
+      <div class="quote-body">
+        <div class="table-wrap"><table class="quote-lines"><thead><tr><th>ประเภท</th><th>เลข</th><th>อัตราจ่าย</th><th>ยอดซื้อ</th><th>เงินรางวัลสูงสุด</th></tr></thead><tbody><tr><td>3 ตัวตรง</td><td><strong>312</strong></td><td class="payout" data-quote-payout-main>x900</td><td>100 บาท</td><td data-quote-max-main>90,000 บาท</td></tr><tr><td>2 ตัวบน</td><td><strong>27</strong></td><td class="payout" data-quote-payout-secondary>x95</td><td>50 บาท</td><td data-quote-max-secondary>4,750 บาท</td></tr></tbody></table></div>
+        <div class="grid-equal" style="margin-top:18px">
+          <div class="summary-box"><div class="summary-row"><span>ยอดซื้อรวม</span><strong>150.00 บาท</strong></div><div class="summary-row"><span>ใช้เงินสด</span><strong data-quote-cash>120.00 บาท</strong></div><div class="summary-row"><span>ใช้โบนัส</span><strong>30.00 บาท</strong></div><div class="summary-row total"><span>ชำระรวม</span><strong>150.00 บาท</strong></div></div>
+          <div class="stack"><div class="notice success" data-quote-validation><b>✓</b><div><strong>ตรวจข้อจำกัดแล้ว</strong>รายการนี้ผ่านข้อจำกัดเลขและวงเงิน ณ เวลาสร้าง Quote</div></div><div class="notice info"><b>i</b><div><strong>ก่อน Confirm ระบบจะตรวจซ้ำอีกครั้ง</strong>หาก payout, cutoff, restriction หรือยอดเงินเปลี่ยน คุณจะต้องตรวจข้อเสนอใหม่</div></div></div>
+        </div>
+        <label class="quote-accept-row" data-quote-accept-row><input id="quote-accept" type="checkbox" /> <span>ฉันตรวจเลข จำนวนเงิน อัตราจ่าย และแหล่งเงินเรียบร้อยแล้ว และต้องการยืนยันรายการนี้</span></label>
+        <div class="quote-confirm-actions"><a class="button secondary" href="bet.html">← แก้ไขรายการ</a><a id="confirm-bet" class="button lime" href="receipt.html" aria-disabled="true">ยืนยันซื้อ 150.00 บาท</a></div>
+      </div>
+    </section>
+  </main>
+  <script src="assets/app.js"></script>
+</body></html>

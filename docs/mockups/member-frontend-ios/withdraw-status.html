@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lottify — สถานะถอนเงิน</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <link rel="stylesheet" href="assets/payment-status.css" />
+</head>
+<body data-page="wallet">
+  <main id="main" class="payment-status-page">
+    <div class="breadcrumb"><a href="wallet.html">กระเป๋า</a><span>/</span><a href="withdraw.html">ถอนเงิน</a><span>/</span><span>สถานะ</span></div>
+
+    <section class="payment-status-shell" data-payment-status data-kind="withdrawal" data-reference="WD-20260910-11840">
+      <div id="connection-banner" class="payment-connection" hidden role="status" aria-live="polite"></div>
+
+      <div class="payment-status-grid">
+        <section class="panel payment-status-main" aria-labelledby="status-title">
+          <div class="payment-status-heading">
+            <div>
+              <p id="status-kicker" class="payment-eyebrow">สถานะล่าสุดจากระบบ</p>
+              <h1 id="status-title">กำลังดำเนินการถอนเงิน</h1>
+              <p id="status-message" class="muted">คำขอถูกบันทึกแล้วและยอดของรายการถูกพักไว้ระหว่างดำเนินการ</p>
+            </div>
+            <span id="status-badge" class="payment-status-badge is-pending">กำลังดำเนินการ</span>
+          </div>
+
+          <div class="payment-reference-card" aria-label="ข้อมูลอ้างอิงรายการถอนเงิน">
+            <div><span>เลขอ้างอิง</span><strong id="payment-reference">WD-20260910-11840</strong></div>
+            <div><span>ยอดถอน</span><strong>3,000.00 บาท</strong></div>
+            <div><span>ยอดของรายการที่พักไว้</span><strong id="authoritative-amount">3,000.00 บาท</strong></div>
+          </div>
+
+          <div id="status-detail" class="payment-state-note" role="status" aria-live="polite">
+            <strong>ยังไม่ถือว่าถอนเงินสำเร็จ</strong>
+            <span>รายการจะสำเร็จเมื่อมีหลักฐานการจ่ายเงินและการบันทึกยอดเสร็จครบถ้วนแล้วเท่านั้น</span>
+          </div>
+
+          <ol id="status-timeline" class="payment-timeline" aria-label="ความคืบหน้ารายการถอนเงิน"></ol>
+
+          <div class="payment-refresh-row">
+            <button id="refresh-status" class="button primary payment-status-refresh" type="button">ตรวจสถานะล่าสุด</button>
+            <p>หากการอัปเดตขาดหายหรือข้อมูลเก่า ให้กดตรวจอีกครั้ง ระบบจะอ่านสถานะรายการเดิมจากแหล่งข้อมูลอ้างอิง</p>
+          </div>
+          <p id="refresh-result" class="payment-refresh-result" aria-live="polite"></p>
+          <p class="payment-updated">ตรวจสถานะล่าสุด: <strong id="status-updated">ยังไม่ได้ตรวจซ้ำ</strong></p>
+        </section>
+
+        <aside class="stack payment-status-aside">
+          <section class="summary-box">
+            <div class="summary-row"><span>ยอดถอน</span><strong>3,000.00 บาท</strong></div>
+            <div class="summary-row"><span>ค่าธรรมเนียม</span><strong>0.00 บาท</strong></div>
+            <div class="summary-row"><span>ปลายทาง</span><strong>กสิกรไทย ••••4821</strong></div>
+            <div class="summary-row"><span>เลขอ้างอิง</span><strong>WD-20260910-11840</strong></div>
+          </section>
+
+          <section class="panel payment-review-panel" aria-labelledby="review-title">
+            <div class="panel-title"><h2 id="review-title">ตรวจ mockup</h2></div>
+            <p class="muted small">Query contract: <code>state</code>, <code>connection</code> และ <code>next</code>. ใช้ลิงก์ด้านล่างเพื่อดูผลแบบ deterministic</p>
+            <nav class="payment-review-links" aria-label="จำลองสถานะถอนเงิน">
+              <a href="withdraw-status.html?state=pending">กำลังดำเนินการ</a>
+              <a href="withdraw-status.html?state=pending&amp;connection=stale">ข้อมูลเก่า</a>
+              <a href="withdraw-status.html?state=pending&amp;connection=offline">ขาดการเชื่อมต่อ</a>
+              <a href="withdraw-status.html?state=review_required">ต้องตรวจสอบ</a>
+              <a href="withdraw-status.html?state=reconciling">กำลังตรวจสอบผล</a>
+              <a href="withdraw-status.html?state=completed">ถอนสำเร็จ</a>
+              <a href="withdraw-status.html?state=reconciling&amp;connection=stale&amp;next=completed">Refresh → สำเร็จ</a>
+            </nav>
+          </section>
+
+          <a class="button secondary block" href="wallet.html">กลับกระเป๋า</a>
+        </aside>
+      </div>
+    </section>
+  </main>
+  <script src="assets/app.js"></script>
+  <script src="assets/payment-status.js"></script>
+</body>
+</html>
