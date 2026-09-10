@@ -6,6 +6,7 @@ import { MemberAuthService } from "../../src/contexts/identity-access/applicatio
 import { SessionService } from "../../src/contexts/identity-access/application/session.service";
 import { PrismaMemberAuthRepository } from "../../src/contexts/identity-access/infrastructure/prisma-member-auth.repository";
 import { PrismaSessionRepository } from "../../src/contexts/identity-access/infrastructure/prisma-session.repository";
+import { PreAuthLoginCapabilityAdapter } from "../../src/platform/integration/pre-auth-login-capability.adapter";
 import {
   getEnvironment,
   resetEnvironmentForTests,
@@ -29,7 +30,12 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     const memberRepo = new PrismaMemberAuthRepository(prisma);
     delivery = new LocalMemberOtpDelivery();
     sessions = new SessionService(new PrismaSessionRepository(prisma), new JwtService());
-    auth = new MemberAuthService(memberRepo, delivery, sessions);
+    auth = new MemberAuthService(
+      memberRepo,
+      delivery,
+      sessions,
+      new PreAuthLoginCapabilityAdapter(prisma),
+    );
     void env;
   });
 

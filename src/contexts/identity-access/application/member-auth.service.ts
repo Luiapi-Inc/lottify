@@ -21,6 +21,10 @@ import {
   type MemberOtpPurpose,
 } from "../domain/identity-otp-policy";
 import { MEMBER_OTP_DELIVERY_PORT, type MemberOtpDeliveryPort } from "./member-otp-delivery.port";
+import {
+  MEMBER_LOGIN_CAPABILITY_PORT,
+  type MemberLoginCapabilityPort,
+} from "./pre-auth-login-capability.port";
 
 export interface MemberAuthenticatedContext {
   memberId: string;
@@ -53,7 +57,12 @@ export class MemberAuthService {
   constructor(
     @Inject(MEMBER_AUTH_REPOSITORY) private readonly members: MemberAuthRepository,
     @Inject(MEMBER_OTP_DELIVERY_PORT) private readonly delivery: MemberOtpDeliveryPort,
-    private readonly sessions: SessionService,
+    // `@Inject` on every parameter: the tsx-run tooling (the OpenAPI generator)
+    // does not emit `design:paramtypes`, so an undecorated parameter is injected
+    // as `undefined` there.
+    @Inject(SessionService) private readonly sessions: SessionService,
+    @Inject(MEMBER_LOGIN_CAPABILITY_PORT)
+    private readonly loginCapability: MemberLoginCapabilityPort,
   ) {}
 
   // Purpose-scoped OTP request. The endpoint does not reveal whether the phone
@@ -200,6 +209,24 @@ export class MemberAuthService {
       throw new UnauthorizedException({
         code: "ACCOUNT_DISABLED",
         message: "This Member account is not active",
+        details: {},
+      });
+    }
+
+    // Pre-auth capability gate (Ticket 06): a persisted, effective
+    // `LOGIN_BLOCKED` restriction denies session establishment. It is evaluated
+    // at the same pre-session point as the account-status check, against the
+    // restriction's effective period, so an Admin control that is operable is
+    // also enforced. OTP request stays ungated so a blocked Member is not
+    // distinguishable at request time (anti-enumeration).
+    const loginCapability = await this.loginCapability.evaluateLoginCapability(
+      member.id,
+      now,
+    );
+    if (!loginCapability.allowed) {
+      throw new UnauthorizedException({
+        code: loginCapability.reasonCode ?? "CAPABILITY_BLOCKED",
+        message: "This Member is not permitted to log in",
         details: {},
       });
     }

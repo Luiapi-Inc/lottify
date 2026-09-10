@@ -12,6 +12,10 @@ import type {
   OtpRequestWindowFact,
 } from "../../src/contexts/identity-access/domain/identity-auth.repository";
 import { hashRefreshToken } from "../../src/contexts/identity-access/application/session.service";
+import type {
+  MemberLoginCapabilityDecision,
+  MemberLoginCapabilityPort,
+} from "../../src/contexts/identity-access/application/pre-auth-login-capability.port";
 import type { AuthSessionRecord, SessionRepository } from "../../src/contexts/identity-access/domain/session.repository";
 import { resetEnvironmentForTests } from "../../src/platform/config/env";
 
@@ -211,13 +215,33 @@ class InMemorySessionRepo implements SessionRepository {
   }
 }
 
-function harness() {
+function harness(loginCapability?: FakeLoginCapability) {
   const members = new InMemoryMemberRepository();
   const sessionsRepo = new InMemorySessionRepo();
   const delivery = new FakeDelivery();
   const sessions = new SessionService(sessionsRepo, new JwtService());
-  const auth = new MemberAuthService(members, delivery, sessions);
-  return { members, sessionsRepo, delivery, sessions, auth };
+  const gate = loginCapability ?? new FakeLoginCapability();
+  const auth = new MemberAuthService(members, delivery, sessions, gate);
+  return { members, sessionsRepo, delivery, sessions, auth, gate };
+}
+
+/** Records the instant the login gate was evaluated at, so point-in-time
+ *  evaluation can be asserted rather than assumed. */
+class FakeLoginCapability implements MemberLoginCapabilityPort {
+  decision: MemberLoginCapabilityDecision = {
+    allowed: true,
+    reasonCode: null,
+    evidenceRefs: [],
+  };
+  evaluations: Array<{ memberId: string; at: Date }> = [];
+
+  async evaluateLoginCapability(
+    memberId: string,
+    at: Date,
+  ): Promise<MemberLoginCapabilityDecision> {
+    this.evaluations.push({ memberId, at });
+    return this.decision;
+  }
 }
 
 const PHONE = "+66812345678";
@@ -264,6 +288,54 @@ describe("MemberAuthService registration and login", () => {
     await auth.requestOtp("LOGIN", PHONE);
     const code = delivery.lastCode(PHONE, "LOGIN");
     await expect(auth.verifyOtp("LOGIN", PHONE, code!, "Phone")).rejects.toThrow();
+  });
+});
+
+describe("MemberAuthService pre-auth capability gate", () => {
+  it("denies session establishment for a Member with an effective LOGIN_BLOCKED restriction", async () => {
+    const { auth, delivery, sessionsRepo, gate } = harness();
+    await auth.requestOtp("REGISTER", PHONE);
+    const code = delivery.lastCode(PHONE, "REGISTER");
+    const registered = await auth.verifyOtp("REGISTER", PHONE, code!, "Phone");
+    const sessionsBeforeDenial = sessionsRepo.records.size;
+    expect(sessionsBeforeDenial).toBe(1);
+
+    gate.decision = {
+      allowed: false,
+      reasonCode: "CAPABILITY_BLOCKED",
+      evidenceRefs: ["policy:responsible-gaming/v1"],
+    };
+    await auth.requestOtp("LOGIN", PHONE);
+    const loginCode = delivery.lastCode(PHONE, "LOGIN");
+    await expect(
+      auth.verifyOtp("LOGIN", PHONE, loginCode!, "Phone"),
+    ).rejects.toMatchObject({
+      response: { code: "CAPABILITY_BLOCKED" },
+    });
+
+    // No session was established by the denied attempt (the register session is
+    // the only one), and the gate was evaluated for the Member's own id.
+    expect(sessionsRepo.records.size).toBe(sessionsBeforeDenial);
+    expect(await auth.listSessions(registered.memberId)).toHaveLength(1);
+    // Evaluated once per successful verify — at the login instant, for a
+    // Member that the register verify already evaluated.
+    expect(gate.evaluations).toHaveLength(2);
+    expect(new Set(gate.evaluations.map((entry) => entry.memberId))).toEqual(
+      new Set([registered.memberId]),
+    );
+  });
+
+  it("proceeds with login when the gate allows the Member", async () => {
+    const { auth, delivery } = harness();
+    await auth.requestOtp("REGISTER", PHONE);
+    const code = delivery.lastCode(PHONE, "REGISTER");
+    const registered = await auth.verifyOtp("REGISTER", PHONE, code!, "Phone");
+
+    await auth.requestOtp("LOGIN", PHONE);
+    const loginCode = delivery.lastCode(PHONE, "LOGIN");
+    const loggedIn = await auth.verifyOtp("LOGIN", PHONE, loginCode!, "Phone");
+    expect(loggedIn.memberId).toBe(registered.memberId);
+    expect(await auth.listSessions(registered.memberId)).toHaveLength(2);
   });
 });
 
