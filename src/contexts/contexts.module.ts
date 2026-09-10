@@ -22,6 +22,8 @@ import {
 } from "./result-settlement/application/settlement.ports";
 import { WITHDRAWAL_LEDGER_PORT } from "./payments/application/withdrawal-ledger.port";
 import { NotificationPreferenceService } from "./promotion/application/notification-preference.service";
+import { TermsService } from "./member/application/terms.service";
+import { ProfileService } from "./member/application/profile.service";
 import { PromotionCampaignService } from "./promotion/application/promotion-campaign.service";
 import { PromotionEntitlementService } from "./promotion/application/promotion-entitlement.service";
 import { PROMOTION_LEDGER_PORT } from "./promotion/application/promotion-ledger.port";
@@ -125,6 +127,11 @@ import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-m
     PromotionCampaignService,
     PromotionEntitlementService,
     NotificationPreferenceService,
+    // Member onboarding: Terms acceptance and the mandatory profile. The Member
+    // context owns these facts (Ticket 01), so the services live here rather
+    // than being derived by another context.
+    TermsService,
+    ProfileService,
     DepositService,
     WithdrawalService,
     PayoutDestinationService,
@@ -139,6 +146,8 @@ import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-m
     PromotionCampaignService,
     PromotionEntitlementService,
     NotificationPreferenceService,
+    TermsService,
+    ProfileService,
     DepositService,
     WithdrawalService,
     PayoutDestinationService,

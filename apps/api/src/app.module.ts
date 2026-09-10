@@ -36,6 +36,9 @@ import { AdminWithdrawalController } from "./admin-withdrawal.controller";
 import { WithdrawalReviewService } from "./withdrawal-review.service";
 import { MemberPromotionController } from "./member-promotion.controller";
 import { MemberNotificationPreferenceController } from "./member-notification-preference.controller";
+import { MemberTermsController } from "./member-terms.controller";
+import { MemberProfileController } from "./member-profile.controller";
+import { AdminMemberTermsController } from "./admin-member-terms.controller";
 import { MetricsController } from "./metrics.controller";
 
 collectDefaultMetrics({ prefix: "lottify_" });
@@ -68,6 +71,9 @@ collectDefaultMetrics({ prefix: "lottify_" });
     AdminWithdrawalController,
     MemberPromotionController,
     MemberNotificationPreferenceController,
+    MemberTermsController,
+    MemberProfileController,
+    AdminMemberTermsController,
     HealthController,
     MetricsController,
   ],

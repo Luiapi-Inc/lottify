@@ -57,7 +57,7 @@ The Wayfinder map declares the engineering specification handoff complete. The f
 
 1. **OTP acceptance evidence** — Issue 31 resolved the concrete OTP storage and REST shape plus TTL/resend/request-window bindings, and the verify-attempt default now matches Ticket 13 at `10 attempts / challenge`. The remaining gap is the required Ticket 16 security/abuse evidence for the aligned policy.
 2. **Logical Device risk evidence** — Issue 31 resolved the Device persistence and Member session/device management surface. Ticket 06 still requires anomalous-device Risk Signals and policy outcomes (`ALLOW`, `CHALLENGE`, `REAUTH`, `BLOCK`); the evidence model and its end-to-end wiring remain outside the implemented session/device management checkpoint.
-3. **Member onboarding contract** — Tickets 02/06/11 require Terms acceptance, mandatory profile data, and age/jurisdiction eligibility before affected capabilities are enabled, but do not lock the mandatory profile field set, Terms acceptance representation/version contract, or age/jurisdiction evidence rules.
+3. **Member onboarding contract** — Tickets 02/06/11 require Terms acceptance, mandatory profile data, and age/jurisdiction eligibility before affected capabilities are enabled. The Terms acceptance/version contract and the mandatory profile field set are now implemented as `member_terms_documents` / `member_terms_acceptances` plus the `members` profile columns, with concrete decisions recorded in `docs/implementation/member-onboarding-decisions.md` (Issue 64). Age/jurisdiction **evidence rules and thresholds** remain unlocked and belong to the capability-readiness slice.
 
 ## Milestone disposition
 

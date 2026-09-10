@@ -29,6 +29,10 @@ model Member {
   id        String         @id @default(uuid()) @db.Uuid
   phone     String         @unique
   status    String         @default("ACTIVE")
+  fullName        String?   @map("full_name")
+  dateOfBirth     DateTime? @map("date_of_birth") @db.Date
+  province        String?
+  profileUpdatedAt DateTime? @map("profile_updated_at")
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt @map("updated_at")
   devices   MemberDevice[]
@@ -39,8 +43,60 @@ model Member {
   settlementOrders SettlementOrder[]
   payoutDestinations PayoutDestination[]
   withdrawals PaymentWithdrawal[]
+  termsAcceptances MemberTermsAcceptance[]
 
   @@map("members")
+}
+
+/// Versioned Member Terms document. Only a PUBLISHED version inside its
+/// effective window is "currently required"; published content is immutable.
+model MemberTermsDocument {
+  id                  String    @id @default(uuid()) @db.Uuid
+  code                String
+  version             Int
+  revision            Int       @default(1)
+  state               String
+  title               String
+  body                String
+  contentDigest       String    @map("content_digest")
+  policyVersion       String    @map("policy_version")
+  effectiveFrom       DateTime  @map("effective_from")
+  effectiveUntil      DateTime? @map("effective_until")
+  reason              String?
+  createdByAdminId    String?   @map("created_by_admin_id") @db.Uuid
+  publishedAt         DateTime? @map("published_at")
+  publishedByAdminId  String?   @map("published_by_admin_id") @db.Uuid
+  approvalEvidenceRef String?   @map("approval_evidence_ref")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  acceptances         MemberTermsAcceptance[]
+
+  @@unique([code, version])
+  @@index([state, effectiveFrom, effectiveUntil])
+  @@map("member_terms_documents")
+}
+
+/// Immutable record that a Member accepted an exact Terms version at an instant.
+/// One acceptance per Member + Terms version; the accepted content digest is
+/// snapshotted so a later Terms change can never rewrite what was accepted.
+model MemberTermsAcceptance {
+  id              String             @id @default(uuid()) @db.Uuid
+  memberId        String             @map("member_id") @db.Uuid
+  documentId      String             @map("document_id") @db.Uuid
+  documentCode    String             @map("document_code")
+  documentVersion Int                @map("document_version")
+  contentDigest   String             @map("content_digest")
+  source          String
+  acceptedAt      DateTime           @map("accepted_at")
+  evidence        Json
+  correlationId   String             @map("correlation_id")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  member          Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  document        MemberTermsDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([memberId, documentId])
+  @@index([memberId, acceptedAt])
+  @@map("member_terms_acceptances")
 }
 
 model MemberDevice {

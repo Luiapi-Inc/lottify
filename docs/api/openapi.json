@@ -4756,6 +4756,366 @@
           "Member Notification Preferences"
         ]
       }
+    },
+    "/api/v1/member/terms": {
+      "get": {
+        "description": "Reports the Terms version(s) that are published and effective right now, plus this Member's durable acceptances. An acceptance is never assumed.",
+        "operationId": "MemberTermsController_getTerms",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberTermsBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the Member's currently required Terms version(s) and acceptance status",
+        "tags": [
+          "Member Terms"
+        ]
+      }
+    },
+    "/api/v1/member/terms/accept": {
+      "post": {
+        "description": "Records immutable acceptance evidence once per Member + Terms version. Idempotent: replaying the same Idempotency-Key returns the prior result, and re-accepting the same version returns the existing evidence instead of duplicating it. A version that is not currently required is denied.",
+        "operationId": "MemberTermsController_accept",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Scoped Idempotency-Key. Same key + same payload returns the prior result.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptTermsRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptTermsBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Accept the currently required Terms version",
+        "tags": [
+          "Member Terms"
+        ]
+      }
+    },
+    "/api/v1/member/profile": {
+      "get": {
+        "operationId": "MemberProfileController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberProfileBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the Member's own profile and which mandatory fields are missing",
+        "tags": [
+          "Member Profile"
+        ]
+      },
+      "patch": {
+        "description": "Editable fields are the mandatory profile data only. Server-owned facts (phone, account status, KYC and Terms state) can never be set through the profile.",
+        "operationId": "MemberProfileController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberProfileBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberProfileBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update the Member's own profile fields",
+        "tags": [
+          "Member Profile"
+        ]
+      }
+    },
+    "/api/v1/admin/member-terms": {
+      "post": {
+        "operationId": "AdminMemberTermsController_createVersion",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTermsVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Author a DRAFT Member Terms version",
+        "tags": [
+          "admin-member-terms"
+        ]
+      },
+      "get": {
+        "operationId": "AdminMemberTermsController_list",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "PUBLISHED",
+                "RETIRED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionListBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Member Terms versions",
+        "tags": [
+          "admin-member-terms"
+        ]
+      }
+    },
+    "/api/v1/admin/member-terms/{id}": {
+      "get": {
+        "operationId": "AdminMemberTermsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read a Member Terms version",
+        "tags": [
+          "admin-member-terms"
+        ]
+      }
+    },
+    "/api/v1/admin/member-terms/{id}/publish": {
+      "post": {
+        "description": "Maker-checker: the publishing Admin must differ from the author. A published version becomes the required Terms for every Member inside its effective window and can never be rewritten.",
+        "operationId": "AdminMemberTermsController_publish",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedRevisionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and publish a Member Terms version (fresh MFA required)",
+        "tags": [
+          "admin-member-terms"
+        ]
+      }
+    },
+    "/api/v1/admin/member-terms/{id}/retire": {
+      "post": {
+        "operationId": "AdminMemberTermsController_retire",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedRevisionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermsVersionBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retire a published Member Terms version",
+        "tags": [
+          "admin-member-terms"
+        ]
+      }
     }
   },
   "info": {
@@ -6829,6 +7189,9 @@
                 "promotion.read",
                 "promotion.manage",
                 "promotion.approve",
+                "member-terms.read",
+                "member-terms.manage",
+                "member-terms.approve",
                 "reconciliation.read",
                 "report.read",
                 "audit.read",
@@ -9351,6 +9714,460 @@
         },
         "required": [
           "preferences"
+        ]
+      },
+      "RequiredTermsBody": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "example": "MEMBER_TERMS"
+          },
+          "version": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "The exact text the Member must read before accepting"
+          },
+          "contentDigest": {
+            "type": "string",
+            "description": "SHA-256 over the accepted Terms content"
+          },
+          "policyVersion": {
+            "type": "string",
+            "description": "Policy version governing this Terms version"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "accepted": {
+            "type": "boolean",
+            "description": "True only when a durable acceptance for this exact version exists"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "acceptanceId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "documentId",
+          "code",
+          "version",
+          "title",
+          "body",
+          "contentDigest",
+          "policyVersion",
+          "effectiveFrom",
+          "effectiveUntil",
+          "accepted",
+          "acceptedAt",
+          "acceptanceId"
+        ]
+      },
+      "TermsAcceptanceBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "documentCode": {
+            "type": "string"
+          },
+          "documentVersion": {
+            "type": "number"
+          },
+          "contentDigest": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "example": "MEMBER_SELF_SERVICE"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "documentId",
+          "documentCode",
+          "documentVersion",
+          "contentDigest",
+          "source",
+          "acceptedAt"
+        ]
+      },
+      "MemberTermsBody": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "required": {
+            "description": "Terms versions currently required for this Member (may be empty)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequiredTermsBody"
+            }
+          },
+          "acceptances": {
+            "description": "This Member's immutable Terms acceptances",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TermsAcceptanceBody"
+            }
+          },
+          "satisfied": {
+            "type": "boolean",
+            "description": "Every currently required Terms version has a durable acceptance"
+          }
+        },
+        "required": [
+          "memberId",
+          "asOf",
+          "required",
+          "acceptances",
+          "satisfied"
+        ]
+      },
+      "AcceptTermsRequestBody": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The Terms version the Member is accepting (from GET /member/terms)"
+          }
+        },
+        "required": [
+          "documentId"
+        ]
+      },
+      "AcceptTermsBody": {
+        "type": "object",
+        "properties": {
+          "acceptanceId": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "documentCode": {
+            "type": "string"
+          },
+          "documentVersion": {
+            "type": "number"
+          },
+          "contentDigest": {
+            "type": "string",
+            "description": "SHA-256 over the accepted Terms content"
+          },
+          "source": {
+            "type": "string",
+            "example": "MEMBER_SELF_SERVICE"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "alreadyAccepted": {
+            "type": "boolean",
+            "description": "False on the first acceptance; true when this Member had already accepted it"
+          }
+        },
+        "required": [
+          "acceptanceId",
+          "memberId",
+          "documentId",
+          "documentCode",
+          "documentVersion",
+          "contentDigest",
+          "source",
+          "acceptedAt",
+          "alreadyAccepted"
+        ]
+      },
+      "MemberProfileBody": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Login identity owned by Identity & Access"
+          },
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "example": "1990-01-01"
+          },
+          "province": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "mandatoryFields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fullName",
+                "dateOfBirth",
+                "province"
+              ]
+            }
+          },
+          "missingMandatoryFields": {
+            "type": "array",
+            "description": "Mandatory fields with no stored value",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fullName",
+                "dateOfBirth",
+                "province"
+              ]
+            }
+          },
+          "profileComplete": {
+            "type": "boolean",
+            "description": "True only when every mandatory field has a stored value"
+          }
+        },
+        "required": [
+          "memberId",
+          "phone",
+          "fullName",
+          "dateOfBirth",
+          "province",
+          "profileUpdatedAt",
+          "mandatoryFields",
+          "missingMandatoryFields",
+          "profileComplete"
+        ]
+      },
+      "UpdateMemberProfileBody": {
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "example": "1990-01-01"
+          },
+          "province": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CreateTermsVersionBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "default": "MEMBER_TERMS"
+          },
+          "version": {
+            "type": "number",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "example": "ข้อตกลงการใช้งาน Lottify"
+          },
+          "body": {
+            "type": "string",
+            "description": "The exact Terms text a Member accepts"
+          },
+          "policyVersion": {
+            "type": "string",
+            "description": "Effective policy version governing this document"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2026-10-01T00:00:00.000Z"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "version",
+          "title",
+          "body",
+          "policyVersion",
+          "effectiveFrom"
+        ]
+      },
+      "TermsVersionBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          },
+          "revision": {
+            "type": "number",
+            "description": "Optimistic-concurrency revision"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PUBLISHED",
+              "RETIRED"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "contentDigest": {
+            "type": "string"
+          },
+          "policyVersion": {
+            "type": "string"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "approvalEvidenceRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "version",
+          "revision",
+          "state",
+          "title",
+          "body",
+          "contentDigest",
+          "policyVersion",
+          "effectiveFrom",
+          "effectiveUntil",
+          "reason",
+          "publishedAt",
+          "approvalEvidenceRef",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "TermsVersionListBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TermsVersionBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "ExpectedRevisionBody": {
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "number",
+            "example": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision"
         ]
       }
     }
