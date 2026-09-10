@@ -21,6 +21,9 @@ export const ADMIN_CAPABILITIES = [
   "withdrawal.read",
   "withdrawal.review",
   "withdrawal.payout",
+  "promotion.read",
+  "promotion.manage",
+  "promotion.approve",
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 

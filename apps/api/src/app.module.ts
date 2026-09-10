@@ -5,6 +5,7 @@ import { PlatformModule } from "../../../src/platform/platform.module";
 import { AdminAccountingPeriodController } from "./admin-accounting-period.controller";
 import { AdminDrawController } from "./admin-draw.controller";
 import { AdminLotteryConfigurationController } from "./admin-lottery-configuration.controller";
+import { AdminPromotionController } from "./admin-promotion.controller";
 import { AdminAuthController } from "./admin-auth.controller";
 import { AdminAuthGuard } from "./admin-auth.guard";
 import { AdminCapabilityGuard } from "./admin-capability.guard";
@@ -28,6 +29,8 @@ import { MemberWithdrawalController } from "./member-withdrawal.controller";
 import { MemberPayoutDestinationController } from "./member-payout-destination.controller";
 import { AdminWithdrawalController } from "./admin-withdrawal.controller";
 import { WithdrawalReviewService } from "./withdrawal-review.service";
+import { MemberPromotionController } from "./member-promotion.controller";
+import { MemberNotificationPreferenceController } from "./member-notification-preference.controller";
 import { MetricsController } from "./metrics.controller";
 
 collectDefaultMetrics({ prefix: "lottify_" });
@@ -39,6 +42,7 @@ collectDefaultMetrics({ prefix: "lottify_" });
     AdminAccountingPeriodController,
     AdminDrawController,
     AdminLotteryConfigurationController,
+    AdminPromotionController,
     AdminAuthController,
     MemberAuthController,
     MemberDrawController,
@@ -52,6 +56,8 @@ collectDefaultMetrics({ prefix: "lottify_" });
     MemberWithdrawalController,
     MemberPayoutDestinationController,
     AdminWithdrawalController,
+    MemberPromotionController,
+    MemberNotificationPreferenceController,
     HealthController,
     MetricsController,
   ],

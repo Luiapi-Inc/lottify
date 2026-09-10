@@ -75,6 +75,9 @@ describe("Admin authentication security primitives", () => {
       "withdrawal.read",
       "withdrawal.review",
       "withdrawal.payout",
+      "promotion.read",
+      "promotion.manage",
+      "promotion.approve",
     ]);
     expect(capabilitiesForRole("SUPER_ADMIN")).toEqual([
       "accounting-period.read",
@@ -96,6 +99,9 @@ describe("Admin authentication security primitives", () => {
       "withdrawal.read",
       "withdrawal.review",
       "withdrawal.payout",
+      "promotion.read",
+      "promotion.manage",
+      "promotion.approve",
     ]);
     expect(capabilitiesForRole("AUDITOR")).toEqual([
       "accounting-period.read",
@@ -104,6 +110,7 @@ describe("Admin authentication security primitives", () => {
       "result.read",
       "settlement.read",
       "withdrawal.read",
+      "promotion.read",
     ]);
   });
 });
