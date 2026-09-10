@@ -26,6 +26,8 @@ export const ADMIN_CAPABILITIES = [
   "promotion.approve",
   "reconciliation.read",
   "report.read",
+  "audit.read",
+  "approval.read",
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 

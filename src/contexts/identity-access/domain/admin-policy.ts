@@ -30,6 +30,8 @@ const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
     "promotion.approve",
     "reconciliation.read",
     "report.read",
+    "audit.read",
+    "approval.read",
   ],
   ADMIN: [
     "accounting-period.read",
@@ -56,6 +58,8 @@ const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
     "promotion.approve",
     "reconciliation.read",
     "report.read",
+    "audit.read",
+    "approval.read",
   ],
   AUDITOR: [
     "accounting-period.read",
@@ -67,6 +71,8 @@ const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
     "promotion.read",
     "reconciliation.read",
     "report.read",
+    "audit.read",
+    "approval.read",
   ],
 };
 

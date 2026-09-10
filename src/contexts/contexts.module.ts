@@ -146,6 +146,10 @@ import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-m
     // Reporting exports its own read/reconciliation services; re-exporting the
     // module keeps a single instance per service instead of duplicating providers.
     ReportingModule,
+    // Audit and AdminApproval export their own read services; re-exporting the
+    // modules keeps a single instance per service instead of duplicating providers.
+    AuditModule,
+    AdminApprovalModule,
     BettingOrderService,
     SettlementService,
   ],
