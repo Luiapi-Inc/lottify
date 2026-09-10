@@ -37,6 +37,7 @@ const phonePrefix = "+6693"; // pre-auth login capability integration namespace
 describe.runIf(runIntegration)("Member pre-auth login capability gate", () => {
   let prisma: PrismaService;
   let auth: MemberAuthService;
+  let sessions: SessionService;
   let delivery: LocalMemberOtpDelivery;
   let restrictionAdmin: CapabilityRestrictionAdminService;
   /** Phones this suite registered, so cleanup never touches another row. */
@@ -49,7 +50,11 @@ describe.runIf(runIntegration)("Member pre-auth login capability gate", () => {
     await prisma.$connect();
     void getEnvironment();
     delivery = new LocalMemberOtpDelivery();
-    const sessions = new SessionService(new PrismaSessionRepository(prisma), new JwtService());
+    sessions = new SessionService(
+      new PrismaSessionRepository(prisma),
+      new JwtService(),
+      new PreAuthLoginCapabilityAdapter(prisma),
+    );
     auth = new MemberAuthService(
       new PrismaMemberAuthRepository(prisma),
       delivery,
@@ -248,5 +253,82 @@ describe.runIf(runIntegration)("Member pre-auth login capability gate", () => {
 
     expect(loggedIn.memberId).toBe(memberId);
     expect(await activeSessionCount(memberId)).toBe(1);
+  });
+
+  it("denies refresh rotation and access-token use for an in-flight session once LOGIN_BLOCKED is applied", async () => {
+    const phone = freshPhone();
+    const memberId = await registerMember(phone);
+    await clearSessions(memberId);
+    // Establish a live session while no restriction is effective.
+    await auth.requestOtp("LOGIN", phone);
+    const code = delivery.lastCode(phone, "LOGIN");
+    const established = await auth.verifyOtp("LOGIN", phone, code!, "Gate Phone");
+    expect(established.memberId).toBe(memberId);
+    expect(await activeSessionCount(memberId)).toBe(1);
+
+    // The access token is usable before the restriction is applied.
+    await expect(
+      sessions.authenticateAccess(established.accessToken),
+    ).resolves.toMatchObject({ memberId, sessionId: expect.any(String) });
+
+    await seedRestriction(memberId, { type: "LOGIN_BLOCKED" });
+
+    // Both the refresh rotation and the already-issued access token are now
+    // denied with the same stable coded reason as the pre-auth boundary.
+    await expect(auth.refresh(established.refreshToken)).rejects.toMatchObject({
+      response: { code: "CAPABILITY_BLOCKED" },
+    });
+    await expect(
+      sessions.authenticateAccess(established.accessToken),
+    ).rejects.toMatchObject({
+      response: { code: "CAPABILITY_BLOCKED" },
+    });
+    // The session row survives (not destructively revoked); only its use is
+    // denied while the restriction is effective.
+    expect(await activeSessionCount(memberId)).toBe(1);
+  });
+
+  it("restores the same in-flight session once the LOGIN_BLOCKED restriction is cleared", async () => {
+    const phone = freshPhone();
+    const memberId = await registerMember(phone);
+    await clearSessions(memberId);
+    await auth.requestOtp("LOGIN", phone);
+    const code = delivery.lastCode(phone, "LOGIN");
+    const established = await auth.verifyOtp("LOGIN", phone, code!, "Gate Phone");
+    const restrictionId = await seedRestriction(memberId, {
+      type: "LOGIN_BLOCKED",
+    });
+
+    await expect(auth.refresh(established.refreshToken)).rejects.toMatchObject({
+      response: { code: "CAPABILITY_BLOCKED" },
+    });
+
+    await prisma.capabilityRestriction.delete({ where: { id: restrictionId } });
+
+    // The very same session resumes working without a new login: no token
+    // rotation was consumed while the restriction was effective, so the
+    // original refresh credential still advances the family lineage. Rotation
+    // re-issues a fresh access token bound to the advancing session.
+    const resumed = await auth.refresh(established.refreshToken);
+    expect(resumed.accessToken).toBeTruthy();
+    await expect(
+      sessions.authenticateAccess(resumed.accessToken),
+    ).resolves.toMatchObject({ memberId });
+  });
+
+  it("does not gate an in-flight session with a non-LOGIN restriction", async () => {
+    const phone = freshPhone();
+    const memberId = await registerMember(phone);
+    await auth.requestOtp("LOGIN", phone);
+    const code = delivery.lastCode(phone, "LOGIN");
+    const established = await auth.verifyOtp("LOGIN", phone, code!, "Gate Phone");
+    await seedRestriction(memberId, { type: "BET_BLOCKED" });
+
+    await expect(
+      sessions.authenticateAccess(established.accessToken),
+    ).resolves.toMatchObject({ memberId });
+    await expect(
+      auth.refresh(established.refreshToken),
+    ).resolves.toMatchObject({ accessToken: expect.any(String) });
   });
 });

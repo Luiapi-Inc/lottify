@@ -219,8 +219,8 @@ function harness(loginCapability?: FakeLoginCapability) {
   const members = new InMemoryMemberRepository();
   const sessionsRepo = new InMemorySessionRepo();
   const delivery = new FakeDelivery();
-  const sessions = new SessionService(sessionsRepo, new JwtService());
   const gate = loginCapability ?? new FakeLoginCapability();
+  const sessions = new SessionService(sessionsRepo, new JwtService(), gate);
   const auth = new MemberAuthService(members, delivery, sessions, gate);
   return { members, sessionsRepo, delivery, sessions, auth, gate };
 }

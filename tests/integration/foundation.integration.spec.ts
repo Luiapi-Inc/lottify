@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaSessionRepository } from "../../src/contexts/identity-access/infrastructure/prisma-session.repository";
 import { SessionService } from "../../src/contexts/identity-access/application/session.service";
+import { PreAuthLoginCapabilityAdapter } from "../../src/platform/integration/pre-auth-login-capability.adapter";
 import { IdempotencyService } from "../../src/platform/idempotency/idempotency.service";
 import { OutboxService } from "../../src/platform/outbox/outbox.service";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
@@ -20,7 +21,11 @@ describe.runIf(runIntegration)("foundation integration", () => {
     prisma = new PrismaService();
     idempotency = new IdempotencyService(prisma);
     outbox = new OutboxService(prisma);
-    sessions = new SessionService(new PrismaSessionRepository(prisma), new JwtService());
+    sessions = new SessionService(
+      new PrismaSessionRepository(prisma),
+      new JwtService(),
+      new PreAuthLoginCapabilityAdapter(prisma),
+    );
     await prisma.$connect();
   });
 

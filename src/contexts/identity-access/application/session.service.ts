@@ -3,6 +3,10 @@ import { JwtService } from "@nestjs/jwt";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getEnvironment } from "../../../platform/config/env";
 import { SESSION_REPOSITORY, type SessionRepository } from "../domain/session.repository";
+import {
+  MEMBER_LOGIN_CAPABILITY_PORT,
+  type MemberLoginCapabilityPort,
+} from "./pre-auth-login-capability.port";
 
 export function hashRefreshToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
@@ -16,7 +20,17 @@ function newRefreshToken(): string {
 export class SessionService {
   constructor(
     @Inject(SESSION_REPOSITORY) private readonly sessions: SessionRepository,
-    private readonly jwt: JwtService,
+    // Explicit @Inject on every parameter: the tsx-run tooling (the OpenAPI
+    // generator) does not emit `design:paramtypes`, so an undecorated parameter
+    // is injected as `undefined` (a decorated param after it makes Nest throw
+    // `UndefinedDependencyException`).
+    @Inject(JwtService) private readonly jwt: JwtService,
+    // The effective `LOGIN_BLOCKED` restriction also denies an in-flight Member
+    // session (refresh rotation and access-token use), not only new logins. The
+    // rule is consumed from the merged Member-context module through the same
+    // cross-context port as the pre-auth boundary — never re-implemented here.
+    @Inject(MEMBER_LOGIN_CAPABILITY_PORT)
+    private readonly loginCapability: MemberLoginCapabilityPort,
   ) {}
 
   async issue(memberId: string, deviceId?: string): Promise<{
@@ -65,6 +79,12 @@ export class SessionService {
       }
       throw new UnauthorizedException("Refresh session is invalid, expired, or revoked");
     }
+
+    // An effective `LOGIN_BLOCKED` denies refresh rotation, so a restricted
+    // Member cannot keep an in-flight session alive past its access-token TTL.
+    // Point-in-time against the restriction's effective window; the session is
+    // NOT revoked, so once the restriction clears the same credential resumes.
+    await this.assertLoginAllowed(session.memberId, now);
 
     return this.rotate(session.id, refreshToken);
   }
@@ -198,10 +218,32 @@ export class SessionService {
     ) {
       throw new UnauthorizedException("Member session expired or revoked");
     }
+
+    // A Member restricted by an effective `LOGIN_BLOCKED` cannot use an already
+    // issued access token: the guard's per-request authentication now also
+    // consults the capability port, point-in-time, so a restriction applied
+    // after login takes effect immediately (not only on the next login).
+    await this.assertLoginAllowed(session.memberId, now);
+
     return {
       memberId: session.memberId,
       sessionId: session.id,
       deviceId: session.deviceId,
     };
+  }
+
+  /** Denies session use/refresh for an effective `LOGIN_BLOCKED` restriction. */
+  private async assertLoginAllowed(memberId: string, at: Date): Promise<void> {
+    const decision = await this.loginCapability.evaluateLoginCapability(
+      memberId,
+      at,
+    );
+    if (!decision.allowed) {
+      throw new UnauthorizedException({
+        code: decision.reasonCode ?? "CAPABILITY_BLOCKED",
+        message: "This Member is not permitted to use their session",
+        details: {},
+      });
+    }
   }
 }

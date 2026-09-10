@@ -151,10 +151,22 @@ Member login / OTP-verification boundary.
   `MEMBER_NOT_REGISTERED`/`ACCOUNT_DISABLED`, so nothing new is leaked at
   OTP/request time: issuance stays identical for blocked and unblocked phones
   (anti-enumeration untouched). No `/api/v1` request or response shape changed.
-- Known limitation: an already-issued session/refresh credential is not revoked
-  when a restriction is applied; enforcement happens at session establishment
-  (login). Refresh-time enforcement and session revocation on restriction are
-  filed as a separate follow-up.
+- Known limitation (pre-auth slice): applying a restriction does not
+  destructively revoke an in-flight session; enforcement happened at session
+  establishment (login). This follow-up closes the usability gap by denying
+  refresh rotation and access-token use while the restriction is effective.
+- **In-flight sessions (this follow-up).** `SessionService` — the member-only
+  session engine — consumes `MEMBER_LOGIN_CAPABILITY_PORT` directly and denies
+  both `refresh()` rotation and `authenticateAccess()` (the per-request access
+  token path used by `MemberAuthGuard`) while an effective `LOGIN_BLOCKED`
+  restriction exists. So an already-issued session is not silently usable past
+  its access-token TTL: a restriction applied after login takes effect at the
+  next refresh or request. The decision is point-in-time and the session is
+  **not** revoked, so when the restriction is cleared or its effective period
+  ends the same credential resumes working without a new login. The denial
+  reuses the same stable codes as the pre-auth boundary
+  (`CAPABILITY_BLOCKED` / `SELF_EXCLUSION`) and does not leak the restriction's
+  evidence references.
 
 ## Verification
 
@@ -164,7 +176,9 @@ Member login / OTP-verification boundary.
   mapping), `tests/unit/member-capability-restriction.spec.ts`,
   `tests/unit/login-capability-gate.spec.ts` (pre-auth gate: allow, deny, other
   capabilities never gate, effective period), `tests/unit/member-auth.service.spec.ts`
-  (denied login establishes no session).
+  (denied login establishes no session), `tests/unit/member-auth.guard.spec.ts`
+  (a `CAPABILITY_BLOCKED`/`SELF_EXCLUSION` denial from the session engine
+  surfaces with its coded reason instead of collapsing to `AUTHENTICATION_REQUIRED`).
 - Contract: `tests/contract/member-readiness-api.contract.spec.ts` (declared
   success schemas, no persistence leakage, capability gating, Idempotency-Key on
   every critical Admin mutation).
@@ -174,7 +188,10 @@ Member login / OTP-verification boundary.
   against Postgres; pre-auth enforcement (effective `LOGIN_BLOCKED` denies with
   no session, only that type gates, effective period, cleared restriction,
   anti-enumeration at OTP request, self-exclusion protection):
-  `tests/integration/member-login-capability.integration.spec.ts`.
+  `tests/integration/member-login-capability.integration.spec.ts`; in-flight
+  enforcement (a restriction applied after login denies refresh rotation and
+  access-token use, and clearing it resumes the same session):
+  same suite.
 - `pnpm check` must pass.
 
 This is an implementation checkpoint. It is not Ticket 16 acceptance of the

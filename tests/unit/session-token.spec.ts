@@ -9,9 +9,25 @@ import type {
   AuthSessionRecord,
   SessionRepository,
 } from "../../src/contexts/identity-access/domain/session.repository";
+import type { MemberLoginCapabilityPort } from "../../src/contexts/identity-access/application/pre-auth-login-capability.port";
 import { resetEnvironmentForTests } from "../../src/platform/config/env";
 
 type StoredSession = AuthSessionRecord & { deviceId: string | null };
+
+/** Allow-all login gate so session mechanics are tested in isolation. */
+class AllowAllLoginCapability implements MemberLoginCapabilityPort {
+  async evaluateLoginCapability() {
+    return { allowed: true, reasonCode: null, evidenceRefs: [] };
+  }
+}
+
+function makeSessions(): SessionService {
+  return new SessionService(
+    new InMemorySessionRepository(),
+    new JwtService(),
+    new AllowAllLoginCapability(),
+  );
+}
 
 class InMemorySessionRepository implements SessionRepository {
   private readonly records = new Map<string, StoredSession>();
@@ -129,7 +145,7 @@ describe("refresh token hashing", () => {
 
 describe("session revocation", () => {
   it("lists only active sessions owned by the selected member without exposing refresh-token state", async () => {
-    const sessions = new SessionService(new InMemorySessionRepository(), new JwtService());
+    const sessions = makeSessions();
     const memberId = randomUUID();
     const otherMemberId = randomUUID();
     const phone = await sessions.issue(memberId, "phone");
@@ -149,7 +165,7 @@ describe("session revocation", () => {
   });
 
   it("does not allow a member to revoke another member's session by id", async () => {
-    const sessions = new SessionService(new InMemorySessionRepository(), new JwtService());
+    const sessions = makeSessions();
     const memberId = randomUUID();
     const otherMemberId = randomUUID();
     const otherMember = await sessions.issue(otherMemberId, "phone");
@@ -160,7 +176,7 @@ describe("session revocation", () => {
   });
 
   it("revokes only sessions for the selected member device", async () => {
-    const sessions = new SessionService(new InMemorySessionRepository(), new JwtService());
+    const sessions = makeSessions();
     const memberId = randomUUID();
     const otherMemberId = randomUUID();
     const selected = await sessions.issue(memberId, "phone");
@@ -175,7 +191,7 @@ describe("session revocation", () => {
   });
 
   it("revokes all sessions for one member without revoking another member", async () => {
-    const sessions = new SessionService(new InMemorySessionRepository(), new JwtService());
+    const sessions = makeSessions();
     const memberId = randomUUID();
     const otherMemberId = randomUUID();
     const first = await sessions.issue(memberId, "phone");

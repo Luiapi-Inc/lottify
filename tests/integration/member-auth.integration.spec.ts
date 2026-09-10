@@ -29,7 +29,11 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     const env = getEnvironment();
     const memberRepo = new PrismaMemberAuthRepository(prisma);
     delivery = new LocalMemberOtpDelivery();
-    sessions = new SessionService(new PrismaSessionRepository(prisma), new JwtService());
+    sessions = new SessionService(
+      new PrismaSessionRepository(prisma),
+      new JwtService(),
+      new PreAuthLoginCapabilityAdapter(prisma),
+    );
     auth = new MemberAuthService(
       memberRepo,
       delivery,
