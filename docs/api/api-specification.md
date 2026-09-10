@@ -2,12 +2,11 @@
 
 Generated from the live OpenAPI 3.0.0 contract (`apps/api/openapi/openapi.json`).
 
-**92 paths · 100 operations · 86 schemas**
+**96 paths · 104 operations · 110 schemas**
 
-Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
+Source: `main @ d8fa322` · generated 2026-09-10 16:53 (+07)
 
 ---
-
 ## Contents
 
 - **Member API**
@@ -26,6 +25,8 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
   - [`/member/withdrawals`](#member--withdrawals)
 - **Admin API**
   - [`/admin/accounting-periods`](#admin--accounting-periods)
+  - [`/admin/approvals`](#admin--approvals)
+  - [`/admin/audit`](#admin--audit)
   - [`/admin/auth`](#admin--auth)
   - [`/admin/draws`](#admin--draws)
   - [`/admin/lottery`](#admin--lottery)
@@ -36,7 +37,6 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
   - [`/admin/settlement`](#admin--settlement)
   - [`/admin/withdrawals`](#admin--withdrawals)
 - **Common** — [conventions](#common-conventions) · [schemas](#schemas)
-
 ---
 
 
@@ -82,7 +82,7 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 *Rotate the Member refresh credential*
 
 - **Responses:**
-  - `200` → `MemberSessionResponse`
+  - `200` → `MemberRefreshResponse`
 
 #### `POST /api/v1/member/auth/revoke-all`
 
@@ -142,21 +142,21 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 - **Request** `application/json`: array<`QuoteCreateBody`>
 
 - **Responses:**
-  - `201`
+  - `200` → `BettingQuoteBody`
 
 #### `GET /api/v1/member/draws/{id}`
 
 *Get a Lottery Draw detail with status, cutoff and server time*
 
 - **Responses:**
-  - `200`
+  - `200` → `MemberDrawDetailBody`
 
 #### `GET /api/v1/member/draws/{id}/eligibility`
 
 *Cutoff eligibility: strictly-before eligible; exact/beyond rejected*
 
 - **Responses:**
-  - `200`
+  - `200` → `MemberDrawEligibilityBody`
 
 <a id="member--notification-preferences"></a>
 ### `/member/notification-preferences`
@@ -183,7 +183,7 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 *Read a Member Bet Order by id*
 
 - **Responses:**
-  - `200`
+  - `200` → `BetOrderBody`
 
 #### `POST /api/v1/member/orders/{id}/cancel`
 
@@ -192,7 +192,7 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 - **Request** `application/json`: `BetOrderCommandBody`
 
 - **Responses:**
-  - `201`
+  - `200` → `BetOrderBody`
 
 #### `POST /api/v1/member/orders/{id}/confirm`
 
@@ -201,21 +201,21 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 - **Request** `application/json`: `BetOrderCommandBody`
 
 - **Responses:**
-  - `201`
+  - `200` → `BetOrderBody`
 
 #### `GET /api/v1/member/orders/{id}/receipt`
 
 *Read the immutable Bet Receipt of a confirmed Order*
 
 - **Responses:**
-  - `200`
+  - `200` → `BetReceiptBody`
 
 #### `GET /api/v1/member/orders/{id}/settlement`
 
 *Read the settlement outcome of a Member Bet Order*
 
 - **Responses:**
-  - `200`
+  - `200` → `MemberSettlementOutcomeBody`
 
 <a id="member--payout-destinations"></a>
 ### `/member/payout-destinations`
@@ -264,7 +264,7 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 | `limit` | query | number | no |
 
 - **Responses:**
-  - `200`
+  - `200` → `MemberDrawPageBody`
 
 <a id="member--promotions"></a>
 ### `/member/promotions`
@@ -311,14 +311,14 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 *Read a Member betting Quote by id*
 
 - **Responses:**
-  - `200`
+  - `200` → `BettingQuoteBody`
 
 #### `POST /api/v1/member/quotes/{quoteId}/orders`
 
 *Create a Bet Order from an authorised Quote*
 
 - **Responses:**
-  - `201`
+  - `200` → `BetOrderBody`
 
 <a id="member--sessions"></a>
 ### `/member/sessions`
@@ -518,6 +518,75 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
   - `403` → `ApiErrorResponse`
   - `404` → `ApiErrorResponse`
   - `409` → `ApiErrorResponse`
+
+<a id="admin--approvals"></a>
+### `/admin/approvals`
+
+#### `GET /api/v1/admin/approvals`
+
+*List the immutable Admin approval work queue with requester/target/state/age and evidence*
+
+| param | in | type | required |
+|---|---|---|---|
+| `cursor` | query | string | no |
+| `limit` | query | number | no |
+| `to` | query | string | no |
+| `from` | query | string | no |
+| `resourceId` | query | string | no |
+| `resourceType` | query | string | no |
+| `action` | query | string | no |
+| `state` | query | string | no |
+
+- **Responses:**
+  - `200` → `AdminApprovalListResponse`
+  - `400` — VALIDATION_ERROR
+  - `401` — AUTHENTICATION_REQUIRED
+  - `403` — ACCESS_DENIED
+
+#### `GET /api/v1/admin/approvals/{id}`
+
+*Read one approval evidence record with requester/approver and linked audit*
+
+- **Responses:**
+  - `200` → `AdminApprovalResponse`
+  - `401` — AUTHENTICATION_REQUIRED
+  - `403` — ACCESS_DENIED
+  - `404` — NOT_FOUND
+
+<a id="admin--audit"></a>
+### `/admin/audit`
+
+#### `GET /api/v1/admin/audit/records`
+
+*List immutable audit records with actor/action/resource/outcome and evidence references*
+
+| param | in | type | required |
+|---|---|---|---|
+| `cursor` | query | string | no |
+| `limit` | query | number | no |
+| `to` | query | string | no |
+| `from` | query | string | no |
+| `outcome` | query | string | no |
+| `resourceId` | query | string | no |
+| `resourceType` | query | string | no |
+| `action` | query | string | no |
+| `actor` | query | string | no |
+
+- **Responses:**
+  - `200` → `AuditRecordListResponse`
+  - `400` — VALIDATION_ERROR
+  - `401` — AUTHENTICATION_REQUIRED
+  - `403` — ACCESS_DENIED
+
+#### `GET /api/v1/admin/audit/records/{id}`
+
+*Read one audit record with actor and linked reauth/approval evidence*
+
+- **Responses:**
+  - `200` → `AuditRecordResponse`
+  - `401` — AUTHENTICATION_REQUIRED
+  - `403` — ACCESS_DENIED
+  - `404` — NOT_FOUND
 
 <a id="admin--auth"></a>
 ### `/admin/auth`
@@ -1064,20 +1133,20 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 
 ## Common conventions
 
-- **Base** `/api/v1`. JSON in/out. Errors: canonical `{ code, message }` (plus `correlationId`).
-- **Auth** — `Member` and `Admin` token spaces are mutually exclusive; `Authorization: Bearer <access>`.
-  - Member: phone is the login identity; purpose-scoped OTP → short-lived access + rotating refresh; refresh reuse revokes the whole session family; sessions/devices are first-class resources.
-  - Admin: password + mandatory TOTP MFA; `auth/reauth` yields fresh-MFA evidence for sensitive actions; `auth/revoke-all` kills admin sessions.
-- **Idempotency** — critical mutations require an `Idempotency-Key` header (deposits, quotes, order confirm/cancel, withdrawal create/cancel/finalize, status/close commands, governed lottery & promotion commands). Same key + same payload → prior result; same key + different payload → `IDEMPOTENCY_CONFLICT`.
+- **Base** `/api/v1`. JSON in/out. Errors: canonical `{ code, message, correlationId }`.
+- **Auth** — Member/Admin token spaces are mutually exclusive; `Authorization: Bearer <access>`.
+  - Member: phone identity; purpose-scoped OTP → short-lived access + rotating refresh (set as an httpOnly cookie); refresh reuse revokes the session family; sessions/devices first-class.
+  - Admin: password + mandatory TOTP MFA; `auth/reauth` yields fresh-MFA evidence; `auth/revoke-all` kills admin sessions.
+- **Idempotency** — critical mutations require `Idempotency-Key`. Same key + same payload → prior result; changed payload → `IDEMPOTENCY_CONFLICT`.
 - **Optimistic concurrency** — versioned aggregates return `version` + `allowedActions`; stale writes → `VERSION_CONFLICT`.
 - **Pagination** — deterministic keyset/cursor with stable sort; allowlisted filters per resource.
-- **Time** — half-open `[from,to)` ranges; server-authoritative instants; read models expose `dataAsOf`/`generatedAt` + completeness state (`CURRENT`/`LAGGING`/`PARTIAL`/`REBUILDING`).
-- **Status codes** — 400 validation · 401 no auth · 403 capability denied/risk denial · 404 missing · 409 idempotency/version conflict · 429 rate limit.
+- **Time** — half-open `[from,to)`; server-authoritative instants; read models expose `dataAsOf`/`generatedAt` + completeness state.
+- **Status codes** — 400 validation · 401 no auth · 403 capability denied · 404 missing · 409 idempotency/version conflict · 429 rate limit.
 
 
 ## Schemas
 
-86 component schemas (full definitions in the OpenAPI document).
+110 component schemas (full definitions in the OpenAPI document).
 
 | schema | shape |
 |---|---|
@@ -1100,6 +1169,11 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 | `AccountingPeriodResponse` | object · 25 fields · required: id, mode, generationKind, effectiveStart, effectiveEnd, accountingTimezone |
 | `AddPayoutDestinationBody` | object · 4 fields · required: type, bankCode, accountNumber, accountHolderName |
 | `AdminAccessTokenResponse` | object · 1 fields · required: accessToken |
+| `AdminApprovalLinkedAuditResponse` | object · 3 fields · required: id, outcome, createdAt |
+| `AdminApprovalListResponse` | object · 3 fields · required: items, nextCursor, dataAsOf |
+| `AdminApprovalPrincipalResponse` | object · 4 fields · required: id, email, name, role |
+| `AdminApprovalReauthResponse` | object · 4 fields · required: id, actionClass, verifiedAt, expiresAt |
+| `AdminApprovalResponse` | object · 20 fields · required: id, action, resourceType, resourceId, requesterAdminId, approverAdminId |
 | `AdminMeResponse` | object · 5 fields · required: id, email, name, role, capabilities |
 | `AdminReauthBody` | object · 2 fields · required: actionClass, code |
 | `AdminReauthResponse` | object · 3 fields · required: actionClass, verifiedAt, expiresAt |
@@ -1110,7 +1184,18 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 | `AdminWithdrawalTimelineEntry` | object · 9 fields · required: id, fromState, toState, actorType, actorId, reason |
 | `ApiErrorResponse` | object · 4 fields · required: code, message, details, correlationId |
 | `ApproveAccountingPeriodBody` | object · 1 fields · required: expectedVersion |
+| `AuditActorReferenceResponse` | object · 4 fields · required: id, email, name, role |
+| `AuditLinkedApprovalResponse` | object · 7 fields · required: id, action, resourceType, resourceId, requesterAdminId, approverAdminId |
+| `AuditLinkedReauthResponse` | object · 4 fields · required: id, actionClass, verifiedAt, expiresAt |
+| `AuditRecordListResponse` | object · 3 fields · required: items, nextCursor, dataAsOf |
+| `AuditRecordResponse` | object · 17 fields · required: id, actorAdminId, actorRole, sessionId, action, resourceType |
+| `BetOrderBody` | object · 25 fields · required: id, memberId, quoteId, drawId, productId, productVersionId |
 | `BetOrderCommandBody` | object · 2 fields · required: version |
+| `BetOrderLineBody` | object · 8 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
+| `BetReceiptBody` | object · 7 fields · required: id, orderId, memberId, orderVersion, contentDigest, terms |
+| `BetReceiptLineBody` | object · 5 fields · required: betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
+| `BetReceiptTermsBody` | object · 9 fields · required: productId, productVersionId, drawReference, drawCutoffAt, currency, totalStakeMinor |
+| `BettingQuoteBody` | object · 12 fields · required: id, memberId, drawId, productId, productVersionId, currency |
 | `CancelAccountingPeriodBody` | object · 2 fields · required: expectedVersion, reason |
 | `ClaimPromotionBody` | object · 1 fields · required: campaignVersionId |
 | `CloseAccountingPeriodBody` | object · 6 fields · required: expectedVersion, reason, reconciliationReferences, checkpointReferences, blockingDiscrepancyReferences, acceptedExceptionReferences |
@@ -1125,10 +1210,17 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 | `ExpectedVersionBody` | object · 1 fields · required: expectedVersion |
 | `GenerateDrawsBody` | object · 1 fields · required: baseOccurrences |
 | `MemberDeviceViewBody` | object · 4 fields · required: deviceId, name, createdAt, lastUsedAt |
+| `MemberDrawBetTypeBody` | object · 11 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumberFormat, validationPattern, payout |
+| `MemberDrawCutoffBody` | object · 1 fields · required: cutoffAt |
+| `MemberDrawDetailBody` | object · 24 fields · required: id, productId, productVersionId, occurrenceIdentity, localDate, state |
+| `MemberDrawEligibilityBody` | object · 3 fields · required: eligible, cutoffAt, serverNow |
+| `MemberDrawPageBody` | object · 2 fields · required: items, nextCursor |
 | `MemberMeResponse` | object · 3 fields · required: memberId, phone, status |
+| `MemberRefreshResponse` | object · 1 fields · required: accessToken |
 | `MemberRevokedResponse` | object · 1 fields · required: revoked |
 | `MemberSessionResponse` | object · 4 fields · required: accessToken, memberId, accountCreated, deviceId |
 | `MemberSessionViewBody` | object · 3 fields · required: sessionId, deviceId, expiresAt |
+| `MemberSettlementOutcomeBody` | object · 5 fields · required: orderId, outcome, payoutMinor, batchState, authoritative |
 | `NotificationPreferenceBody` | object · 5 fields · required: topic, channel, enabled, version, updatedAt |
 | `NotificationPreferencesBody` | object · 2 fields · required: memberId, items |
 | `Object` | object · 0 fields |
@@ -1144,6 +1236,7 @@ Source: `main @ 934ae33` · generated 2026-09-10 15:50 (+07)
 | `PromotionEntitlementBody` | object · 19 fields · required: id, memberId, campaignCode, campaignVersionId, campaignVersion, state |
 | `PromotionEntitlementPageBody` | object · 2 fields · required: items, nextCursor |
 | `QuoteCreateBody` | object · 3 fields · required: betTypeCode, canonicalNumber, stakeMinor |
+| `QuoteLineBody` | object · 8 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
 | `ReconciliationDiscrepancyFactsResponse` | object · 5 fields · required: memberId, currency, bucket, metric, amountMinor |
 | `ReconciliationDiscrepancyListResponse` | object · 3 fields · required: items, nextCursor, dataAsOf |
 | `ReconciliationDiscrepancyResponse` | object · 21 fields · required: id, reconciliationRunId, pair, identityKey, memberId, currency |

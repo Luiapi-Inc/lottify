@@ -1870,6 +1870,298 @@
         ]
       }
     },
+    "/api/v1/admin/audit/records": {
+      "get": {
+        "operationId": "AdminAuditController_listRecords",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive upper bound of the half-open `createdAt` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound of the half-open `createdAt` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "outcome",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "required": false,
+            "in": "query",
+            "description": "Admin actor id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditRecordListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR"
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List immutable audit records with actor/action/resource/outcome and evidence references",
+        "tags": [
+          "admin-audit"
+        ]
+      }
+    },
+    "/api/v1/admin/audit/records/{id}": {
+      "get": {
+        "operationId": "AdminAuditController_getRecord",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditRecordResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read one audit record with actor and linked reauth/approval evidence",
+        "tags": [
+          "admin-audit"
+        ]
+      }
+    },
+    "/api/v1/admin/approvals": {
+      "get": {
+        "operationId": "AdminApprovalController_listApprovals",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive upper bound of the half-open `createdAt` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound of the half-open `createdAt` window",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "Target action filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Approval evidence state (the durable model only persists granted approvals)",
+            "schema": {
+              "enum": [
+                "APPROVED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminApprovalListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR"
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the immutable Admin approval work queue with requester/target/state/age and evidence",
+        "tags": [
+          "admin-approvals"
+        ]
+      }
+    },
+    "/api/v1/admin/approvals/{id}": {
+      "get": {
+        "operationId": "AdminApprovalController_getApproval",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminApprovalResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED"
+          },
+          "403": {
+            "description": "ACCESS_DENIED"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read one approval evidence record with requester/approver and linked audit",
+        "tags": [
+          "admin-approvals"
+        ]
+      }
+    },
     "/api/v1/admin/reports/accounting-period-financial": {
       "get": {
         "operationId": "AdminReportingController_accountingPeriodFinancial",
@@ -2225,7 +2517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberSessionResponse"
+                  "$ref": "#/components/schemas/MemberRefreshResponse"
                 }
               }
             }
@@ -2356,7 +2648,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDrawPageBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2376,7 +2675,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDrawDetailBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2396,7 +2702,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDrawEligibilityBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2438,8 +2751,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BettingQuoteBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2459,7 +2779,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BettingQuoteBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2489,8 +2816,15 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetOrderBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2510,7 +2844,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetOrderBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2550,8 +2891,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetOrderBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2591,8 +2939,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetOrderBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2612,7 +2967,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetReceiptBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2633,7 +2995,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberSettlementOutcomeBody"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5493,6 +5862,440 @@
           "dataAsOf"
         ]
       },
+      "AuditActorReferenceResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SUPER_ADMIN",
+              "ADMIN",
+              "AUDITOR"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role"
+        ]
+      },
+      "AuditLinkedReauthResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actionClass": {
+            "type": "string"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "actionClass",
+          "verifiedAt",
+          "expiresAt"
+        ]
+      },
+      "AuditLinkedApprovalResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "type": "string"
+          },
+          "resourceType": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requesterAdminId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "approverAdminId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "resourceType",
+          "resourceId",
+          "requesterAdminId",
+          "approverAdminId",
+          "approvedAt"
+        ]
+      },
+      "AuditRecordResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorAdminId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorRole": {
+            "type": "string",
+            "description": "Actor role at the time of the action"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "type": "string",
+            "description": "Audited Admin action"
+          },
+          "resourceType": {
+            "type": "string",
+            "description": "Target resource type of the audited action"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "payloadHash": {
+            "type": "string",
+            "description": "Immutable SHA-256 hash of the action payload"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reauthEvidenceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "approvalId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "description": "Stable correlation identity across the workflow"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "Audited action outcome"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/AuditActorReferenceResponse"
+          },
+          "reauthEvidence": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuditLinkedReauthResponse"
+              }
+            ]
+          },
+          "approval": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuditLinkedApprovalResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "actorAdminId",
+          "actorRole",
+          "sessionId",
+          "action",
+          "resourceType",
+          "resourceId",
+          "payloadHash",
+          "reason",
+          "reauthEvidenceId",
+          "approvalId",
+          "correlationId",
+          "outcome",
+          "createdAt",
+          "actor",
+          "reauthEvidence",
+          "approval"
+        ]
+      },
+      "AuditRecordListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditRecordResponse"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataAsOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Audit data-freshness instant"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "dataAsOf"
+        ]
+      },
+      "AdminApprovalPrincipalResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SUPER_ADMIN",
+              "ADMIN",
+              "AUDITOR"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role"
+        ]
+      },
+      "AdminApprovalReauthResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actionClass": {
+            "type": "string"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "actionClass",
+          "verifiedAt",
+          "expiresAt"
+        ]
+      },
+      "AdminApprovalLinkedAuditResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "outcome",
+          "createdAt"
+        ]
+      },
+      "AdminApprovalResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "type": "string",
+            "description": "Approved target action"
+          },
+          "resourceType": {
+            "type": "string",
+            "description": "Target resource type of the approved action"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requesterAdminId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "approverAdminId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestedVersion": {
+            "type": "number",
+            "description": "Resource version the approval was granted against"
+          },
+          "payloadHash": {
+            "type": "string",
+            "description": "Immutable SHA-256 hash of the approved payload"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "policyVersion": {
+            "type": "string",
+            "description": "Approval policy version applied"
+          },
+          "reauthEvidenceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "APPROVED"
+            ],
+            "description": "Every AdminApprovalEvidence record is created atomically with a required approvedAt, so its immutable state is APPROVED"
+          },
+          "ageMs": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Queue age evaluated against `dataAsOf`"
+          },
+          "requester": {
+            "$ref": "#/components/schemas/AdminApprovalPrincipalResponse"
+          },
+          "approver": {
+            "$ref": "#/components/schemas/AdminApprovalPrincipalResponse"
+          },
+          "reauthEvidence": {
+            "$ref": "#/components/schemas/AdminApprovalReauthResponse"
+          },
+          "auditRecords": {
+            "description": "Audit records this approval produced",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminApprovalLinkedAuditResponse"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "resourceType",
+          "resourceId",
+          "requesterAdminId",
+          "approverAdminId",
+          "requestedVersion",
+          "payloadHash",
+          "reason",
+          "policyVersion",
+          "reauthEvidenceId",
+          "correlationId",
+          "approvedAt",
+          "createdAt",
+          "state",
+          "ageMs",
+          "requester",
+          "approver",
+          "reauthEvidence",
+          "auditRecords"
+        ]
+      },
+      "AdminApprovalListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminApprovalResponse"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataAsOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Approval data-freshness instant"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "dataAsOf"
+        ]
+      },
       "AccountingPeriodReportRangeResponse": {
         "type": "object",
         "properties": {
@@ -5814,7 +6617,9 @@
                 "promotion.manage",
                 "promotion.approve",
                 "reconciliation.read",
-                "report.read"
+                "report.read",
+                "audit.read",
+                "approval.read"
               ]
             }
           }
@@ -5965,6 +6770,17 @@
           "deviceId"
         ]
       },
+      "MemberRefreshResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken"
+        ]
+      },
       "MemberRevokedResponse": {
         "type": "object",
         "properties": {
@@ -6000,6 +6816,240 @@
           "status"
         ]
       },
+      "MemberDrawCutoffBody": {
+        "type": "object",
+        "properties": {
+          "cutoffAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "cutoffAt"
+        ]
+      },
+      "MemberDrawBetTypeBody": {
+        "type": "object",
+        "properties": {
+          "betTypeId": {
+            "type": "string"
+          },
+          "betTypeCode": {
+            "type": "string"
+          },
+          "betTypeVersionId": {
+            "type": "string"
+          },
+          "canonicalNumberFormat": {
+            "type": "string"
+          },
+          "validationPattern": {
+            "type": "string"
+          },
+          "payout": {
+            "type": "object",
+            "description": "Resolved payout configuration (opaque configuration value)."
+          },
+          "minStakeMinor": {
+            "type": "string",
+            "description": "Minimum stake in minor units."
+          },
+          "maxStakeMinor": {
+            "type": "string",
+            "description": "Maximum stake in minor units."
+          },
+          "limitPolicyRef": {
+            "type": "string"
+          },
+          "restrictionPolicyRef": {
+            "type": "string"
+          },
+          "settlementRuleVersionRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "betTypeId",
+          "betTypeCode",
+          "betTypeVersionId",
+          "canonicalNumberFormat",
+          "validationPattern",
+          "payout",
+          "minStakeMinor",
+          "maxStakeMinor",
+          "limitPolicyRef",
+          "restrictionPolicyRef",
+          "settlementRuleVersionRef"
+        ]
+      },
+      "MemberDrawDetailBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "productVersionId": {
+            "type": "string"
+          },
+          "occurrenceIdentity": {
+            "type": "string"
+          },
+          "localDate": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "SCHEDULED",
+              "OPEN",
+              "CLOSED",
+              "RESULT_PENDING",
+              "RESULT_CONFIRMED",
+              "SETTLING",
+              "SETTLED",
+              "CANCELLING",
+              "CANCELLED"
+            ]
+          },
+          "version": {
+            "type": "number"
+          },
+          "openAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cutoffAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "drawAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "provenance": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "scheduleTemplateRef": {
+            "type": "string"
+          },
+          "resultSchemaVersionRef": {
+            "type": "string"
+          },
+          "settlementRuleVersionRef": {
+            "type": "string"
+          },
+          "defaultPayoutPolicyRef": {
+            "type": "string"
+          },
+          "defaultLimitPolicyRef": {
+            "type": "string"
+          },
+          "defaultRestrictionPolicyRef": {
+            "type": "string"
+          },
+          "resultSourceRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "overrideRevisionRef": {
+            "type": "string"
+          },
+          "cutoff": {
+            "$ref": "#/components/schemas/MemberDrawCutoffBody"
+          },
+          "serverNow": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "allowedActions": {
+            "description": "Lifecycle commands currently allowed by the Draw state machine.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "betTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberDrawBetTypeBody"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "productVersionId",
+          "occurrenceIdentity",
+          "localDate",
+          "state",
+          "version",
+          "openAt",
+          "cutoffAt",
+          "drawAt",
+          "provenance",
+          "timezone",
+          "scheduleTemplateRef",
+          "resultSchemaVersionRef",
+          "settlementRuleVersionRef",
+          "defaultPayoutPolicyRef",
+          "defaultLimitPolicyRef",
+          "defaultRestrictionPolicyRef",
+          "resultSourceRef",
+          "overrideRevisionRef",
+          "cutoff",
+          "serverNow",
+          "allowedActions",
+          "betTypes"
+        ]
+      },
+      "MemberDrawPageBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberDrawDetailBody"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "MemberDrawEligibilityBody": {
+        "type": "object",
+        "properties": {
+          "eligible": {
+            "type": "boolean",
+            "description": "True only when server time is strictly before the Draw cutoff."
+          },
+          "cutoffAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "serverNow": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "eligible",
+          "cutoffAt",
+          "serverNow"
+        ]
+      },
       "QuoteCreateBody": {
         "type": "object",
         "properties": {
@@ -6021,6 +7071,323 @@
           "stakeMinor"
         ]
       },
+      "QuoteLineBody": {
+        "type": "object",
+        "properties": {
+          "betTypeId": {
+            "type": "string"
+          },
+          "betTypeCode": {
+            "type": "string"
+          },
+          "betTypeVersionId": {
+            "type": "string"
+          },
+          "canonicalNumber": {
+            "type": "string",
+            "example": "42"
+          },
+          "stakeMinor": {
+            "type": "string",
+            "description": "Stake in integer minor units"
+          },
+          "resolvedPayout": {
+            "type": "object",
+            "description": "Server-resolved payout for the line (opaque configuration value)"
+          },
+          "payoutSource": {
+            "type": "string",
+            "enum": [
+              "DRAW_OVERRIDE",
+              "DRAW_SNAPSHOT"
+            ]
+          },
+          "restrictions": {
+            "description": "Applied restriction codes",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "betTypeId",
+          "betTypeCode",
+          "betTypeVersionId",
+          "canonicalNumber",
+          "stakeMinor",
+          "resolvedPayout",
+          "payoutSource",
+          "restrictions"
+        ]
+      },
+      "BettingQuoteBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "drawId": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "productVersionId": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "totalStakeMinor": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUOTED",
+              "EXPIRED"
+            ]
+          },
+          "cutoffAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "serverNow": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteLineBody"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "drawId",
+          "productId",
+          "productVersionId",
+          "currency",
+          "totalStakeMinor",
+          "status",
+          "cutoffAt",
+          "serverNow",
+          "expiresAt",
+          "lines"
+        ]
+      },
+      "BetOrderLineBody": {
+        "type": "object",
+        "properties": {
+          "betTypeId": {
+            "type": "string"
+          },
+          "betTypeCode": {
+            "type": "string"
+          },
+          "betTypeVersionId": {
+            "type": "string"
+          },
+          "canonicalNumber": {
+            "type": "string",
+            "example": "42"
+          },
+          "stakeMinor": {
+            "type": "string",
+            "description": "Stake in integer minor units"
+          },
+          "resolvedPayout": {
+            "type": "object",
+            "description": "Server-resolved payout accepted for the line (opaque configuration value)"
+          },
+          "payoutSource": {
+            "type": "string",
+            "enum": [
+              "DRAW_OVERRIDE",
+              "DRAW_SNAPSHOT"
+            ]
+          },
+          "restrictions": {
+            "description": "Accepted restriction codes",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "betTypeId",
+          "betTypeCode",
+          "betTypeVersionId",
+          "canonicalNumber",
+          "stakeMinor",
+          "resolvedPayout",
+          "payoutSource",
+          "restrictions"
+        ]
+      },
+      "BetOrderBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "quoteId": {
+            "type": "string"
+          },
+          "drawId": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "productVersionId": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "QUOTED",
+              "CONFIRMING",
+              "CONFIRMED",
+              "CANCELLING",
+              "CANCELLED",
+              "EXPIRED",
+              "REJECTED",
+              "SETTLED"
+            ]
+          },
+          "version": {
+            "type": "number",
+            "description": "Optimistic-concurrency version"
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "CONFIRM",
+                "CANCEL"
+              ]
+            }
+          },
+          "totalStakeMinor": {
+            "type": "string"
+          },
+          "cutoffAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "quoteExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reservationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "stakeTransactionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "refundTransactionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "rejectedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "receiptId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Issued Receipt id"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BetOrderLineBody"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "quoteId",
+          "drawId",
+          "productId",
+          "productVersionId",
+          "currency",
+          "state",
+          "version",
+          "allowedActions",
+          "totalStakeMinor",
+          "cutoffAt",
+          "quoteExpiresAt",
+          "reservationId",
+          "stakeTransactionId",
+          "refundTransactionId",
+          "rejectionReason",
+          "cancellationReason",
+          "confirmedAt",
+          "cancelledAt",
+          "rejectedAt",
+          "receiptId",
+          "lines",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       "BetOrderCommandBody": {
         "type": "object",
         "properties": {
@@ -6034,6 +7401,161 @@
         },
         "required": [
           "version"
+        ]
+      },
+      "BetReceiptLineBody": {
+        "type": "object",
+        "properties": {
+          "betTypeCode": {
+            "type": "string"
+          },
+          "betTypeVersionId": {
+            "type": "string"
+          },
+          "canonicalNumber": {
+            "type": "string"
+          },
+          "stakeMinor": {
+            "type": "string"
+          },
+          "resolvedPayout": {
+            "type": "object",
+            "description": "Payout accepted at confirmation (opaque configuration value)"
+          }
+        },
+        "required": [
+          "betTypeCode",
+          "betTypeVersionId",
+          "canonicalNumber",
+          "stakeMinor",
+          "resolvedPayout"
+        ]
+      },
+      "BetReceiptTermsBody": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string"
+          },
+          "productVersionId": {
+            "type": "string"
+          },
+          "drawReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "drawCutoffAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "totalStakeMinor": {
+            "type": "string"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BetReceiptLineBody"
+            }
+          },
+          "acceptedRestrictions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "productId",
+          "productVersionId",
+          "drawReference",
+          "drawCutoffAt",
+          "currency",
+          "totalStakeMinor",
+          "acceptedAt",
+          "lines",
+          "acceptedRestrictions"
+        ]
+      },
+      "BetReceiptBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "orderId": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "orderVersion": {
+            "type": "number"
+          },
+          "contentDigest": {
+            "type": "string",
+            "description": "SHA-256 over the accepted terms"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/BetReceiptTermsBody"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "orderId",
+          "memberId",
+          "orderVersion",
+          "contentDigest",
+          "terms",
+          "issuedAt"
+        ]
+      },
+      "MemberSettlementOutcomeBody": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "WIN",
+              "LOSE"
+            ],
+            "nullable": true
+          },
+          "payoutMinor": {
+            "type": "string"
+          },
+          "batchState": {
+            "type": "string",
+            "nullable": true
+          },
+          "authoritative": {
+            "type": "boolean",
+            "description": "True only when the batch has COMPLETED"
+          }
+        },
+        "required": [
+          "orderId",
+          "outcome",
+          "payoutMinor",
+          "batchState",
+          "authoritative"
         ]
       },
       "Object": {

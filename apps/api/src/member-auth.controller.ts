@@ -90,6 +90,14 @@ class MemberSessionResponse {
   deviceId!: string | null;
 }
 
+// A refresh rotates the credential in place: the rotating refresh token is set as
+// an httpOnly cookie, so the JSON body carries only the new short-lived access
+// token. The body deliberately does NOT mirror MemberSessionResponse.
+class MemberRefreshResponse {
+  @ApiProperty({ type: String })
+  accessToken!: string;
+}
+
 class MemberRevokedResponse {
   @ApiProperty({ type: Boolean, example: true })
   revoked!: true;
@@ -152,11 +160,11 @@ export class MemberAuthController {
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Rotate the Member refresh credential" })
-  @ApiOkResponse({ type: MemberSessionResponse })
+  @ApiOkResponse({ type: MemberRefreshResponse })
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<unknown> {
+  ): Promise<MemberRefreshResponse> {
     const refreshToken = readCookie(request, MEMBER_REFRESH_COOKIE);
     if (!refreshToken) {
       throw new UnauthorizedException("Member refresh cookie required");

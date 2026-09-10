@@ -15,6 +15,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiHeader,
+  ApiOkResponse,
   ApiOperation,
   ApiProperty,
   ApiTags,
@@ -55,7 +56,10 @@ class BetOrderLineBody {
   @ApiProperty({ type: String, description: "Stake in integer minor units" })
   stakeMinor!: string;
 
-  @ApiProperty({ description: "Server-resolved payout accepted for the line" })
+  @ApiProperty({
+    type: Object,
+    description: "Server-resolved payout accepted for the line (opaque configuration value)",
+  })
   resolvedPayout!: unknown;
 
   @ApiProperty({ enum: ["DRAW_OVERRIDE", "DRAW_SNAPSHOT"] })
@@ -167,7 +171,10 @@ class BetReceiptLineBody {
   @ApiProperty({ type: String })
   stakeMinor!: string;
 
-  @ApiProperty({ description: "Payout accepted at confirmation" })
+  @ApiProperty({
+    type: Object,
+    description: "Payout accepted at confirmation (opaque configuration value)",
+  })
   resolvedPayout!: unknown;
 }
 
@@ -253,6 +260,7 @@ export class MemberOrderController {
     description:
       "Scoped Idempotency-Key. Replaying it returns the same Bet Order; the same key with a different Quote conflicts.",
   })
+  @ApiOkResponse({ type: BetOrderBody })
   async create(
     @Req() request: MemberAuthenticatedRequest,
     @Param("quoteId") quoteId: string,
@@ -272,6 +280,7 @@ export class MemberOrderController {
   @Get("orders/:id")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Read a Member Bet Order by id" })
+  @ApiOkResponse({ type: BetOrderBody })
   async get(
     @Req() request: MemberAuthenticatedRequest,
     @Param("id") id: string,
@@ -297,6 +306,7 @@ export class MemberOrderController {
     description: "Scoped Idempotency-Key for the Confirm command.",
   })
   @ApiBody({ type: BetOrderCommandBody })
+  @ApiOkResponse({ type: BetOrderBody })
   async confirm(
     @Req() request: MemberAuthenticatedRequest,
     @Param("id") id: string,
@@ -329,6 +339,7 @@ export class MemberOrderController {
     description: "Scoped Idempotency-Key for the Cancel command.",
   })
   @ApiBody({ type: BetOrderCommandBody })
+  @ApiOkResponse({ type: BetOrderBody })
   async cancel(
     @Req() request: MemberAuthenticatedRequest,
     @Param("id") id: string,
@@ -352,6 +363,7 @@ export class MemberOrderController {
   @Get("orders/:id/receipt")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Read the immutable Bet Receipt of a confirmed Order" })
+  @ApiOkResponse({ type: BetReceiptBody })
   async receipt(
     @Req() request: MemberAuthenticatedRequest,
     @Param("id") id: string,
