@@ -17,7 +17,8 @@ export type OnboardingErrorCode =
   | "TERMS_VERSION_NOT_REQUIRED"
   | "IDEMPOTENCY_CONFLICT"
   | "IDEMPOTENCY_IN_PROGRESS"
-  | "MEMBER_NOT_ACTIVE";
+  | "MEMBER_NOT_ACTIVE"
+  | "SELF_EXCLUSION_NOT_REMOVABLE";
 
 export class OnboardingRuleError extends Error {
   readonly code: OnboardingErrorCode;

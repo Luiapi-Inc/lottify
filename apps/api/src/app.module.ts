@@ -38,7 +38,9 @@ import { MemberPromotionController } from "./member-promotion.controller";
 import { MemberNotificationPreferenceController } from "./member-notification-preference.controller";
 import { MemberTermsController } from "./member-terms.controller";
 import { MemberProfileController } from "./member-profile.controller";
+import { MemberReadinessController } from "./member-readiness.controller";
 import { AdminMemberTermsController } from "./admin-member-terms.controller";
+import { AdminMemberCapabilityRestrictionController } from "./admin-member-capability-restriction.controller";
 import { MetricsController } from "./metrics.controller";
 
 collectDefaultMetrics({ prefix: "lottify_" });
@@ -73,7 +75,9 @@ collectDefaultMetrics({ prefix: "lottify_" });
     MemberNotificationPreferenceController,
     MemberTermsController,
     MemberProfileController,
+    MemberReadinessController,
     AdminMemberTermsController,
+    AdminMemberCapabilityRestrictionController,
     HealthController,
     MetricsController,
   ],

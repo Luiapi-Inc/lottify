@@ -22,6 +22,7 @@ const STATUS_BY_CODE: Record<OnboardingErrorCode, HttpStatus> = {
   IDEMPOTENCY_CONFLICT: HttpStatus.CONFLICT,
   IDEMPOTENCY_IN_PROGRESS: HttpStatus.CONFLICT,
   MEMBER_NOT_ACTIVE: HttpStatus.FORBIDDEN,
+  SELF_EXCLUSION_NOT_REMOVABLE: HttpStatus.FORBIDDEN,
 };
 
 export function onboardingHttpException(error: OnboardingRuleError): HttpException {
