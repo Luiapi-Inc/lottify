@@ -13,6 +13,7 @@ const environmentSchema = z
     JWT_ACCESS_SECRET: z.string().min(32),
     JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
     REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
+    QUOTE_TTL_SECONDS: z.coerce.number().int().positive().default(120),
     ADMIN_MFA_ENCRYPTION_KEY: z.string().min(32).optional(),
     ADMIN_MFA_SETUP_TTL_SECONDS: z.coerce.number().int().positive().default(600),
     ADMIN_MFA_CHALLENGE_TTL_SECONDS: z.coerce.number().int().positive().default(300),

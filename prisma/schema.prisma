@@ -34,6 +34,7 @@ model Member {
   devices   MemberDevice[]
   otpChallenges MemberOtpChallenge[]
   deposits  PaymentDeposit[]
+  quotes    BettingQuote[]
 
   @@map("members")
 }
@@ -324,6 +325,7 @@ model LotteryDraw {
   createdByAdmin              AdminUser?               @relation("LotteryDrawCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   betTypes                    LotteryDrawBetType[]
   overrides                   LotteryDrawOverride[]
+  quotes                      BettingQuote[]
 
   @@unique([productId, occurrenceIdentity])
   @@index([productId, localDate])
@@ -388,6 +390,58 @@ model LotteryDrawOverride {
   @@index([drawId])
   @@index([effectiveAt])
   @@map("lottery_draw_overrides")
+}
+
+// Betting Quote aggregate (Issue 44). A Quote is the server-authoritative
+// resolution of a Member's bet lines against a Draw's effective configuration:
+// aggregated normalized lines, resolved payout/limits/restrictions, total and
+// expiry. Creation is idempotent by a scoped Idempotency-Key; every trusted
+// value is computed server-side and never accepted from the client.
+model BettingQuote {
+  id               String              @id @default(uuid()) @db.Uuid
+  memberId         String              @map("member_id") @db.Uuid
+  drawId           String              @map("draw_id") @db.Uuid
+  productId        String              @map("product_id") @db.Uuid
+  productVersionId String              @map("product_version_id") @db.Uuid
+  currency         String              @default("THB")
+  totalStakeMinor  BigInt              @map("total_stake_minor")
+  cutoffAt         DateTime            @map("cutoff_at")
+  serverNow        DateTime            @map("server_now")
+  expiresAt        DateTime            @map("expires_at")
+  status           String              @default("QUOTED")
+  idempotencyScope String              @map("idempotency_scope")
+  idempotencyKey   String              @map("idempotency_key")
+  fingerprint      String
+  requestPayload   Json?               @map("request_payload")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  member           Member              @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  draw             LotteryDraw         @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  lines            BettingQuoteLine[]
+
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([memberId, createdAt])
+  @@index([drawId])
+  @@map("betting_quotes")
+}
+
+model BettingQuoteLine {
+  id               String       @id @default(uuid()) @db.Uuid
+  quoteId          String       @map("quote_id") @db.Uuid
+  betTypeId        String       @map("bet_type_id") @db.Uuid
+  betTypeCode      String       @map("bet_type_code")
+  betTypeVersionId String       @map("bet_type_version_id") @db.Uuid
+  canonicalNumber  String       @map("canonical_number")
+  stakeMinor       BigInt       @map("stake_minor")
+  resolvedPayout   Json         @map("resolved_payout")
+  payoutSource     String       @map("payout_source")
+  restrictions     Json         @map("restrictions")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  quote            BettingQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteId, betTypeId, canonicalNumber])
+  @@index([betTypeVersionId])
+  @@map("betting_quote_lines")
 }
 
 model IdempotencyRecord {
