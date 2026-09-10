@@ -9,6 +9,8 @@ import { MemberModule } from "./member/member.module";
 import { NotificationModule } from "./notification/notification.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { DepositService } from "./payments/application/deposit.service";
+import { WithdrawalService } from "./payments/application/withdrawal.service";
+import { PayoutDestinationService } from "./payments/application/payout-destination.service";
 import { DEPOSIT_LEDGER_PORT } from "./payments/application/deposit-ledger.port";
 import { BettingOrderService } from "./betting/application/betting-order.service";
 import { BET_ORDER_WALLET_PORT } from "./betting/application/betting-order-wallet.port";
@@ -18,6 +20,7 @@ import {
   SETTLEMENT_ORDERS_PORT,
   SETTLEMENT_WALLET_PORT,
 } from "./result-settlement/application/settlement.ports";
+import { WITHDRAWAL_LEDGER_PORT } from "./payments/application/withdrawal-ledger.port";
 import { PromotionModule } from "./promotion/promotion.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { LedgerWalletReconciliationService } from "./reporting/ledger-wallet-reconciliation.service";
@@ -32,6 +35,7 @@ import { BetOrderWalletAdapter } from "../platform/integration/betting-order-wal
 import { SettlementWalletAdapter } from "../platform/integration/settlement-wallet.adapter";
 import { SettlementDrawAdapter } from "../platform/integration/settlement-draw.adapter";
 import { SettlementOrdersAdapter } from "../platform/integration/settlement-orders.adapter";
+import { WithdrawalLedgerAdapter } from "../platform/integration/withdrawal-ledger.adapter";
 
 @Module({
   imports: [
@@ -93,7 +97,14 @@ import { SettlementOrdersAdapter } from "../platform/integration/settlement-orde
       useExisting: SettlementOrdersAdapter,
     },
     SettlementService,
+    WithdrawalLedgerAdapter,
+    {
+      provide: WITHDRAWAL_LEDGER_PORT,
+      useExisting: WithdrawalLedgerAdapter,
+    },
     DepositService,
+    WithdrawalService,
+    PayoutDestinationService,
     LedgerWalletReconciliationService,
   ],
   exports: [
@@ -103,6 +114,8 @@ import { SettlementOrdersAdapter } from "../platform/integration/settlement-orde
     WalletLedgerModule,
     PaymentsModule,
     DepositService,
+    WithdrawalService,
+    PayoutDestinationService,
     LedgerWalletReconciliationService,
     BettingOrderService,
     SettlementService,

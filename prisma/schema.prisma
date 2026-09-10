@@ -37,6 +37,8 @@ model Member {
   quotes    BettingQuote[]
   betOrders BetOrder[]
   settlementOrders SettlementOrder[]
+  payoutDestinations PayoutDestination[]
+  withdrawals PaymentWithdrawal[]
 
   @@map("members")
 }
@@ -888,4 +890,104 @@ model PaymentDeposit {
   @@index([memberId, createdAt])
   @@index([providerReferenceKey])
   @@map("payment_deposits")
+}
+
+// Payments context Payout Destination aggregate. A Payout Destination is a
+// Member-linked destination that must be verified before it can receive a
+// Withdrawal. Verification is independent of Member/KYC status, and the raw
+// destination account reference is never persisted: only an opaque digest for
+// duplicate detection plus the masked display value stored on the aggregate.
+model PayoutDestination {
+  id                      String              @id @default(uuid()) @db.Uuid
+  memberId                String              @map("member_id") @db.Uuid
+  type                    String
+  bankCode                String              @map("bank_code")
+  accountNumberMasked     String              @map("account_number_masked")
+  accountDigest           String              @map("account_digest")
+  accountHolderName       String              @map("account_holder_name")
+  currency                String              @default("THB")
+  status                  String
+  verificationEvidenceRef String?             @map("verification_evidence_ref")
+  verifiedAt              DateTime?           @map("verified_at")
+  disabledAt              DateTime?           @map("disabled_at")
+  version                 Int                 @default(1)
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+  member                  Member              @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  withdrawals             PaymentWithdrawal[]
+
+  @@unique([memberId, accountDigest])
+  @@index([memberId, status, createdAt])
+  @@index([accountDigest])
+  @@map("payout_destinations")
+}
+
+// Payments context Withdrawal aggregate: the Member-facing orchestration of one
+// withdrawal from request through reservation, review/approval, provider payout,
+// reconciliation and authoritative Ledger finalization. Provider acceptance is
+// not completion; the state machine and its durable event trail are the
+// authoritative workflow record. It is idempotent by a scoped Idempotency-Key
+// and records provider identity separately so an ambiguous payout outcome is
+// never blindly re-initiated.
+model PaymentWithdrawal {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  memberId                 String                   @map("member_id") @db.Uuid
+  payoutDestinationId      String                   @map("payout_destination_id") @db.Uuid
+  amountMinor              BigInt                   @map("amount_minor")
+  feeMinor                 BigInt                   @default(0) @map("fee_minor")
+  currency                 String                   @default("THB")
+  state                    String
+  version                  Int                      @default(1)
+  eligibilityOutcome       String                   @map("eligibility_outcome")
+  eligibilityPolicyVersion String                   @map("eligibility_policy_version")
+  eligibilityReasonCodes   Json                     @map("eligibility_reason_codes")
+  eligibilityEvidenceRefs  Json                     @map("eligibility_evidence_refs")
+  requiresApproval         Boolean                  @default(false) @map("requires_approval")
+  idempotencyScope         String                   @map("idempotency_scope")
+  idempotencyKey           String                   @map("idempotency_key")
+  fingerprint              String
+  reservationId            String?                  @map("reservation_id") @db.Uuid
+  providerId               String                   @map("provider_id")
+  providerReferenceKey     String                   @map("provider_reference_key")
+  providerTransactionId    String?                  @map("provider_transaction_id")
+  payoutEvidenceRef        String?                  @map("payout_evidence_ref")
+  ledgerTransactionId      String?                  @map("ledger_transaction_id") @db.Uuid
+  reconciliationAttempts   Int                      @default(0) @map("reconciliation_attempts")
+  decidedByAdminId         String?                  @map("decided_by_admin_id") @db.Uuid
+  decisionReason           String?                  @map("decision_reason")
+  failureReason            String?                  @map("failure_reason")
+  incomingProviderError    String?                  @map("incoming_provider_error")
+  correlationId            String                   @map("correlation_id")
+  completedAt              DateTime?                @map("completed_at")
+  createdAt                DateTime                 @default(now()) @map("created_at")
+  updatedAt                DateTime                 @updatedAt @map("updated_at")
+  member                   Member                   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  payoutDestination        PayoutDestination        @relation(fields: [payoutDestinationId], references: [id], onDelete: Restrict)
+  events                   PaymentWithdrawalEvent[]
+
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([memberId, createdAt])
+  @@index([state, createdAt])
+  @@index([providerReferenceKey])
+  @@map("payment_withdrawals")
+}
+
+// Durable workflow timeline for a Withdrawal. Terminal financial effects are
+// owned by Wallet & Ledger; this trail records orchestration transitions,
+// actor/evidence references and reasons without becoming a balance authority.
+model PaymentWithdrawalEvent {
+  id            String            @id @default(uuid()) @db.Uuid
+  withdrawalId  String            @map("withdrawal_id") @db.Uuid
+  fromState     String?           @map("from_state")
+  toState       String            @map("to_state")
+  actorType     String            @map("actor_type")
+  actorId       String?           @map("actor_id")
+  reason        String?
+  evidenceRef   String?           @map("evidence_ref")
+  correlationId String            @map("correlation_id")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  withdrawal    PaymentWithdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+
+  @@index([withdrawalId, createdAt])
+  @@map("payment_withdrawal_events")
 }
