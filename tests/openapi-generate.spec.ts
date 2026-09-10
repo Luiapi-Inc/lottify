@@ -40,6 +40,11 @@ describe("openapi spec generator (vitest boot)", () => {
     expect(spec).toContain("\"/api/v1/admin/products/{productId}/draws/generate\"");
     expect(spec).toContain("\"/api/v1/member/draws/{id}\"");
     expect(spec).toContain("\"/api/v1/member/products/{productId}/draws\"");
+    expect(spec).toContain("\"/api/v1/member/quotes/{quoteId}/orders\"");
+    expect(spec).toContain("\"/api/v1/member/orders/{id}\"");
+    expect(spec).toContain("\"/api/v1/member/orders/{id}/confirm\"");
+    expect(spec).toContain("\"/api/v1/member/orders/{id}/cancel\"");
+    expect(spec).toContain("\"/api/v1/member/orders/{id}/receipt\"");
     // No persistence/entity internals leak into the generated contract.
     expect(spec.toLowerCase()).not.toMatch(/prisma|lottery_draw|lotteryDrawBetType|lotteryDrawOverride/);
   });

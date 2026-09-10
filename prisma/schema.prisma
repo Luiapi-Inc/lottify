@@ -35,6 +35,7 @@ model Member {
   otpChallenges MemberOtpChallenge[]
   deposits  PaymentDeposit[]
   quotes    BettingQuote[]
+  betOrders BetOrder[]
 
   @@map("members")
 }
@@ -326,6 +327,7 @@ model LotteryDraw {
   betTypes                    LotteryDrawBetType[]
   overrides                   LotteryDrawOverride[]
   quotes                      BettingQuote[]
+  betOrders                   BetOrder[]
 
   @@unique([productId, occurrenceIdentity])
   @@index([productId, localDate])
@@ -418,6 +420,7 @@ model BettingQuote {
   member           Member              @relation(fields: [memberId], references: [id], onDelete: Restrict)
   draw             LotteryDraw         @relation(fields: [drawId], references: [id], onDelete: Restrict)
   lines            BettingQuoteLine[]
+  order            BetOrder?
 
   @@unique([idempotencyScope, idempotencyKey])
   @@index([memberId, createdAt])
@@ -442,6 +445,92 @@ model BettingQuoteLine {
   @@unique([quoteId, betTypeId, canonicalNumber])
   @@index([betTypeVersionId])
   @@map("betting_quote_lines")
+}
+
+// Bet Order aggregate (Issue 45). An Order is created from an authorised Quote
+// and moves through the locked lifecycle state machine (`bet-order-lifecycle`).
+// `version` is the optimistic-concurrency guard for every member command; the
+// financial linkage columns (reservation + stake/refund transaction) prove the
+// Wallet & Ledger effect that gated the terminal state.
+model BetOrder {
+  id                  String         @id @default(uuid()) @db.Uuid
+  memberId            String         @map("member_id") @db.Uuid
+  quoteId             String         @map("quote_id") @db.Uuid
+  drawId              String         @map("draw_id") @db.Uuid
+  productId           String         @map("product_id") @db.Uuid
+  productVersionId    String         @map("product_version_id") @db.Uuid
+  currency            String         @default("THB")
+  state               String         @default("QUOTED")
+  version             Int            @default(1)
+  totalStakeMinor     BigInt         @map("total_stake_minor")
+  cutoffAt            DateTime       @map("cutoff_at")
+  quoteExpiresAt      DateTime       @map("quote_expires_at")
+  reservationId       String?        @map("reservation_id") @db.Uuid
+  stakeTransactionId  String?        @map("stake_transaction_id") @db.Uuid
+  refundTransactionId String?        @map("refund_transaction_id") @db.Uuid
+  rejectionReason     String?        @map("rejection_reason")
+  cancellationReason  String?        @map("cancellation_reason")
+  confirmIdempotencyKey String?      @map("confirm_idempotency_key")
+  cancelIdempotencyKey String?       @map("cancel_idempotency_key")
+  confirmedAt         DateTime?      @map("confirmed_at")
+  cancelledAt         DateTime?      @map("cancelled_at")
+  rejectedAt          DateTime?      @map("rejected_at")
+  idempotencyScope    String         @map("idempotency_scope")
+  idempotencyKey      String         @map("idempotency_key")
+  fingerprint         String
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  member              Member         @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  quote               BettingQuote   @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  draw                LotteryDraw    @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  lines               BetOrderLine[]
+  receipt             BetReceipt?
+
+  @@unique([quoteId])
+  @@unique([idempotencyScope, idempotencyKey])
+  @@index([memberId, createdAt])
+  @@index([drawId, state])
+  @@index([state])
+  @@map("bet_orders")
+}
+
+model BetOrderLine {
+  id               String   @id @default(uuid()) @db.Uuid
+  orderId          String   @map("order_id") @db.Uuid
+  betTypeId        String   @map("bet_type_id") @db.Uuid
+  betTypeCode      String   @map("bet_type_code")
+  betTypeVersionId String   @map("bet_type_version_id") @db.Uuid
+  canonicalNumber  String   @map("canonical_number")
+  stakeMinor       BigInt   @map("stake_minor")
+  resolvedPayout   Json     @map("resolved_payout")
+  payoutSource     String   @map("payout_source")
+  restrictions     Json     @map("restrictions")
+  createdAt        DateTime @default(now()) @map("created_at")
+  order            BetOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, betTypeId, canonicalNumber])
+  @@index([betTypeVersionId])
+  @@map("bet_order_lines")
+}
+
+// Immutable member-facing Bet Receipt (Issue 45). Exactly one Receipt per
+// confirmed Order; `terms` is the frozen accepted-terms snapshot and
+// `content_digest` is its SHA-256. A database trigger rejects any UPDATE or
+// DELETE so the accepted terms can never be rewritten.
+model BetReceipt {
+  id            String   @id @default(uuid()) @db.Uuid
+  orderId       String   @unique @map("order_id") @db.Uuid
+  memberId      String   @map("member_id") @db.Uuid
+  orderVersion  Int      @map("order_version")
+  contentDigest String   @map("content_digest")
+  terms         Json
+  /** The exact canonical serialization that `content_digest` digests. */
+  termsCanonical String  @map("terms_canonical")
+  issuedAt      DateTime @default(now()) @map("issued_at")
+  order         BetOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([memberId, issuedAt])
+  @@map("bet_receipts")
 }
 
 model IdempotencyRecord {

@@ -18,6 +18,7 @@ import { MemberAuthController } from "./member-auth.controller";
 import { MemberAuthGuard } from "./member-auth.guard";
 import { MemberDrawController } from "./member-draw.controller";
 import { MemberQuoteController } from "./member-quote.controller";
+import { MemberOrderController } from "./member-order.controller";
 import { MemberSessionDeviceController } from "./member-session-device.controller";
 import { MemberWalletController } from "./member-wallet.controller";
 import { MemberDepositController } from "./member-deposit.controller";
@@ -36,6 +37,7 @@ collectDefaultMetrics({ prefix: "lottify_" });
     MemberAuthController,
     MemberDrawController,
     MemberQuoteController,
+    MemberOrderController,
     MemberSessionDeviceController,
     MemberWalletController,
     MemberDepositController,

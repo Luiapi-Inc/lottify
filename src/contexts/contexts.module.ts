@@ -10,6 +10,8 @@ import { NotificationModule } from "./notification/notification.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { DepositService } from "./payments/application/deposit.service";
 import { DEPOSIT_LEDGER_PORT } from "./payments/application/deposit-ledger.port";
+import { BettingOrderService } from "./betting/application/betting-order.service";
+import { BET_ORDER_WALLET_PORT } from "./betting/application/betting-order-wallet.port";
 import { PromotionModule } from "./promotion/promotion.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { LedgerWalletReconciliationService } from "./reporting/ledger-wallet-reconciliation.service";
@@ -20,6 +22,7 @@ import { WalletLedgerModule } from "./wallet-ledger/wallet-ledger.module";
 import { LedgerWalletProjectionAdapter } from "../platform/integration/ledger-wallet-projection.adapter";
 import { LedgerWalletSourceAdapter } from "../platform/integration/ledger-wallet-source.adapter";
 import { DepositLedgerAdapter } from "../platform/integration/deposit-ledger.adapter";
+import { BetOrderWalletAdapter } from "../platform/integration/betting-order-wallet.adapter";
 
 @Module({
   imports: [
@@ -53,6 +56,15 @@ import { DepositLedgerAdapter } from "../platform/integration/deposit-ledger.ada
       provide: DEPOSIT_LEDGER_PORT,
       useExisting: DepositLedgerAdapter,
     },
+    // Bet Order orchestration lives here (not in BettingModule) so the
+    // betting→wallet-ledger adapter and the betting→lottery draw port it needs
+    // are both visible without one context module importing another.
+    BetOrderWalletAdapter,
+    {
+      provide: BET_ORDER_WALLET_PORT,
+      useExisting: BetOrderWalletAdapter,
+    },
+    BettingOrderService,
     DepositService,
     LedgerWalletReconciliationService,
   ],
@@ -64,6 +76,7 @@ import { DepositLedgerAdapter } from "../platform/integration/deposit-ledger.ada
     PaymentsModule,
     DepositService,
     LedgerWalletReconciliationService,
+    BettingOrderService,
   ],
 })
 export class ContextsModule {}
