@@ -2,9 +2,9 @@
 
 Generated from the live OpenAPI 3.0.0 contract (`apps/api/openapi/openapi.json`).
 
-**101 paths · 109 operations · 121 schemas**
+**108 paths · 118 operations · 132 schemas**
 
-Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
+Source: `main @ 6391102` · generated 2026-09-10 18:42 (+07)
 
 ---
 ## Contents
@@ -19,9 +19,11 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
   - [`/member/orders`](#member--orders)
   - [`/member/payout-destinations`](#member--payout-destinations)
   - [`/member/products`](#member--products)
+  - [`/member/profile`](#member--profile)
   - [`/member/promotions`](#member--promotions)
   - [`/member/quotes`](#member--quotes)
   - [`/member/sessions`](#member--sessions)
+  - [`/member/terms`](#member--terms)
   - [`/member/wallet`](#member--wallet)
   - [`/member/withdrawals`](#member--withdrawals)
 - **Admin API**
@@ -31,6 +33,7 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
   - [`/admin/auth`](#admin--auth)
   - [`/admin/draws`](#admin--draws)
   - [`/admin/lottery`](#admin--lottery)
+  - [`/admin/member-terms`](#admin--member-terms)
   - [`/admin/products`](#admin--products)
   - [`/admin/promotions`](#admin--promotions)
   - [`/admin/reconciliation`](#admin--reconciliation)
@@ -321,6 +324,25 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 - **Responses:**
   - `200` → `MemberDrawPageBody`
 
+<a id="member--profile"></a>
+### `/member/profile`
+
+#### `GET /api/v1/member/profile`
+
+*Read the Member's own profile and which mandatory fields are missing*
+
+- **Responses:**
+  - `200` → `MemberProfileBody`
+
+#### `PATCH /api/v1/member/profile`
+
+*Update the Member's own profile fields*
+
+- **Request** `application/json`: `UpdateMemberProfileBody`
+
+- **Responses:**
+  - `200` → `MemberProfileBody`
+
 <a id="member--promotions"></a>
 ### `/member/promotions`
 
@@ -391,6 +413,25 @@ Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 
 - **Responses:**
   - `200` → `MemberRevokedResponse`
+
+<a id="member--terms"></a>
+### `/member/terms`
+
+#### `GET /api/v1/member/terms`
+
+*Read the Member's currently required Terms version(s) and acceptance status*
+
+- **Responses:**
+  - `200` → `MemberTermsBody`
+
+#### `POST /api/v1/member/terms/accept`
+
+*Accept the currently required Terms version*
+
+- **Request** `application/json`: `AcceptTermsRequestBody`
+
+- **Responses:**
+  - `200` → `AcceptTermsBody`
 
 <a id="member--wallet"></a>
 ### `/member/wallet`
