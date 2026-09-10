@@ -9,6 +9,11 @@
  * crash recovery can never duplicate a Reservation, a release, or a posting.
  */
 export interface WithdrawalLedgerPort {
+  /** Read-only authoritative CASH availability for withdrawal preflight. */
+  getWithdrawalAvailableMinor(input: {
+    memberId: string;
+    currency: "THB";
+  }): Promise<bigint>;
   /** Creates the authoritative `WITHDRAWAL` Reservation and returns its id. */
   reserveWithdrawal(input: {
     withdrawalId: string;

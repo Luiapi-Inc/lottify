@@ -17,6 +17,14 @@ import {
 export class WithdrawalLedgerAdapter implements WithdrawalLedgerPort {
   constructor(private readonly ledger: FinancialLedgerService) {}
 
+  async getWithdrawalAvailableMinor(input: {
+    memberId: string;
+    currency: "THB";
+  }): Promise<bigint> {
+    const projection = await this.ledger.getWalletProjection(input.memberId, input.currency);
+    return projection.buckets.find((bucket) => bucket.bucket === "CASH")?.availableMinor ?? 0n;
+  }
+
   async reserveWithdrawal(input: {
     withdrawalId: string;
     memberId: string;

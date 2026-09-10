@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MemberWalletController } from "../../apps/api/src/member-wallet.controller";
 import { MemberDepositController } from "../../apps/api/src/member-deposit.controller";
 import { MemberAuthGuard } from "../../apps/api/src/member-auth.guard";
+import { DepositMethodService } from "../../apps/api/src/deposit-method.service";
 import { MemberWalletService } from "../../src/contexts/wallet-ledger/application/member-wallet.service";
 import { DepositService } from "../../src/contexts/payments/application/deposit.service";
 import { SessionService } from "../../src/contexts/identity-access/application/session.service";
@@ -21,6 +22,7 @@ describe("Member Wallet & Deposit API contract", () => {
         { provide: SessionService, useValue: {} },
         { provide: MemberWalletService, useValue: {} },
         { provide: DepositService, useValue: {} },
+        DepositMethodService,
       ],
     })
     class ContractModule {}
@@ -41,6 +43,8 @@ describe("Member Wallet & Deposit API contract", () => {
     expect(document.paths["/api/v1/member/wallet"]?.get).toBeDefined();
     expect(document.paths["/api/v1/member/wallet/transactions"]?.get).toBeDefined();
     expect(document.paths["/api/v1/member/deposits"]?.post).toBeDefined();
+    expect(document.paths["/api/v1/member/deposits/methods"]?.get).toBeDefined();
+    expect(document.paths["/api/v1/member/deposits/methods/{code}"]?.get).toBeDefined();
     expect(document.paths["/api/v1/member/deposits/{id}"]?.get).toBeDefined();
     expect(document.paths["/api/v1/member/deposits/{id}/reconcile"]?.post).toBeDefined();
   });

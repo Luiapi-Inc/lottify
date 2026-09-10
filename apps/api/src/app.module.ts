@@ -30,6 +30,7 @@ import { AdminResultSettlementController } from "./admin-result-settlement.contr
 import { MemberSessionDeviceController } from "./member-session-device.controller";
 import { MemberWalletController } from "./member-wallet.controller";
 import { MemberDepositController } from "./member-deposit.controller";
+import { DepositMethodService } from "./deposit-method.service";
 import { MemberWithdrawalController } from "./member-withdrawal.controller";
 import { MemberPayoutDestinationController } from "./member-payout-destination.controller";
 import { AdminWithdrawalController } from "./admin-withdrawal.controller";
@@ -87,6 +88,7 @@ collectDefaultMetrics({ prefix: "lottify_" });
     MemberAuthGuard,
     AccountingPeriodApprovalService,
     WithdrawalReviewService,
+    DepositMethodService,
     HealthService,
   ],
 })
