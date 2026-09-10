@@ -107,6 +107,10 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
         "lottery-configuration.approve",
         "lottery-draw.read",
         "lottery-draw.manage",
+        "result.read",
+        "result.manage",
+        "settlement.read",
+        "settlement.manage",
       ],
     });
 
@@ -179,6 +183,8 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
       "accounting-period.read",
       "lottery-configuration.read",
       "lottery-draw.read",
+      "result.read",
+      "settlement.read",
     ]);
   });
 

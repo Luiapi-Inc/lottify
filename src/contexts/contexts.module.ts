@@ -12,6 +12,12 @@ import { DepositService } from "./payments/application/deposit.service";
 import { DEPOSIT_LEDGER_PORT } from "./payments/application/deposit-ledger.port";
 import { BettingOrderService } from "./betting/application/betting-order.service";
 import { BET_ORDER_WALLET_PORT } from "./betting/application/betting-order-wallet.port";
+import { SettlementService } from "./result-settlement/application/settlement.service";
+import {
+  SETTLEMENT_DRAW_PORT,
+  SETTLEMENT_ORDERS_PORT,
+  SETTLEMENT_WALLET_PORT,
+} from "./result-settlement/application/settlement.ports";
 import { PromotionModule } from "./promotion/promotion.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { LedgerWalletReconciliationService } from "./reporting/ledger-wallet-reconciliation.service";
@@ -23,6 +29,9 @@ import { LedgerWalletProjectionAdapter } from "../platform/integration/ledger-wa
 import { LedgerWalletSourceAdapter } from "../platform/integration/ledger-wallet-source.adapter";
 import { DepositLedgerAdapter } from "../platform/integration/deposit-ledger.adapter";
 import { BetOrderWalletAdapter } from "../platform/integration/betting-order-wallet.adapter";
+import { SettlementWalletAdapter } from "../platform/integration/settlement-wallet.adapter";
+import { SettlementDrawAdapter } from "../platform/integration/settlement-draw.adapter";
+import { SettlementOrdersAdapter } from "../platform/integration/settlement-orders.adapter";
 
 @Module({
   imports: [
@@ -65,6 +74,25 @@ import { BetOrderWalletAdapter } from "../platform/integration/betting-order-wal
       useExisting: BetOrderWalletAdapter,
     },
     BettingOrderService,
+    // Result & Settlement orchestration lives here (not in ResultSettlementModule)
+    // so the settlement -> lottery draw, wallet-ledger and betting-orders port
+    // adapters are all visible without one context module importing another.
+    SettlementWalletAdapter,
+    {
+      provide: SETTLEMENT_WALLET_PORT,
+      useExisting: SettlementWalletAdapter,
+    },
+    SettlementDrawAdapter,
+    {
+      provide: SETTLEMENT_DRAW_PORT,
+      useExisting: SettlementDrawAdapter,
+    },
+    SettlementOrdersAdapter,
+    {
+      provide: SETTLEMENT_ORDERS_PORT,
+      useExisting: SettlementOrdersAdapter,
+    },
+    SettlementService,
     DepositService,
     LedgerWalletReconciliationService,
   ],
@@ -77,6 +105,7 @@ import { BetOrderWalletAdapter } from "../platform/integration/betting-order-wal
     DepositService,
     LedgerWalletReconciliationService,
     BettingOrderService,
+    SettlementService,
   ],
 })
 export class ContextsModule {}
