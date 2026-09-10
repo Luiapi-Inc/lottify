@@ -1,3 +1,7 @@
+import type { components } from "@lottify/contracts";
+
+type Schema<Name extends keyof components["schemas"]> = components["schemas"][Name];
+
 export type MemberAuthPurpose = "LOGIN" | "REGISTER";
 
 export interface OtpRequestResponse {
@@ -103,6 +107,17 @@ export interface MemberReadinessResponse {
   };
 }
 
+export type DepositMethodSummary = Schema<"DepositMethodSummaryBody">;
+export type DepositMethodDescription = Schema<"DepositMethodDescriptionBody">;
+export type DepositInitiateRequest = Schema<"DepositInitiateBody">;
+export type Deposit = Schema<"DepositBody">;
+export type WithdrawalCreateRequest = Schema<"CreateWithdrawalBody">;
+export type WithdrawalPreflight = Schema<"WithdrawalPreflightBody">;
+export type Withdrawal = Schema<"WithdrawalBody">;
+export type WithdrawalList = Schema<"WithdrawalListBody">;
+export type PayoutDestination = Schema<"PayoutDestinationBody">;
+export type PayoutDestinationList = Schema<"PayoutDestinationListBody">;
+
 export class MemberApiFailure extends Error {
   constructor(
     public code: string,
@@ -172,6 +187,64 @@ class MemberApiClient {
 
   getReadiness(): Promise<MemberReadinessResponse> {
     return this.request<MemberReadinessResponse>("readiness");
+  }
+
+  listDepositMethods(): Promise<DepositMethodSummary[]> {
+    return this.request<DepositMethodSummary[]>("deposits/methods");
+  }
+
+  describeDepositMethod(code: string): Promise<DepositMethodDescription> {
+    return this.request<DepositMethodDescription>(`deposits/methods/${encodeURIComponent(code)}`);
+  }
+
+  createDeposit(body: DepositInitiateRequest): Promise<Deposit> {
+    return this.request<Deposit>("deposits", {
+      method: "POST",
+      body,
+      idempotencyKey: createIdempotencyKey(),
+    });
+  }
+
+  getDeposit(id: string): Promise<Deposit> {
+    return this.request<Deposit>(`deposits/${encodeURIComponent(id)}`);
+  }
+
+  listPayoutDestinations(): Promise<PayoutDestinationList> {
+    return this.request<PayoutDestinationList>("payout-destinations");
+  }
+
+  preflightWithdrawal(body: WithdrawalCreateRequest): Promise<WithdrawalPreflight> {
+    return this.request<WithdrawalPreflight>("withdrawals/preflight", {
+      method: "POST",
+      body,
+    });
+  }
+
+  listWithdrawals(cursor?: string, limit?: number): Promise<WithdrawalList> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit !== undefined) params.set("limit", String(limit));
+    const query = params.toString();
+    return this.request<WithdrawalList>(`withdrawals${query ? `?${query}` : ""}`);
+  }
+
+  createWithdrawal(body: WithdrawalCreateRequest): Promise<Withdrawal> {
+    return this.request<Withdrawal>("withdrawals", {
+      method: "POST",
+      body,
+      idempotencyKey: createIdempotencyKey(),
+    });
+  }
+
+  getWithdrawal(id: string): Promise<Withdrawal> {
+    return this.request<Withdrawal>(`withdrawals/${encodeURIComponent(id)}`);
+  }
+
+  cancelWithdrawal(id: string): Promise<Withdrawal> {
+    return this.request<Withdrawal>(`withdrawals/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+      idempotencyKey: createIdempotencyKey(),
+    });
   }
 
   private async publicRequest<T>(path: string, body?: unknown): Promise<T> {
