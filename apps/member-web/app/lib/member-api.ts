@@ -123,6 +123,7 @@ export class MemberApiFailure extends Error {
     public code: string,
     message: string,
     public correlationId?: string,
+    public status?: number,
   ) {
     super(message);
   }
@@ -197,11 +198,11 @@ class MemberApiClient {
     return this.request<DepositMethodDescription>(`deposits/methods/${encodeURIComponent(code)}`);
   }
 
-  createDeposit(body: DepositInitiateRequest): Promise<Deposit> {
+  createDeposit(body: DepositInitiateRequest, idempotencyKey: string): Promise<Deposit> {
     return this.request<Deposit>("deposits", {
       method: "POST",
       body,
-      idempotencyKey: createIdempotencyKey(),
+      idempotencyKey,
     });
   }
 
@@ -228,11 +229,11 @@ class MemberApiClient {
     return this.request<WithdrawalList>(`withdrawals${query ? `?${query}` : ""}`);
   }
 
-  createWithdrawal(body: WithdrawalCreateRequest): Promise<Withdrawal> {
+  createWithdrawal(body: WithdrawalCreateRequest, idempotencyKey: string): Promise<Withdrawal> {
     return this.request<Withdrawal>("withdrawals", {
       method: "POST",
       body,
-      idempotencyKey: createIdempotencyKey(),
+      idempotencyKey,
     });
   }
 
@@ -240,10 +241,10 @@ class MemberApiClient {
     return this.request<Withdrawal>(`withdrawals/${encodeURIComponent(id)}`);
   }
 
-  cancelWithdrawal(id: string): Promise<Withdrawal> {
+  cancelWithdrawal(id: string, idempotencyKey: string): Promise<Withdrawal> {
     return this.request<Withdrawal>(`withdrawals/${encodeURIComponent(id)}/cancel`, {
       method: "POST",
-      idempotencyKey: createIdempotencyKey(),
+      idempotencyKey,
     });
   }
 
@@ -321,13 +322,14 @@ class MemberApiClient {
         code,
         message,
         typeof body.correlationId === "string" ? body.correlationId : undefined,
+        response.status,
       );
     }
     return body as T;
   }
 }
 
-function createIdempotencyKey(): string {
+export function createIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }

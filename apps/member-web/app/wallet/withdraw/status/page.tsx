@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { type Withdrawal, MemberApiFailure, memberApi } from "../../../lib/member-api";
+import { createIdempotencyKey, type Withdrawal, MemberApiFailure, memberApi } from "../../../lib/member-api";
 
 type StepTone = "done" | "current" | "future";
 
@@ -13,50 +13,66 @@ export default function WithdrawStatusPage() {
 
 function WithdrawStatusInner() {
   const [id, setId] = useState("");
-  useEffect(() => setId(new URLSearchParams(window.location.search).get("id") ?? ""), []);
+  const [idReady, setIdReady] = useState(false);
+  useEffect(() => {
+    setId(new URLSearchParams(window.location.search).get("id")?.trim() ?? "");
+    setIdReady(true);
+  }, []);
   const [withdrawal, setWithdrawal] = useState<Withdrawal | null>(null);
   const [loading, setLoading] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshText, setRefreshText] = useState("ยังไม่ได้ตรวจซ้ำ");
+  const refreshGenerationRef = useRef(0);
+  const cancelIdempotencyKeyRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!id) return;
+    if (!id || cancelling) return;
+    const generation = ++refreshGenerationRef.current;
     setLoading(true);
     setError(null);
     try {
       const next = await memberApi.getWithdrawal(id);
+      if (generation !== refreshGenerationRef.current) return;
       setWithdrawal(next);
       setRefreshText(nowLabel());
     } catch (requestError) {
+      if (generation !== refreshGenerationRef.current) return;
       setError(toStatusError(requestError));
     } finally {
-      setLoading(false);
+      if (generation === refreshGenerationRef.current) setLoading(false);
     }
-  }, [id]);
+  }, [cancelling, id]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (!withdrawal || isFinalState(withdrawal.state)) return;
+    if (!withdrawal || cancelling || isFinalState(withdrawal.state)) return;
     const timer = window.setInterval(() => void refresh(), 10000);
     return () => window.clearInterval(timer);
-  }, [refresh, withdrawal]);
+  }, [cancelling, refresh, withdrawal]);
 
   const copy = useMemo(() => withdrawal ? withdrawalCopy(withdrawal) : null, [withdrawal]);
   const canCancel = Boolean(withdrawal && cancellableStates.has(withdrawal.state) && hasMemberCancelAction(withdrawal.allowedActions));
 
   const cancel = async () => {
     if (!withdrawal || !canCancel || cancelling) return;
+    ++refreshGenerationRef.current;
+    const idempotencyKey = cancelIdempotencyKeyRef.current ?? createIdempotencyKey();
+    cancelIdempotencyKeyRef.current = idempotencyKey;
     setCancelling(true);
+    setLoading(false);
     setError(null);
     try {
-      const next = await memberApi.cancelWithdrawal(withdrawal.id);
+      const next = await memberApi.cancelWithdrawal(withdrawal.id, idempotencyKey);
+      ++refreshGenerationRef.current;
+      cancelIdempotencyKeyRef.current = null;
       setWithdrawal(next);
       setRefreshText(nowLabel());
     } catch (requestError) {
+      if (isDefinitiveClientFailure(requestError)) cancelIdempotencyKeyRef.current = null;
       setError(toCancelError(requestError));
     } finally {
       setCancelling(false);
@@ -69,7 +85,8 @@ function WithdrawStatusInner() {
       <div className="payment-status-grid">
         <section className="panel payment-status-main" aria-labelledby="status-title">
           {error && <div className="notice warning" role="alert"><b>!</b><div><strong>ไม่สามารถอ่านสถานะถอนเงินได้</strong>{error}</div></div>}
-          {!withdrawal && !error && <div className="notice info"><b>i</b><div><strong>กำลังอ่านสถานะรายการ</strong>ระบบกำลังโหลดสถานะถอนเงินล่าสุด</div></div>}
+          {idReady && !id && <div className="notice warning" role="alert"><b>!</b><div><strong>ไม่พบเลขอ้างอิงรายการ</strong>ไม่พบเลขอ้างอิงรายการ กรุณาเปิดหน้านี้จากการยืนยันรายการเดิม</div></div>}
+          {!withdrawal && !error && (!idReady || Boolean(id)) && <div className="notice info"><b>i</b><div><strong>กำลังอ่านสถานะรายการ</strong>ระบบกำลังโหลดสถานะถอนเงินล่าสุด</div></div>}
           {withdrawal && copy && <>
             <div className="payment-status-heading"><div><p className="payment-eyebrow">สถานะล่าสุดจากระบบ</p><h1 id="status-title">{copy.title}</h1><p className="muted">{copy.message}</p></div><span className={`payment-status-badge ${copy.badgeClass}`}>{copy.badge}</span></div>
             <div className="payment-reference-card"><div><span>เลขอ้างอิง</span><strong>{withdrawal.id}</strong></div><div><span>ยอดถอน</span><strong>{formatBaht(withdrawal.amountMinor)} บาท</strong></div><div><span>ค่าธรรมเนียม</span><strong>{formatBaht(withdrawal.feeMinor)} บาท</strong></div></div>
@@ -164,4 +181,8 @@ function toCancelError(error: unknown): string {
     return "ไม่สามารถยกเลิกรายการถอนเงินได้ กรุณาตรวจสถานะล่าสุด";
   }
   return "ไม่สามารถยกเลิกรายการถอนเงินได้ กรุณาตรวจสถานะล่าสุด";
+}
+
+function isDefinitiveClientFailure(error: unknown): boolean {
+  return error instanceof MemberApiFailure && error.status !== undefined && error.status >= 400 && error.status < 500 && error.status !== 408;
 }

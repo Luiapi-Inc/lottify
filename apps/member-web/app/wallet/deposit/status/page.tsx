@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type Deposit, MemberApiFailure, memberApi } from "../../../lib/member-api";
 
@@ -11,24 +11,32 @@ export default function DepositStatusPage() {
 
 function DepositStatusInner() {
   const [id, setId] = useState("");
-  useEffect(() => setId(new URLSearchParams(window.location.search).get("id") ?? ""), []);
+  const [idReady, setIdReady] = useState(false);
+  useEffect(() => {
+    setId(new URLSearchParams(window.location.search).get("id")?.trim() ?? "");
+    setIdReady(true);
+  }, []);
   const [deposit, setDeposit] = useState<Deposit | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshText, setRefreshText] = useState("ยังไม่ได้ตรวจซ้ำ");
+  const refreshGenerationRef = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!id) return;
+    const generation = ++refreshGenerationRef.current;
     setLoading(true);
     setError(null);
     try {
       const next = await memberApi.getDeposit(id);
+      if (generation !== refreshGenerationRef.current) return;
       setDeposit(next);
       setRefreshText(new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     } catch (requestError) {
+      if (generation !== refreshGenerationRef.current) return;
       setError(toStatusError(requestError));
     } finally {
-      setLoading(false);
+      if (generation === refreshGenerationRef.current) setLoading(false);
     }
   }, [id]);
 
@@ -50,7 +58,8 @@ function DepositStatusInner() {
       <div className="payment-status-grid">
         <section className="panel payment-status-main" aria-labelledby="status-title">
           {error && <div className="notice warning" role="alert"><b>!</b><div><strong>ไม่สามารถอ่านสถานะฝากเงินได้</strong>{error}</div></div>}
-          {!deposit && !error && <div className="notice info"><b>i</b><div><strong>กำลังอ่านสถานะรายการ</strong>ระบบกำลังโหลดสถานะฝากเงินล่าสุด</div></div>}
+          {idReady && !id && <div className="notice warning" role="alert"><b>!</b><div><strong>ไม่พบเลขอ้างอิงรายการ</strong>ไม่พบเลขอ้างอิงรายการ กรุณาเปิดหน้านี้จากการยืนยันรายการเดิม</div></div>}
+          {!deposit && !error && (!idReady || Boolean(id)) && <div className="notice info"><b>i</b><div><strong>กำลังอ่านสถานะรายการ</strong>ระบบกำลังโหลดสถานะฝากเงินล่าสุด</div></div>}
           {deposit && copy && <>
             <div className="payment-status-heading"><div><p className="payment-eyebrow">สถานะล่าสุดจากระบบ</p><h1 id="status-title">{copy.title}</h1><p className="muted">{copy.message}</p></div><span className={`payment-status-badge ${copy.badgeClass}`}>{copy.badge}</span></div>
             <div className="payment-reference-card"><div><span>เลขอ้างอิง</span><strong>{deposit.id}</strong></div><div><span>ยอดชำระ</span><strong>{formatBaht(deposit.amountMinor)} บาท</strong></div><div><span>ยอดเข้ากระเป๋า</span><strong>{deposit.status === "COMPLETED" ? `+${formatBaht(deposit.amountMinor)} บาท` : "ยังไม่เพิ่มยอด"}</strong></div></div>
