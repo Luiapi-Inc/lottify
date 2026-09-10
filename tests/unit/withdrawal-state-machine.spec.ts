@@ -6,6 +6,7 @@ import {
   withdrawalCanTransition,
   withdrawalIsTerminal,
   withdrawalQueue,
+  withdrawalQueueFilter,
   withdrawalRetainsReservation,
   withdrawalSeverity,
   withdrawalStateForPayoutOutcome,
@@ -72,6 +73,52 @@ describe("Withdrawal lifecycle state machine", () => {
     expect(withdrawalStatesForQueue("APPROVAL")).toEqual(["REVIEWING"]);
     expect(withdrawalStatesForQueue("RECONCILIATION")).toEqual(["RECONCILING"]);
     expect(withdrawalStatesForQueue("PAYOUT")).toContain("PAYOUT_CONFIRMED");
+  });
+
+  it("partitions the shared REVIEWING state between the review and approval queues", () => {
+    // State alone puts the same withdrawal in both queues, so the filter must
+    // constrain the approval flag as well.
+    expect(withdrawalQueueFilter("REVIEW")).toEqual({
+      states: ["REVIEWING"],
+      requiresApproval: false,
+    });
+    expect(withdrawalQueueFilter("APPROVAL")).toEqual({
+      states: ["REVIEWING"],
+      requiresApproval: true,
+    });
+    // Queues that are not partitioned leave the flag unconstrained.
+    expect(withdrawalQueueFilter("PAYOUT").requiresApproval).toBeNull();
+    expect(withdrawalQueueFilter("RECONCILIATION").requiresApproval).toBeNull();
+  });
+
+  it("agrees with withdrawalQueue on which queue a record belongs to", () => {
+    for (const requiresApproval of [false, true]) {
+      const queue = withdrawalQueue("REVIEWING", requiresApproval);
+      expect(queue).not.toBeNull();
+      expect(withdrawalQueueFilter(queue!)).toEqual({
+        states: ["REVIEWING"],
+        requiresApproval,
+      });
+    }
+  });
+
+  it("records an in-flight payout observation without leaving the current state", () => {
+    // A PENDING outcome is an observation, so the declared transition is the
+    // self-loop the service actually applies and never an undeclared step.
+    expect(withdrawalStateForPayoutOutcome("PENDING", "PAYOUT_PROCESSING")).toBe(
+      "PAYOUT_PROCESSING",
+    );
+    expect(withdrawalCanTransition("PAYOUT_PROCESSING", "PAYOUT_PROCESSING")).toBe(true);
+    // An ambiguous withdrawal stays ambiguous while the provider is still pending.
+    expect(withdrawalStateForPayoutOutcome("PENDING", "RECONCILING")).toBe("RECONCILING");
+    expect(withdrawalCanTransition("RECONCILING", "RECONCILING")).toBe(true);
+    // A definitive outcome still moves the workflow.
+    expect(withdrawalStateForPayoutOutcome("APPROVED", "RECONCILING")).toBe("PAYOUT_CONFIRMED");
+    expect(withdrawalStateForPayoutOutcome("REJECTED", "RECONCILING")).toBe("FAILED");
+  });
+
+  it("allows cancellation from a reserved withdrawal", () => {
+    expect(withdrawalCanTransition("RESERVING", "CANCELLING")).toBe(true);
   });
 
   it("elevates severity for ambiguous and failed payouts", () => {

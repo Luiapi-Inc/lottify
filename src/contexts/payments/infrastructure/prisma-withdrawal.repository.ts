@@ -12,7 +12,7 @@ import type {
 } from "../domain/withdrawal.repository";
 import type { WithdrawalRecord } from "../domain/withdrawal.repository";
 import {
-  withdrawalStatesForQueue,
+  withdrawalQueueFilter,
   type WithdrawalActorType,
   type WithdrawalEligibilityOutcome,
   type WithdrawalState,
@@ -146,14 +146,19 @@ export class PrismaWithdrawalRepository implements WithdrawalRepository {
 
   async list(query: WithdrawalListQuery): Promise<WithdrawalListPage> {
     const limit = clampLimit(query.limit);
-    const states = resolveStates(query);
+    const queueFilter = query.queue ? withdrawalQueueFilter(query.queue) : null;
+    const states = query.state ? [query.state] : (queueFilter?.states ?? null);
+    // `REVIEW` and `APPROVAL` share the REVIEWING state, so the queue filter also
+    // constrains the approval flag; an explicit caller filter always wins.
+    const requiresApproval =
+      query.requiresApproval === undefined
+        ? (queueFilter?.requiresApproval ?? null)
+        : query.requiresApproval;
     const rows = await this.prisma.paymentWithdrawal.findMany({
       where: {
         ...(query.memberId ? { memberId: query.memberId } : {}),
         ...(states ? { state: { in: [...states] } } : {}),
-        ...(query.requiresApproval === undefined
-          ? {}
-          : { requiresApproval: query.requiresApproval }),
+        ...(requiresApproval === null ? {} : { requiresApproval }),
         ...(query.cursor
           ? {
               OR: [
@@ -194,12 +199,6 @@ export class PrismaWithdrawalRepository implements WithdrawalRepository {
       createdAt: row.createdAt,
     }));
   }
-}
-
-function resolveStates(query: WithdrawalListQuery): readonly WithdrawalState[] | null {
-  if (query.state) return [query.state];
-  if (query.queue) return withdrawalStatesForQueue(query.queue);
-  return null;
 }
 
 function clampLimit(limit: number): number {

@@ -36,7 +36,7 @@ export type WithdrawalTerminalState = (typeof WITHDRAWAL_TERMINAL_STATES)[number
 
 const WITHDRAWAL_TRANSITIONS: Record<WithdrawalState, readonly WithdrawalState[]> = {
   REQUESTED: ["RESERVING", "REJECTED"],
-  RESERVING: ["REVIEWING", "APPROVED", "REJECTED"],
+  RESERVING: ["REVIEWING", "APPROVED", "REJECTED", "CANCELLING"],
   REVIEWING: ["APPROVED", "REJECTED", "CANCELLING"],
   /**
    * `APPROVED -> REJECTED` is the mandatory pre-payout eligibility recheck
@@ -44,7 +44,15 @@ const WITHDRAWAL_TRANSITIONS: Record<WithdrawalState, readonly WithdrawalState[]
    * is rejected with authoritative Reservation release rather than paid out.
    */
   APPROVED: ["PAYOUT_PROCESSING", "CANCELLING", "REJECTED"],
-  PAYOUT_PROCESSING: ["PAYOUT_CONFIRMED", "RECONCILING", "FAILED"],
+  /**
+   * A PENDING provider outcome on an in-flight payout is an observation, not a
+   * transition: the workflow state is unchanged and the durable event records
+   * that the payout is still in flight (with the provider transaction identity
+   * when the provider supplied one). The self-loop is declared so that the exact
+   * transition rule is the same one the persistence guard and the test doubles
+   * apply; it is never a way to re-initiate an external payout.
+   */
+  PAYOUT_PROCESSING: ["PAYOUT_PROCESSING", "PAYOUT_CONFIRMED", "RECONCILING", "FAILED"],
   PAYOUT_CONFIRMED: ["FINALIZING"],
   FINALIZING: ["COMPLETED"],
   COMPLETED: [],
@@ -52,7 +60,8 @@ const WITHDRAWAL_TRANSITIONS: Record<WithdrawalState, readonly WithdrawalState[]
   CANCELLED: [],
   REJECTED: [],
   FAILED: [],
-  RECONCILING: ["PAYOUT_CONFIRMED", "FAILED"],
+  /** See `PAYOUT_PROCESSING`: a reconciliation that is still pending stays put. */
+  RECONCILING: ["RECONCILING", "PAYOUT_CONFIRMED", "FAILED"],
 };
 
 export const WITHDRAWAL_ACTOR_TYPES = ["MEMBER", "ADMIN", "SYSTEM", "PROVIDER"] as const;
@@ -166,6 +175,29 @@ export function withdrawalStatesForQueue(queue: WithdrawalQueue): readonly Withd
   }
 }
 
+/**
+ * Inverse of `withdrawalQueue` for list filtering. `REVIEW` and `APPROVAL` are
+ * the same workflow state partitioned by whether the item needs an approval
+ * decision, so a queue filter must constrain `requiresApproval` as well:
+ * filtering on state alone would return every `REVIEWING` withdrawal under both
+ * queues. Queues that are not partitioned (payout, reconciliation) leave the
+ * flag unconstrained.
+ */
+export function withdrawalQueueFilter(queue: WithdrawalQueue): {
+  states: readonly WithdrawalState[];
+  requiresApproval: boolean | null;
+} {
+  switch (queue) {
+    case "REVIEW":
+      return { states: ["REVIEWING"], requiresApproval: false };
+    case "APPROVAL":
+      return { states: ["REVIEWING"], requiresApproval: true };
+    case "PAYOUT":
+    case "RECONCILIATION":
+      return { states: withdrawalStatesForQueue(queue), requiresApproval: null };
+  }
+}
+
 export function withdrawalSeverity(state: WithdrawalState): WithdrawalSeverity {
   if (state === "RECONCILING" || state === "FAILED") return "HIGH";
   if (state === "REVIEWING" || state === "PAYOUT_PROCESSING" || state === "CANCELLING") {
@@ -202,12 +234,21 @@ export function withdrawalAllowedActions(state: WithdrawalState): WithdrawalAllo
  * Reservation release; an unknown/ambiguous outcome retains the Reservation and
  * enters `RECONCILING` (Ticket 02/09).
  */
-export function withdrawalStateForPayoutOutcome(outcome: PaymentProviderOutcome): WithdrawalState {
+export function withdrawalStateForPayoutOutcome(
+  outcome: PaymentProviderOutcome,
+  currentState?: WithdrawalState,
+): WithdrawalState {
   switch (outcome) {
     case "APPROVED":
       return "PAYOUT_CONFIRMED";
     case "PENDING":
-      return "PAYOUT_PROCESSING";
+      /**
+       * A pending outcome is an in-flight observation, so the workflow stays
+       * where it is. An ambiguous withdrawal in particular stays `RECONCILING`
+       * with its Reservation retained rather than sliding back to an apparently
+       * normal payout in progress.
+       */
+      return currentState === "RECONCILING" ? "RECONCILING" : "PAYOUT_PROCESSING";
     case "REJECTED":
       return "FAILED";
   }

@@ -38,6 +38,7 @@ import {
 import {
   PAYOUT_PROVIDER_ID,
   WithdrawalError,
+  assertWithdrawalTransition,
   validateWithdrawalInitiation,
   withdrawalIsTerminal,
   withdrawalStateForPayoutOutcome,
@@ -116,6 +117,20 @@ export class WithdrawalService {
     }
 
     const destination = await this.destinations.findById(command.payoutDestinationId);
+    if (!destination || destination.memberId !== memberId) {
+      /**
+       * The referenced destination does not exist, or is not this Member's. That
+       * is a rejected *request*, not a rejection of a persisted withdrawal: no
+       * Withdrawal row is written, so the caller always receives a mapped client
+       * error instead of an unmapped persistence failure. Both cases are reported
+       * identically so the response cannot be used to probe whether another
+       * Member's destination identity exists.
+       */
+      throw new WithdrawalError(
+        "PAYOUT_DESTINATION_NOT_ELIGIBLE",
+        "Payout Destination is not linked to this Member",
+      );
+    }
     const correlation = correlationId || randomUUID();
     const decision = await this.evaluateEligibility(memberId, destination);
     const feeQuote = createPaymentFeeQuote({
@@ -542,7 +557,8 @@ export class WithdrawalService {
     correlationId: string,
     adminId?: string,
   ): Promise<WithdrawalRecord> {
-    const target = withdrawalStateForPayoutOutcome(outcome);
+    const target = withdrawalStateForPayoutOutcome(outcome, withdrawal.state);
+    const inFlight = outcome === "PENDING";
     const actor = {
       actorType: adminId ? ("ADMIN" as const) : ("PROVIDER" as const),
       actorId: adminId ?? null,
@@ -575,8 +591,13 @@ export class WithdrawalService {
         ...(target === "PAYOUT_CONFIRMED"
           ? { payoutEvidenceRef: `payout-evidence:${withdrawal.providerReferenceKey}` }
           : {}),
+        // A pending outcome observed while reconciling is an attempt that did not
+        // resolve the ambiguity yet, so it is counted as one.
+        ...(inFlight && withdrawal.state === "RECONCILING"
+          ? { countReconciliationAttempt: true }
+          : {}),
       },
-      actor,
+      { ...actor, reason: inFlight ? "PAYOUT_IN_FLIGHT" : null },
     );
   }
 
@@ -654,6 +675,9 @@ export class WithdrawalService {
       correlationId: string;
     },
   ): Promise<WithdrawalRecord> {
+    // The declared state machine is authoritative for every persisted transition,
+    // so the domain rule and the durable guard can never disagree.
+    assertWithdrawalTransition(from, to);
     const updated = await this.withdrawals.transition({
       id: withdrawal.id,
       from,

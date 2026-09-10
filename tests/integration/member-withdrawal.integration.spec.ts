@@ -7,6 +7,7 @@ import { PrismaPayoutDestinationRepository } from "../../src/contexts/payments/i
 import { DeterministicPayoutProviderFake } from "../../src/contexts/payments/infrastructure/deterministic-payout-provider.adapter";
 import { DeterministicPayoutDestinationVerificationFake } from "../../src/contexts/payments/infrastructure/deterministic-payout-destination-verification.adapter";
 import { UnrestrictedMemberWithdrawalRestrictionAdapter } from "../../src/contexts/payments/infrastructure/unrestricted-member-withdrawal-restriction.adapter";
+import type { MemberWithdrawalRestrictionPort } from "../../src/contexts/payments/application/withdrawal-restriction.port";
 import { WithdrawalLedgerAdapter } from "../../src/platform/integration/withdrawal-ledger.adapter";
 import { DepositLedgerAdapter } from "../../src/platform/integration/deposit-ledger.adapter";
 import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/application/financial-ledger.service";
@@ -134,6 +135,7 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
 
   function serviceWith(
     scenarios: ConstructorParameters<typeof DeterministicPayoutProviderFake>[0],
+    restriction: MemberWithdrawalRestrictionPort = new UnrestrictedMemberWithdrawalRestrictionAdapter(),
   ): { service: WithdrawalService; provider: DeterministicPayoutProviderFake } {
     const provider = new DeterministicPayoutProviderFake(scenarios);
     const service = new WithdrawalService(
@@ -141,7 +143,7 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
       payoutDestinations,
       withdrawalLedger,
       provider,
-      new UnrestrictedMemberWithdrawalRestrictionAdapter(),
+      restriction,
     );
     return { service, provider };
   }
@@ -446,5 +448,151 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
     expect(events[0]).toMatchObject({ fromState: null, toState: "REQUESTED", actorType: "MEMBER" });
     expect(events.map((event) => event.toState)).toContain("RESERVING");
     expect(events.at(-1)).toMatchObject({ toState: "CANCELLED", actorType: "MEMBER" });
+  });
+
+  it("rejects an unknown or foreign destination reference without persisting a withdrawal", async () => {
+    const memberId = await fundedMember(50_00n);
+    const { service } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "APPROVED" } });
+
+    // An identity that exists but belongs to another Member.
+    const otherMemberId = await fundedMember(10_00n);
+    const foreignDestinationId = await verifiedDestination(otherMemberId);
+
+    for (const payoutDestinationId of [randomUUID(), foreignDestinationId]) {
+      await expect(
+        service.createWithdrawal(
+          memberId,
+          { payoutDestinationId, amountMinor: 10_00n, currency: "THB", idempotencyKey: randomUUID() },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ code: "PAYOUT_DESTINATION_NOT_ELIGIBLE" });
+    }
+
+    // No orchestration row and no hold: the request itself was refused, so the
+    // caller never sees an unmapped persistence failure.
+    expect(await prisma.paymentWithdrawal.count({ where: { memberId } })).toBe(0);
+    expect(await prisma.reservation.count({ where: { memberId } })).toBe(0);
+    expect(await availableCash(memberId)).toBe(50_00n);
+  });
+
+  it("partitions the admin review and approval queues by requiresApproval", async () => {
+    const memberId = await fundedMember(60_00n);
+    const destinationId = await verifiedDestination(memberId);
+    // One withdrawal that needs an approval decision, created through the real
+    // review-required path.
+    const { service } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "APPROVED" } }, {
+      evaluate: async () => ({
+        withdrawalBlocked: false,
+        reviewRequired: true,
+        reasonCodes: ["APPROVAL_THRESHOLD"],
+        evidenceRefs: [],
+      }),
+    });
+    const needsApproval = await service.createWithdrawal(
+      memberId,
+      { payoutDestinationId: destinationId, amountMinor: 10_00n, currency: "THB", idempotencyKey: randomUUID() },
+      randomUUID(),
+    );
+    expect(needsApproval.state).toBe("REVIEWING");
+    expect(needsApproval.requiresApproval).toBe(true);
+
+    // And one REVIEWING withdrawal that does not, inserted directly so the
+    // partition is proven to be on the flag rather than on the creation path.
+    const noApproval = await prisma.paymentWithdrawal.create({
+      data: {
+        memberId,
+        payoutDestinationId: destinationId,
+        amountMinor: 5_00n,
+        feeMinor: 0n,
+        currency: "THB",
+        state: "REVIEWING",
+        version: 3,
+        eligibilityOutcome: "REVIEW_REQUIRED",
+        eligibilityPolicyVersion: "withdrawal-eligibility-v1",
+        eligibilityReasonCodes: ["REVIEW_REQUIRED"],
+        eligibilityEvidenceRefs: [],
+        requiresApproval: false,
+        idempotencyScope: `WITHDRAWAL_CREATE:${memberId}`,
+        idempotencyKey: randomUUID(),
+        fingerprint: randomUUID(),
+        reservationId: randomUUID(),
+        providerId: PAYOUT_PROVIDER_ID,
+        providerReferenceKey: `wdr:${randomUUID()}`,
+        correlationId: randomUUID(),
+      },
+    });
+
+    const reviewQueue = await withdrawals.list({ memberId, queue: "REVIEW", limit: 50 });
+    const approvalQueue = await withdrawals.list({ memberId, queue: "APPROVAL", limit: 50 });
+
+    expect(reviewQueue.items.map((item) => item.id)).toEqual([noApproval.id]);
+    expect(approvalQueue.items.map((item) => item.id)).toEqual([needsApproval.id]);
+    expect(reviewQueue.items.every((item) => !item.requiresApproval)).toBe(true);
+    expect(approvalQueue.items.every((item) => item.requiresApproval)).toBe(true);
+  });
+
+  it("keeps a pending payout observable in place and counts a still-pending reconciliation", async () => {
+    const memberId = await fundedMember(80_00n);
+    const destinationId = await verifiedDestination(memberId);
+    const { service, provider } = serviceWith({
+      [PAYOUT_PROVIDER_ID]: {
+        startFailure: { category: "AMBIGUOUS_OUTCOME", retryable: false, evidenceRefs: [] },
+        resolveOutcome: "PENDING",
+      },
+    });
+
+    const created = await service.createWithdrawal(
+      memberId,
+      { payoutDestinationId: destinationId, amountMinor: 20_00n, currency: "THB", idempotencyKey: randomUUID() },
+      randomUUID(),
+    );
+
+    const ambiguous = await service.requestPayout(created.id, { adminId: "admin-1" }, randomUUID());
+    expect(ambiguous.state).toBe("RECONCILING");
+    expect(ambiguous.reconciliationAttempts).toBe(1);
+    expect(await availableCash(memberId)).toBe(60_00n);
+
+    // A reconcile that is still pending stays ambiguous, holds the Reservation and
+    // records the attempt instead of inventing a workflow step.
+    const stillPending = await service.reconcileWithdrawal(
+      created.id,
+      { adminId: "admin-1" },
+      randomUUID(),
+    );
+    expect(stillPending.state).toBe("RECONCILING");
+    expect(stillPending.reconciliationAttempts).toBe(2);
+    expect(stillPending.reservationId).toBe(ambiguous.reservationId);
+    expect(await availableCash(memberId)).toBe(60_00n);
+    expect(provider.initiateCallCount).toBe(1);
+
+    const events = await service.listEvents(created.id);
+    expect(events.at(-1)).toMatchObject({
+      fromState: "RECONCILING",
+      toState: "RECONCILING",
+      reason: "PAYOUT_IN_FLIGHT",
+    });
+  });
+
+  it("records an in-flight payout observation when the provider only accepts the request", async () => {
+    const memberId = await fundedMember(70_00n);
+    const destinationId = await verifiedDestination(memberId);
+    const { service } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "PENDING" } });
+
+    const created = await service.createWithdrawal(
+      memberId,
+      { payoutDestinationId: destinationId, amountMinor: 20_00n, currency: "THB", idempotencyKey: randomUUID() },
+      randomUUID(),
+    );
+    const inFlight = await service.requestPayout(created.id, { adminId: "admin-1" }, randomUUID());
+
+    expect(inFlight.state).toBe("PAYOUT_PROCESSING");
+    expect(inFlight.reservationId).toBe(created.reservationId);
+    expect(await availableCash(memberId)).toBe(50_00n);
+    const events = await service.listEvents(created.id);
+    expect(events.at(-1)).toMatchObject({
+      fromState: "PAYOUT_PROCESSING",
+      toState: "PAYOUT_PROCESSING",
+      reason: "PAYOUT_IN_FLIGHT",
+    });
   });
 });

@@ -506,4 +506,99 @@ describe("WithdrawalService", () => {
       service.approveWithdrawal(withdrawal.id, { adminId: "admin-1", reason: "  " }, "corr-13"),
     ).rejects.toMatchObject({ code: "INVALID" });
   });
+
+  it("rejects a request for a destination that is not this Member's without persisting a withdrawal", async () => {
+    const foreign = destination({ memberId: "member-2" });
+    destinationRows.set(foreign.id, foreign);
+
+    await expect(
+      service.createWithdrawal(
+        "member-1",
+        {
+          payoutDestinationId: foreign.id,
+          amountMinor: 10_00n,
+          currency: "THB",
+          idempotencyKey: randomUUID(),
+        },
+        "corr-14",
+      ),
+    ).rejects.toMatchObject({ code: "PAYOUT_DESTINATION_NOT_ELIGIBLE" });
+    expect(withdrawals.rows.size).toBe(0);
+    expect(ledger.reservations.size).toBe(0);
+  });
+
+  it("reports an unknown destination identity identically to a foreign one", async () => {
+    await expect(
+      service.createWithdrawal(
+        "member-1",
+        {
+          payoutDestinationId: randomUUID(),
+          amountMinor: 10_00n,
+          currency: "THB",
+          idempotencyKey: randomUUID(),
+        },
+        "corr-15",
+      ),
+    ).rejects.toMatchObject({
+      code: "PAYOUT_DESTINATION_NOT_ELIGIBLE",
+      message: "Payout Destination is not linked to this Member",
+    });
+    expect(withdrawals.rows.size).toBe(0);
+  });
+
+  it("keeps a pending payout outcome in flight without inventing a workflow step", async () => {
+    provider = new DeterministicPayoutProviderFake({ "payout-rail": { outcome: "PENDING" } });
+    service = new WithdrawalService(
+      withdrawals,
+      new InMemoryPayoutDestinationRepository(destinationRows),
+      ledger,
+      provider,
+      restrictions,
+    );
+
+    const withdrawal = await create();
+    const inFlight = await service.requestPayout(withdrawal.id, { adminId: "admin-1" }, "corr-16");
+
+    expect(inFlight.state).toBe("PAYOUT_PROCESSING");
+    expect(inFlight.reservationId).toBe(withdrawal.reservationId);
+    expect(ledger.releases).toEqual([]);
+    // The observation is recorded as an in-flight payout event, not a transition.
+    expect(withdrawals.events.at(-1)).toMatchObject({
+      fromState: "PAYOUT_PROCESSING",
+      toState: "PAYOUT_PROCESSING",
+      reason: "PAYOUT_IN_FLIGHT",
+    });
+  });
+
+  it("keeps an ambiguous withdrawal reconciling when the provider is still pending", async () => {
+    provider = new DeterministicPayoutProviderFake({
+      "payout-rail": {
+        startFailure: { category: "AMBIGUOUS_OUTCOME", retryable: false, evidenceRefs: [] },
+        resolveOutcome: "PENDING",
+      },
+    });
+    service = new WithdrawalService(
+      withdrawals,
+      new InMemoryPayoutDestinationRepository(destinationRows),
+      ledger,
+      provider,
+      restrictions,
+    );
+
+    const withdrawal = await create();
+    const ambiguous = await service.requestPayout(withdrawal.id, { adminId: "admin-1" }, "corr-17");
+    expect(ambiguous.state).toBe("RECONCILING");
+
+    const stillReconciling = await service.reconcileWithdrawal(
+      withdrawal.id,
+      { adminId: "admin-1" },
+      "corr-18",
+    );
+    expect(stillReconciling.state).toBe("RECONCILING");
+    expect(stillReconciling.reconciliationAttempts).toBe(2);
+    expect(stillReconciling.reservationId).toBe(withdrawal.reservationId);
+    // A still-pending reconciliation never re-initiates the external payout.
+    expect(provider.initiateCallCount).toBe(1);
+    expect(ledger.releases).toEqual([]);
+  });
 });
