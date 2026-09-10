@@ -30,12 +30,13 @@ Payments-owned Withdrawal vertical on `/api/v1`, built on the accepted Wallet & 
 
 ## Evidence
 
-Local, on the branch worktree (all commands run with the shared dev PostgreSQL configuration exported from `.env`; without those variables the API composition root aborts during application bootstrap, so `pnpm test` alone is not a valid invocation in this environment):
+Local, on the branch worktree rebased onto `main` 979e1d2 (all commands run with the shared dev PostgreSQL configuration exported from `.env`; without those variables the API composition root aborts during application bootstrap, so `pnpm test` alone is not a valid invocation in this environment):
 
 - `pnpm typecheck` — passed.
 - `pnpm check` — passed (prisma generate, OpenAPI generate, typecheck, unit/contract suite, backend + member-web + admin-web builds).
-- `pnpm test` — 293 passed, 126 skipped (integration suites gated behind `RUN_INTEGRATION_TESTS=1`).
+- `pnpm test` — 332 passed, 151 skipped (integration suites gated behind `RUN_INTEGRATION_TESTS=1`).
 - `pnpm prisma:migrate:status` — up to date; migration `20260910133000_member_withdrawal` is applied on the shared dev database.
+- `RUN_INTEGRATION_TESTS=1 pnpm vitest run --no-file-parallelism` (rebased onto `main` 979e1d2) — 474 passed, 1 failed. The single failure is `tests/integration/admin-accounting-period-api.integration.spec.ts` on the shared dev database (closed-period trigger drift); it reproduces identically on a clean `979e1d2` checkout (`Tests 1 failed | 24 passed`), is accounting-owned, and is not touched by this change.
 - `RUN_INTEGRATION_TESTS=1 pnpm vitest run tests/integration/member-withdrawal.integration.spec.ts` — 7 passed against PostgreSQL. Deterministic integration evidence covers:
   - happy path `create → reserve → payout → finalize` with exactly one `WITHDRAWAL_FINALIZE` transaction, a consumed (not released) `WITHDRAWAL` Reservation, and the Wallet projection moving 100.00 posted / 40.00 reserved → 60.00 posted / 60.00 available;
   - denial to an unverified destination with **no** Reservation created;

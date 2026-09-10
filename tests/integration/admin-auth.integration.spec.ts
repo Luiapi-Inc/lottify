@@ -188,6 +188,7 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
       "lottery-draw.read",
       "result.read",
       "settlement.read",
+      "withdrawal.read",
     ]);
   });
 
