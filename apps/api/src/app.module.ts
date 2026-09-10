@@ -3,6 +3,7 @@ import { collectDefaultMetrics } from "prom-client";
 import { ContextsModule } from "../../../src/contexts/contexts.module";
 import { PlatformModule } from "../../../src/platform/platform.module";
 import { AdminAccountingPeriodController } from "./admin-accounting-period.controller";
+import { AdminDrawController } from "./admin-draw.controller";
 import { AdminLotteryConfigurationController } from "./admin-lottery-configuration.controller";
 import { AdminAuthController } from "./admin-auth.controller";
 import { AdminAuthGuard } from "./admin-auth.guard";
@@ -15,6 +16,7 @@ import { HealthService } from "./health.service";
 import { HttpMetricsMiddleware } from "./http-metrics.middleware";
 import { MemberAuthController } from "./member-auth.controller";
 import { MemberAuthGuard } from "./member-auth.guard";
+import { MemberDrawController } from "./member-draw.controller";
 import { MemberSessionDeviceController } from "./member-session-device.controller";
 import { MemberWalletController } from "./member-wallet.controller";
 import { MemberDepositController } from "./member-deposit.controller";
@@ -27,9 +29,11 @@ collectDefaultMetrics({ prefix: "lottify_" });
   controllers: [
     ApiV1Controller,
     AdminAccountingPeriodController,
+    AdminDrawController,
     AdminLotteryConfigurationController,
     AdminAuthController,
     MemberAuthController,
+    MemberDrawController,
     MemberSessionDeviceController,
     MemberWalletController,
     MemberDepositController,

@@ -66,6 +66,8 @@ describe("Admin authentication security primitives", () => {
       "lottery-configuration.create",
       "lottery-configuration.submit",
       "lottery-configuration.approve",
+      "lottery-draw.read",
+      "lottery-draw.manage",
     ]);
     expect(capabilitiesForRole("SUPER_ADMIN")).toEqual([
       "accounting-period.read",
@@ -78,10 +80,13 @@ describe("Admin authentication security primitives", () => {
       "lottery-configuration.create",
       "lottery-configuration.submit",
       "lottery-configuration.approve",
+      "lottery-draw.read",
+      "lottery-draw.manage",
     ]);
     expect(capabilitiesForRole("AUDITOR")).toEqual([
       "accounting-period.read",
       "lottery-configuration.read",
+      "lottery-draw.read",
     ]);
   });
 });

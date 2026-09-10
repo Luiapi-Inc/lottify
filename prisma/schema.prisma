@@ -92,6 +92,7 @@ model AdminUser {
   accountingPeriodCloseEvidence        AccountingPeriodCloseEvidence[] @relation("AccountingPeriodClosedBy")
   lotteryProductVersionsCreated        LotteryProductVersion[]         @relation("LotteryProductVersionCreatedBy")
   lotteryBetTypeVersionsCreated        LotteryBetTypeVersion[]         @relation("LotteryBetTypeVersionCreatedBy")
+  lotteryDrawsCreated                  LotteryDraw[]                   @relation("LotteryDrawCreatedBy")
 
   @@index([status, role])
   @@map("admin_users")
@@ -201,6 +202,7 @@ model LotteryProduct {
   createdAt DateTime                @default(now()) @map("created_at")
   updatedAt DateTime                @updatedAt @map("updated_at")
   versions  LotteryProductVersion[]
+  draws     LotteryDraw[]
 
   @@map("lottery_products")
 }
@@ -287,6 +289,105 @@ model LotteryProductVersionBetType {
   @@unique([productVersionId, betTypeVersionId])
   @@index([betTypeId, betTypeVersionId])
   @@map("lottery_product_version_bet_types")
+}
+
+// Draw aggregate. A Draw snapshots the effective published Product/Bet-Type
+// configuration at creation time so historical Draws stay reproducible and are
+// never reinterpreted through a later configuration version. The lifecycle state
+// transitions only through the merged draw-lifecycle state machine. The cutoff is
+// a single server-authoritative instant shared by every Bet Type in the Draw.
+model LotteryDraw {
+  id                          String                   @id @default(uuid()) @db.Uuid
+  productId                   String                   @map("product_id") @db.Uuid
+  productVersionId            String                   @map("product_version_id") @db.Uuid
+  occurrenceIdentity          String                   @map("occurrence_identity")
+  localDate                   String                   @map("local_date")
+  state                       String
+  version                     Int                      @default(1)
+  openAt                      DateTime                 @map("open_at")
+  cutoffAt                    DateTime                 @map("cutoff_at")
+  drawAt                      DateTime                 @map("draw_at")
+  provenance                  String
+  timezone                    String
+  scheduleTemplateRef         String                   @map("schedule_template_ref")
+  resultSchemaVersionRef      String                   @map("result_schema_version_ref")
+  settlementRuleVersionRef    String                   @map("settlement_rule_version_ref")
+  defaultPayoutPolicyRef      String                   @map("default_payout_policy_ref")
+  defaultLimitPolicyRef       String                   @map("default_limit_policy_ref")
+  defaultRestrictionPolicyRef String                   @map("default_restriction_policy_ref")
+  resultSourceRef             String?                  @map("result_source_ref")
+  overrideRevisionRef         String                   @default("") @map("override_revision_ref")
+  createdByAdminId            String?                  @map("created_by_admin_id") @db.Uuid
+  createdAt                   DateTime                 @default(now()) @map("created_at")
+  updatedAt                   DateTime                 @updatedAt @map("updated_at")
+  product                     LotteryProduct           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdByAdmin              AdminUser?               @relation("LotteryDrawCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  betTypes                    LotteryDrawBetType[]
+  overrides                   LotteryDrawOverride[]
+
+  @@unique([productId, occurrenceIdentity])
+  @@index([productId, localDate])
+  @@index([state, cutoffAt])
+  @@index([cutoffAt])
+  @@index([productVersionId])
+  @@map("lottery_draws")
+}
+
+// Per-Draw Bet Type configuration snapshot. Stores the exact accepted payout,
+// stake limits, and policy references so every Draw reproduces its decisions
+// without reading live configuration.
+model LotteryDrawBetType {
+  id                       String      @id @default(uuid()) @db.Uuid
+  drawId                   String      @map("draw_id") @db.Uuid
+  betTypeId                String      @map("bet_type_id") @db.Uuid
+  betTypeCode              String      @map("bet_type_code")
+  betTypeVersionId         String      @map("bet_type_version_id") @db.Uuid
+  canonicalNumberFormat    String      @map("canonical_number_format")
+  validationPattern        String      @map("validation_pattern")
+  payout                   Json        @map("payout")
+  minStakeMinor            BigInt      @map("min_stake_minor")
+  maxStakeMinor            BigInt      @map("max_stake_minor")
+  limitPolicyRef           String      @map("limit_policy_ref")
+  restrictionPolicyRef     String      @map("restriction_policy_ref")
+  settlementRuleVersionRef String      @map("settlement_rule_version_ref")
+  createdAt                DateTime    @default(now()) @map("created_at")
+  draw                     LotteryDraw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
+  @@unique([drawId, betTypeId])
+  @@index([betTypeVersionId])
+  @@map("lottery_draw_bet_types")
+}
+
+// Versioned per-Draw Override. A Draw's effective configuration is the snapshot
+// resolved against the published override chain (see draw-override.ts); each
+// override records reason, effective time, actor and approval/audit evidence.
+model LotteryDrawOverride {
+  id                   String       @id @default(uuid()) @db.Uuid
+  drawId               String       @map("draw_id") @db.Uuid
+  supersedesOverrideId String?      @map("supersedes_override_id") @db.Uuid
+  baselineRevisionRef  String       @map("baseline_revision_ref")
+  baselineState        String       @map("baseline_state")
+  effectiveAt          DateTime     @map("effective_at")
+  reason               String
+  actorAdminId         String       @map("actor_admin_id") @db.Uuid
+  changes              Json
+  diff                 Json
+  impact               Json
+  payloadDigest        String       @map("payload_digest")
+  approvalEvidenceRef  String?      @map("approval_evidence_ref")
+  auditEvidenceRef     String?      @map("audit_evidence_ref")
+  status               String       @default("PROPOSED")
+  publishedAt          DateTime?    @map("published_at")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+  draw                 LotteryDraw  @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  supersedes           LotteryDrawOverride? @relation("LotteryDrawOverrideChain", fields: [supersedesOverrideId], references: [id], onDelete: Restrict)
+  supersededBy         LotteryDrawOverride[] @relation("LotteryDrawOverrideChain")
+
+  @@unique([drawId, payloadDigest])
+  @@index([drawId])
+  @@index([effectiveAt])
+  @@map("lottery_draw_overrides")
 }
 
 model IdempotencyRecord {
