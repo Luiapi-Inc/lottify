@@ -105,6 +105,8 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
         "lottery-configuration.create",
         "lottery-configuration.submit",
         "lottery-configuration.approve",
+        "lottery-draw.read",
+        "lottery-draw.manage",
       ],
     });
 
@@ -176,6 +178,7 @@ describe.runIf(runIntegration)("Admin auth integration", () => {
     expect(context.capabilities).toEqual([
       "accounting-period.read",
       "lottery-configuration.read",
+      "lottery-draw.read",
     ]);
   });
 
