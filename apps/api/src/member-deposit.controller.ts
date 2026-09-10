@@ -26,6 +26,7 @@ import { z, type ZodType } from "zod";
 import { DepositService } from "../../../src/contexts/payments/application/deposit.service";
 import { DepositError, type Deposit } from "../../../src/contexts/payments/domain/deposit";
 import { currentCorrelationId } from "./correlation";
+import { DepositMethodService } from "./deposit-method.service";
 import {
   MemberAuthGuard,
   type MemberAuthenticatedRequest,
@@ -52,6 +53,25 @@ class DepositInitiateBody {
 
   @ApiProperty({ enum: ["THB"] })
   currency!: "THB";
+}
+
+class DepositMethodSummaryBody {
+  @ApiProperty({ type: String })
+  methodCode!: string;
+
+  @ApiProperty({ type: String })
+  providerCode!: string;
+}
+
+class DepositMethodDescriptionBody extends DepositMethodSummaryBody {
+  @ApiProperty({ enum: ["THB"] })
+  currency!: "THB";
+
+  @ApiProperty({ type: String, description: "Fee in integer minor units" })
+  feeMinor!: string;
+
+  @ApiProperty({ type: [String] })
+  instructions!: readonly string[];
 }
 
 class DepositBody {
@@ -101,7 +121,34 @@ export class MemberDepositController {
   constructor(
     @Inject(DepositService)
     private readonly deposits: DepositService,
+    @Inject(DepositMethodService)
+    private readonly methods: DepositMethodService,
   ) {}
+
+
+  @Get("methods")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "List deposit methods available to the Member" })
+  @ApiOkResponse({ type: [DepositMethodSummaryBody] })
+  listMethods(): readonly DepositMethodSummaryBody[] {
+    return this.methods.list();
+  }
+
+  @Get("methods/:code")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Describe one deposit method including fee and payment instructions" })
+  @ApiOkResponse({ type: DepositMethodDescriptionBody })
+  describeMethod(@Param("code") code: string): DepositMethodDescriptionBody {
+    const method = this.methods.describe(code);
+    if (!method) {
+      throw new NotFoundException({
+        code: "DEPOSIT_METHOD_NOT_FOUND",
+        message: "Deposit method was not found",
+        details: {},
+      });
+    }
+    return { ...method, feeMinor: method.feeMinor.toString() };
+  }
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)

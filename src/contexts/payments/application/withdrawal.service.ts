@@ -60,6 +60,24 @@ export interface CreateWithdrawalCommand {
   idempotencyKey: string;
 }
 
+export interface WithdrawalPreflightCommand {
+  payoutDestinationId: string;
+  amountMinor: bigint;
+  currency: PaymentCurrency;
+}
+
+export interface WithdrawalPreflightDecision {
+  balanceReady: boolean;
+  availableMinor: bigint;
+  minValid: boolean;
+  maxValid: boolean;
+  outcome: WithdrawalEligibilityDecision["outcome"];
+  reasonCodes: readonly string[];
+  policyVersion: string;
+  evaluatedAt: Date;
+  validUntil: Date;
+}
+
 export interface AdminWithdrawalDecisionCommand {
   adminId: string;
   reason: string;
@@ -236,6 +254,40 @@ export class WithdrawalService {
       {},
       { actorType: "SYSTEM", correlationId: correlation },
     );
+  }
+
+  async preflightWithdrawal(
+    memberId: string,
+    command: WithdrawalPreflightCommand,
+  ): Promise<WithdrawalPreflightDecision> {
+    validateWithdrawalInitiation(command);
+    const destination = await this.destinations.findById(command.payoutDestinationId);
+    if (!destination || destination.memberId !== memberId) {
+      throw new WithdrawalError(
+        "PAYOUT_DESTINATION_NOT_ELIGIBLE",
+        "Payout Destination is not linked to this Member",
+      );
+    }
+    const decision = await this.evaluateEligibility(memberId, destination);
+    const availableMinor = await this.ledger.getWithdrawalAvailableMinor({
+      memberId,
+      currency: command.currency,
+    });
+    const balanceReady = availableMinor >= command.amountMinor;
+    const reasonCodes = balanceReady
+      ? decision.reasonCodes
+      : [...decision.reasonCodes.filter((code) => code !== "ELIGIBLE"), "INSUFFICIENT_FUNDS"];
+    return {
+      balanceReady,
+      availableMinor,
+      minValid: true,
+      maxValid: true,
+      outcome: balanceReady ? decision.outcome : "DENY",
+      reasonCodes,
+      policyVersion: decision.policyVersion,
+      evaluatedAt: decision.evaluatedAt,
+      validUntil: decision.validUntil,
+    };
   }
 
   async getWithdrawal(memberId: string, withdrawalId: string): Promise<WithdrawalRecord> {

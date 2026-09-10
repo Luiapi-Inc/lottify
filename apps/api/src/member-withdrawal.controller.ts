@@ -67,6 +67,35 @@ class CreateWithdrawalBody {
   currency!: "THB";
 }
 
+class WithdrawalPreflightBody {
+  @ApiProperty({ type: Boolean })
+  balanceReady!: boolean;
+
+  @ApiProperty({ type: String, description: "Authoritative available CASH in integer minor units" })
+  availableMinor!: string;
+
+  @ApiProperty({ type: Boolean })
+  minValid!: boolean;
+
+  @ApiProperty({ type: Boolean })
+  maxValid!: boolean;
+
+  @ApiProperty({ enum: ["ALLOW", "REVIEW_REQUIRED", "DENY"] })
+  outcome!: string;
+
+  @ApiProperty({ type: [String] })
+  reasonCodes!: readonly string[];
+
+  @ApiProperty({ type: String })
+  policyVersion!: string;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  evaluatedAt!: Date;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  validUntil!: Date;
+}
+
 class WithdrawalBody {
   @ApiProperty({ type: String })
   id!: string;
@@ -164,6 +193,29 @@ export class MemberWithdrawalController {
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
   ) {}
+
+
+  @Post("preflight")
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Evaluate withdrawal readiness without creating a Withdrawal or reserving funds" })
+  @ApiBody({ type: CreateWithdrawalBody })
+  @ApiOkResponse({ type: WithdrawalPreflightBody })
+  async preflight(
+    @Req() request: MemberAuthenticatedRequest,
+    @Body() body: CreateWithdrawalBody,
+  ): Promise<WithdrawalPreflightBody> {
+    const input = parseBody(createWithdrawalSchema, body);
+    try {
+      const decision = await this.withdrawals.preflightWithdrawal(
+        request.memberAuth!.memberId,
+        input,
+      );
+      return { ...decision, availableMinor: decision.availableMinor.toString() };
+    } catch (error) {
+      throw mapWithdrawalError(error);
+    }
+  }
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)

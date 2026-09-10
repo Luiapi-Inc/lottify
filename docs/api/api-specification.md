@@ -122,6 +122,20 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 <a id="member--deposits"></a>
 ### `/member/deposits`
 
+#### `GET /api/v1/member/deposits/methods`
+
+*List deposit methods available to the Member for deposit discovery*
+
+- **Responses:**
+  - `200` → array<`DepositMethodSummaryBody`>
+
+#### `GET /api/v1/member/deposits/methods/{code}`
+
+*Describe one deposit method including the v1 fee quote and payment instructions*
+
+- **Responses:**
+  - `200` → `DepositMethodDescriptionBody`
+
 #### `POST /api/v1/member/deposits`
 
 - **Request** `application/json`: `DepositInitiateBody`
@@ -469,6 +483,15 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 <a id="member--withdrawals"></a>
 ### `/member/withdrawals`
+
+#### `POST /api/v1/member/withdrawals/preflight`
+
+*Evaluate destination eligibility and authoritative CASH balance readiness without creating a Withdrawal or reserving funds*
+
+- **Request** `application/json`: `CreateWithdrawalBody`
+
+- **Responses:**
+  - `200` → `WithdrawalPreflightBody`
 
 #### `POST /api/v1/member/withdrawals`
 

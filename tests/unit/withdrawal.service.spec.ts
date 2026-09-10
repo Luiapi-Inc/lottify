@@ -208,6 +208,11 @@ class RecordingLedger implements WithdrawalLedgerPort {
   readonly releases: string[] = [];
   readonly finalizations: string[] = [];
   fundsUnavailableFor = new Set<string>();
+  availableMinor = 1_000_00n;
+
+  async getWithdrawalAvailableMinor(): Promise<bigint> {
+    return this.availableMinor;
+  }
 
   async reserveWithdrawal(input: {
     withdrawalId: string;
@@ -293,6 +298,27 @@ describe("WithdrawalService", () => {
       "corr-1",
     );
   }
+
+  it("preflights withdrawal eligibility and authoritative balance without side effects", async () => {
+    ledger.availableMinor = 50_00n;
+
+    const decision = await service.preflightWithdrawal("member-1", {
+      payoutDestinationId: payoutTarget.id,
+      amountMinor: 60_00n,
+      currency: "THB",
+    });
+
+    expect(decision).toMatchObject({
+      balanceReady: false,
+      availableMinor: 50_00n,
+      minValid: true,
+      maxValid: true,
+      outcome: "DENY",
+    });
+    expect(decision.reasonCodes).toContain("INSUFFICIENT_FUNDS");
+    expect(withdrawals.rows.size).toBe(0);
+    expect(ledger.reservations.size).toBe(0);
+  });
 
   it("reserves the authoritative funds and fast-paths an eligible withdrawal to APPROVED", async () => {
     const withdrawal = await create();

@@ -62,6 +62,7 @@ describe("Member Withdrawal & Payout Destination API contract", () => {
     expect(spec.paths["/api/v1/member/payout-destinations/{id}"]?.get).toBeDefined();
     expect(spec.paths["/api/v1/member/payout-destinations/{id}/verify"]?.post).toBeDefined();
     expect(spec.paths["/api/v1/member/withdrawals"]?.post).toBeDefined();
+    expect(spec.paths["/api/v1/member/withdrawals/preflight"]?.post).toBeDefined();
     expect(spec.paths["/api/v1/member/withdrawals"]?.get).toBeDefined();
     expect(spec.paths["/api/v1/member/withdrawals/{id}"]?.get).toBeDefined();
     expect(spec.paths["/api/v1/member/withdrawals/{id}/cancel"]?.post).toBeDefined();
