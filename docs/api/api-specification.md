@@ -2,9 +2,9 @@
 
 Generated from the live OpenAPI 3.0.0 contract (`apps/api/openapi/openapi.json`).
 
-**100 paths · 108 operations · 120 schemas**
+**101 paths · 109 operations · 121 schemas**
 
-Source: `main @ e2cf283` · generated 2026-09-10 17:30 (+07)
+Source: `main @ 3d0c738` · generated 2026-09-10 17:49 (+07)
 
 ---
 ## Contents
@@ -200,6 +200,19 @@ Source: `main @ e2cf283` · generated 2026-09-10 17:30 (+07)
 
 <a id="member--orders"></a>
 ### `/member/orders`
+
+#### `GET /api/v1/member/orders`
+
+*List the Member's own Bet Orders (my slips)*
+
+| param | in | type | required |
+|---|---|---|---|
+| `state` | query | string | no |
+| `cursor` | query | string | no |
+| `limit` | query | number | no |
+
+- **Responses:**
+  - `200` → `BetOrderListBody`
 
 #### `GET /api/v1/member/orders/{id}`
 
@@ -1181,15 +1194,15 @@ Source: `main @ e2cf283` · generated 2026-09-10 17:30 (+07)
   - Admin: password + mandatory TOTP MFA; `auth/reauth` yields fresh-MFA evidence; `auth/revoke-all` kills admin sessions.
 - **Idempotency** — critical mutations require `Idempotency-Key`. Same key + same payload → prior result; changed payload → `IDEMPOTENCY_CONFLICT`.
 - **Optimistic concurrency** — versioned aggregates return `version` + `allowedActions`; stale writes → `VERSION_CONFLICT`.
-- **Pagination** — deterministic keyset/cursor with stable sort; allowlisted filters per resource.
-- **Member visibility** — Member discovery only ever exposes PUBLISHED lottery configuration; a Product/Bet Type with no PUBLISHED version is not part of the Member catalog.
+- **Pagination** — deterministic keyset/cursor over `(createdAt DESC, id DESC)` with a stable tie-breaker; allowlisted filters per resource.
+- **Member visibility** — Member discovery only ever exposes PUBLISHED lottery configuration; a Product/Bet Type with no PUBLISHED version is not part of the Member catalog. History reads return only the requesting Member's own rows.
 - **Time** — half-open `[from,to)`; server-authoritative instants; read models expose `dataAsOf`/`generatedAt` + completeness state.
 - **Status codes** — 400 validation · 401 no auth · 403 capability denied · 404 missing · 409 idempotency/version conflict · 429 rate limit.
 
 
 ## Schemas
 
-120 component schemas (full definitions in the OpenAPI document).
+121 component schemas (full definitions in the OpenAPI document).
 
 | schema | shape |
 |---|---|
@@ -1235,6 +1248,7 @@ Source: `main @ e2cf283` · generated 2026-09-10 17:30 (+07)
 | `BetOrderBody` | object · 25 fields · required: id, memberId, quoteId, drawId, productId, productVersionId |
 | `BetOrderCommandBody` | object · 2 fields · required: version |
 | `BetOrderLineBody` | object · 8 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
+| `BetOrderListBody` | object · 2 fields · required: items, nextCursor |
 | `BetReceiptBody` | object · 7 fields · required: id, orderId, memberId, orderVersion, contentDigest, terms |
 | `BetReceiptLineBody` | object · 5 fields · required: betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
 | `BetReceiptTermsBody` | object · 9 fields · required: productId, productVersionId, drawReference, drawCutoffAt, currency, totalStakeMinor |

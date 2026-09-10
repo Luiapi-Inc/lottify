@@ -131,6 +131,20 @@ export interface BetReceiptView {
   readonly issuedAt: Date;
 }
 
+/**
+ * Keyset cursor for the Member's own Bet Order history: the unique
+ * (createdAt, id) position of the last item on the previous page.
+ */
+export interface BetOrderCursor {
+  readonly createdAt: Date;
+  readonly id: string;
+}
+
+export interface BetOrderListPage {
+  readonly items: readonly BetOrderView[];
+  readonly nextCursor: BetOrderCursor | null;
+}
+
 type BetOrderRow = Prisma.BetOrderGetPayload<{ include: { lines: true; receipt: true } }>;
 
 const ORDER_RELATIONS = { lines: true, receipt: true } as const;
@@ -290,6 +304,49 @@ export class BettingOrderService {
       );
     }
     return toReceiptView(receipt);
+  }
+
+  /**
+   * The Member's own Bet Order history ("my slips"). Keyset pagination over
+   * (createdAt DESC, id DESC) — a stable, deterministic sort with a unique
+   * tie-breaker per Ticket 10, matching the `[memberId, createdAt]` index. Only
+   * Orders owned by the requesting Member are ever returned.
+   */
+  async listOrders(
+    memberId: string,
+    input: { limit?: number; cursor?: BetOrderCursor | null; state?: BetOrderState } = {},
+  ): Promise<BetOrderListPage> {
+    const limit = boundedOrderLimit(input.limit);
+    const rows = await this.prisma.betOrder.findMany({
+      where: {
+        memberId,
+        ...(input.state ? { state: input.state } : {}),
+        ...(input.cursor
+          ? {
+              OR: [
+                { createdAt: { lt: input.cursor.createdAt } },
+                {
+                  createdAt: input.cursor.createdAt,
+                  id: { lt: input.cursor.id },
+                },
+              ],
+            }
+          : {}),
+      },
+      include: ORDER_RELATIONS,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      items: page.map((row) => this.toView(row)),
+      nextCursor:
+        rows.length > limit && last
+          ? { createdAt: last.createdAt, id: last.id }
+          : null,
+    };
   }
 
   /**
@@ -781,6 +838,24 @@ export function orderFingerprint(input: { memberId: string; quoteId: string }): 
   return createHash("sha256")
     .update(JSON.stringify({ memberId: input.memberId, quoteId: input.quoteId }))
     .digest("hex");
+}
+
+/**
+ * Bounds the Member history page size the same way every other list endpoint
+ * does: an omitted limit is a default, an out-of-range one is a client error
+ * rather than a silent clamp.
+ */
+function boundedOrderLimit(limit: number | undefined): number {
+  if (limit === undefined) return 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new BettingOrderError(
+      "INVALID_STATE",
+      "limit must be an integer from 1 to 100",
+      400,
+      { field: "limit" },
+    );
+  }
+  return limit;
 }
 
 /**

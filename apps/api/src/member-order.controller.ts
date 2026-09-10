@@ -8,6 +8,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -18,6 +19,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiProperty,
+  ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
 import { randomUUID } from "node:crypto";
@@ -25,8 +27,13 @@ import { z } from "zod";
 import {
   BettingOrderError,
   BettingOrderService,
+  type BetOrderCursor,
 } from "../../../src/contexts/betting/application/betting-order.service";
-import { BetOrderCommandError } from "../../../src/contexts/betting/domain/bet-order-lifecycle";
+import {
+  BET_ORDER_STATES,
+  BetOrderCommandError,
+  type BetOrderState,
+} from "../../../src/contexts/betting/domain/bet-order-lifecycle";
 import { currentCorrelationId } from "./correlation";
 import {
   MemberAuthGuard,
@@ -158,6 +165,14 @@ class BetOrderBody {
   updatedAt!: Date;
 }
 
+class BetOrderListBody {
+  @ApiProperty({ type: [BetOrderBody] })
+  items!: BetOrderBody[];
+
+  @ApiProperty({ type: String, nullable: true })
+  nextCursor!: string | null;
+}
+
 class BetReceiptLineBody {
   @ApiProperty({ type: String })
   betTypeCode!: string;
@@ -275,6 +290,45 @@ export class MemberOrderController {
     } catch (error) {
       throw mapOrderError(error);
     }
+  }
+
+  @Get("orders")
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "List the Member's own Bet Orders (my slips)",
+    description:
+      "Deterministic keyset pagination over (createdAt DESC, id DESC). Only the requesting Member's Orders are ever returned.",
+  })
+  @ApiQuery({ name: "limit", required: false, type: Number, example: 20 })
+  @ApiQuery({ name: "cursor", required: false, type: String })
+  @ApiQuery({
+    name: "state",
+    required: false,
+    enum: [...BET_ORDER_STATES],
+    description: "Optional Bet Order state filter",
+  })
+  @ApiOkResponse({ type: BetOrderListBody })
+  async list(
+    @Req() request: MemberAuthenticatedRequest,
+    @Query() query: { limit?: string; cursor?: string; state?: string },
+  ): Promise<BetOrderListBody> {
+    const limit = query.limit === undefined ? 20 : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "limit must be an integer from 1 to 100",
+        details: { field: "limit" },
+      });
+    }
+    const page = await this.orders.listOrders(request.memberAuth!.memberId, {
+      limit,
+      cursor: query.cursor ? decodeOrderCursor(query.cursor) : null,
+      state: query.state ? parseOrderState(query.state) : undefined,
+    });
+    return {
+      items: page.items.map(toOrderBody),
+      nextCursor: page.nextCursor ? encodeOrderCursor(page.nextCursor) : null,
+    };
   }
 
   @Get("orders/:id")
@@ -477,6 +531,46 @@ function parseCommandBody(value: unknown): z.infer<typeof commandSchema> {
     });
   }
   return parsed.data;
+}
+
+function parseOrderState(value: string): BetOrderState {
+  if (!BET_ORDER_STATES.includes(value as BetOrderState)) {
+    throw new BadRequestException({
+      code: "VALIDATION_ERROR",
+      message: "state must be a valid Bet Order state",
+      details: { field: "state" },
+    });
+  }
+  return value as BetOrderState;
+}
+
+export function encodeOrderCursor(cursor: BetOrderCursor): string {
+  return Buffer.from(
+    JSON.stringify({ createdAt: cursor.createdAt.toISOString(), id: cursor.id }),
+    "utf8",
+  ).toString("base64url");
+}
+
+export function decodeOrderCursor(value: string): BetOrderCursor {
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8"),
+    ) as { createdAt?: unknown; id?: unknown };
+    if (typeof decoded.createdAt !== "string" || typeof decoded.id !== "string") {
+      throw new Error("cursor fields are missing");
+    }
+    const createdAt = new Date(decoded.createdAt);
+    if (Number.isNaN(createdAt.getTime()) || !decoded.id.trim()) {
+      throw new Error("cursor fields are invalid");
+    }
+    return { createdAt, id: decoded.id };
+  } catch {
+    throw new BadRequestException({
+      code: "VALIDATION_ERROR",
+      message: "cursor is invalid",
+      details: { field: "cursor" },
+    });
+  }
 }
 
 function mapOrderError(error: unknown): HttpException {
