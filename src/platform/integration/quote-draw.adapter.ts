@@ -22,6 +22,7 @@ import type {
 import type { DrawState } from "../../contexts/lottery/domain/draw-lifecycle";
 import {
   resolveDrawOverrideConfiguration,
+  revivePersistedDrawOverrideChanges,
   type DrawBetTypeOverrideBaseline,
   type DrawOverrideBaseline,
   type PublishedDrawOverride,
@@ -67,7 +68,7 @@ export class BettingQuoteDrawAdapter implements BettingQuoteDrawPort {
         effectiveAt: row.effectiveAt,
         reason: row.reason,
         actorId: row.actorAdminId,
-        changes: row.changes as unknown as PublishedDrawOverride<unknown, RestrictionRecord>["changes"],
+        changes: revivePersistedDrawOverrideChanges<unknown, RestrictionRecord>(row.changes),
         diff: row.diff as unknown as PublishedDrawOverride<unknown, RestrictionRecord>["diff"],
         impact: row.impact as unknown as PublishedDrawOverride<unknown, RestrictionRecord>["impact"],
         payloadDigest: row.payloadDigest,

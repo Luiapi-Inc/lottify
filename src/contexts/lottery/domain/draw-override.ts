@@ -70,6 +70,39 @@ export interface DrawOverrideChanges<TPayout, TRestriction> {
   readonly invalidateExistingQuotes?: boolean;
 }
 
+/**
+ * Revives a persisted Draw Override change set. Overrides are stored as JSON, so
+ * every instant (`drawAt`, `cutoffAt`) comes back as a string; a reader of a
+ * persisted Override must restore them before the resolution rules run, or a
+ * cutoff/draw-time change silently breaks the effective Draw configuration.
+ */
+export function revivePersistedDrawOverrideChanges<TPayout, TRestriction>(
+  persisted: unknown,
+): DrawOverrideChanges<TPayout, TRestriction> {
+  if (persisted === null || persisted === undefined) {
+    return {};
+  }
+  const changes = persisted as DrawOverrideChanges<unknown, unknown>;
+  return {
+    ...(changes as DrawOverrideChanges<TPayout, TRestriction>),
+    ...(changes.drawAt === undefined
+      ? {}
+      : { drawAt: revivePersistedInstant("Draw Override drawAt", changes.drawAt) }),
+    ...(changes.cutoffAt === undefined
+      ? {}
+      : { cutoffAt: revivePersistedInstant("Draw Override cutoffAt", changes.cutoffAt) }),
+  };
+}
+
+function revivePersistedInstant(label: string, value: unknown): Date {
+  if (value instanceof Date) return cloneDate(value);
+  if (typeof value === "string" || typeof value === "number") {
+    const instant = new Date(value);
+    if (Number.isFinite(instant.getTime())) return instant;
+  }
+  throw new DrawOverrideRuleError("INVALID_INPUT", `${label} must be a valid instant`);
+}
+
 export type DrawOverrideDiffField =
   | "DRAW_AT"
   | "CUTOFF_AT"
