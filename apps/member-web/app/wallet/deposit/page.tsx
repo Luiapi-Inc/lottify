@@ -26,7 +26,7 @@ export default function DepositPage() {
   const feeMinor = minorToNumber(description?.feeMinor);
   const amountMinor = bahtToMinor(amount);
   const totalMinor = amountMinor + feeMinor;
-  const canSubmit = Boolean(selectedMethod && description && amountMinor >= 10000 && !submitting);
+  const canSubmit = Boolean(selectedMethod && description && amountMinor > 0 && !submitting);
 
   useEffect(() => {
     let active = true;

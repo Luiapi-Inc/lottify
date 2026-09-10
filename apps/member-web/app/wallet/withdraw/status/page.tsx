@@ -46,7 +46,7 @@ function WithdrawStatusInner() {
   }, [refresh, withdrawal]);
 
   const copy = useMemo(() => withdrawal ? withdrawalCopy(withdrawal) : null, [withdrawal]);
-  const canCancel = withdrawal ? hasMemberCancelAction(withdrawal.allowedActions) : false;
+  const canCancel = Boolean(withdrawal && cancellableStates.has(withdrawal.state) && hasMemberCancelAction(withdrawal.allowedActions));
 
   const cancel = async () => {
     if (!withdrawal || !canCancel || cancelling) return;
@@ -109,6 +109,13 @@ function withdrawalCopy(withdrawal: Withdrawal): {
   if (withdrawal.state === "PAYOUT_CONFIRMED" || withdrawal.state === "FINALIZING") return { badge: "กำลังบันทึกผล", badgeClass: "is-pending", title: "ยืนยันการจ่ายเงินแล้ว กำลังปิดรายการ", message: "มีผลการจ่ายเงินที่ยืนยันได้แล้ว ระบบกำลังบันทึกผลทางการเงินให้ครบก่อนแสดงว่าสำเร็จ", noteClass: "", noteTitle: "ยังไม่ถือว่ารายการเสร็จสมบูรณ์", note: "สถานะจะเปลี่ยนเป็นสำเร็จหลังการบันทึกยอดของรายการครบถ้วนแล้ว", steps: [["done", "ส่งคำขอและพักยอดแล้ว", amount], ["done", "ยืนยันผลการจ่ายเงินแล้ว", "มีหลักฐานผลการจ่ายเงินของรายการ"], ["current", "กำลังบันทึกยอด", "รอการยืนยันผลทางการเงินขั้นสุดท้าย"], ["future", "ถอนเงินสำเร็จ", "รายการปิดเมื่อทุกขั้นตอนครบ"]] };
   return { badge: "กำลังดำเนินการ", badgeClass: "is-pending", title: "กำลังดำเนินการถอนเงิน", message: `คำขอถูกบันทึกแล้วและยอด ${amount} อยู่ระหว่างกระบวนการถอนเงิน`, noteClass: "", noteTitle: "ยังไม่ถือว่าถอนเงินสำเร็จ", note: "รายการจะสำเร็จเมื่อมีหลักฐานการจ่ายเงินและการบันทึกยอดเสร็จครบถ้วนแล้วเท่านั้น", steps: [["done", "ส่งคำขอแล้ว", amount], ["current", "กำลังดำเนินการ", stateLabel(withdrawal.state)], ["future", "ยืนยันผลการจ่ายเงิน", "ยังไม่สรุปว่าสำเร็จก่อนยืนยันผล"], ["future", "บันทึกยอดและปิดรายการ", "ต้องครบทั้งผลการจ่ายเงินและผลทางการเงิน"]] };
 }
+
+const cancellableStates: ReadonlySet<Withdrawal["state"]> = new Set([
+  "REQUESTED",
+  "RESERVING",
+  "REVIEWING",
+  "APPROVED",
+]);
 
 function hasMemberCancelAction(allowedActions: Withdrawal["allowedActions"]): boolean {
   const value: unknown = allowedActions;
