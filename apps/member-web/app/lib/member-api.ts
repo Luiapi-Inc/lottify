@@ -28,6 +28,9 @@ export type WithdrawalList = Schema<"WithdrawalListBody">;
 export type PayoutDestination = Schema<"PayoutDestinationBody">;
 export type PayoutDestinationList = Schema<"PayoutDestinationListBody">;
 
+export type WalletBalance = Schema<"WalletBalanceBody">;
+export type BetOrderList = Schema<"BetOrderListBody">;
+export type PromotionDiscovery = Schema<"PromotionDiscoveryBody">;
 export type MemberProductPage = Schema<"MemberProductPageBody">;
 export type MemberDrawPage = Schema<"MemberDrawPageBody">;
 export type MemberDraw = Schema<"MemberDrawDetailBody">;
@@ -116,6 +119,18 @@ class MemberApiClient {
 
   getReadiness(): Promise<MemberReadinessResponse> {
     return this.request<MemberReadinessResponse>("readiness");
+  }
+
+  getWallet(): Promise<WalletBalance> {
+    return this.request<WalletBalance>("wallet");
+  }
+
+  getOrders(limit = 3): Promise<BetOrderList> {
+    return this.request<BetOrderList>(`orders?limit=${limit}`);
+  }
+
+  getPromotions(): Promise<PromotionDiscovery> {
+    return this.request<PromotionDiscovery>("promotions");
   }
 
   listDepositMethods(): Promise<DepositMethodSummary[]> {
