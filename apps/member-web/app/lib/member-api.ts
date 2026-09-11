@@ -3,109 +3,18 @@ import type { components } from "@lottify/contracts";
 type Schema<Name extends keyof components["schemas"]> = components["schemas"][Name];
 
 export type MemberAuthPurpose = "LOGIN" | "REGISTER";
-
-export interface OtpRequestResponse {
-  purpose: MemberAuthPurpose;
-  deliveredTo: string;
-  retryAfterSeconds: number | null;
-}
-
-export interface MemberSessionResponse {
-  accessToken: string;
-  memberId: string;
-  accountCreated: boolean;
-  deviceId: string | null;
-}
-
-export interface RequiredTerms {
-  documentId: string;
-  code: string;
-  version: number;
-  title: string;
-  body: string;
-  contentDigest: string;
-  policyVersion: string;
-  effectiveFrom: string;
-  effectiveUntil: string | null;
-  accepted: boolean;
-  acceptedAt: string | null;
-  acceptanceId: string | null;
-}
-
-export interface MemberTermsResponse {
-  memberId: string;
-  asOf: string;
-  required: RequiredTerms[];
-  acceptances: Array<{
-    id: string;
-    memberId: string;
-    documentId: string;
-    documentCode: string;
-    documentVersion: number;
-    contentDigest: string;
-    source: string;
-    acceptedAt: string;
-  }>;
-  satisfied: boolean;
-}
-
-export interface MemberProfileResponse {
-  memberId: string;
-  phone: string;
-  fullName: string | null;
-  dateOfBirth: string | null;
-  province: string | null;
-  profileUpdatedAt: string | null;
-  mandatoryFields: string[];
-  missingMandatoryFields: string[];
-  profileComplete: boolean;
-}
-
-export interface MemberProfilePatch {
-  fullName?: string | null;
-  dateOfBirth?: string | null;
-  province?: string | null;
-}
-
-export type ReadinessCapability = "BET" | "WITHDRAWAL" | "DEPOSIT" | "PROMOTION";
-export type EligibilityOutcome =
-  | "ALLOW"
-  | "DENY"
-  | "REVIEW_REQUIRED"
-  | "CHALLENGE/REAUTH_REQUIRED";
-export type KycReadinessStatus =
-  | "VERIFIED"
-  | "REJECTED"
-  | "REVIEW_REQUIRED"
-  | "MORE_INFO_REQUIRED"
-  | null;
-
-export interface CapabilityReadiness {
-  capability: ReadinessCapability;
-  outcome: EligibilityOutcome;
-  reasonCodes: string[];
-  evaluatedAt: string;
-  validUntil: string;
-}
-
-export interface MemberReadinessResponse {
-  memberId: string;
-  asOf: string;
-  policyVersion: string;
-  capabilities: CapabilityReadiness[];
-  requirements: {
-    termsSatisfied: boolean;
-    profileComplete: boolean;
-    missingProfileFields: Array<"fullName" | "dateOfBirth" | "province">;
-    kyc: {
-      required: boolean;
-      status: KycReadinessStatus;
-      verified: boolean;
-      expired: boolean;
-    };
-    outstandingRequirements: string[];
-  };
-}
+export type OtpRequestResponse = Schema<"OtpRequestResponse">;
+export type MemberSessionResponse = Schema<"MemberSessionResponse">;
+export type RequiredTerms = Schema<"RequiredTermsBody">;
+export type MemberTermsResponse = Schema<"MemberTermsBody">;
+export type AcceptTermsResponse = Schema<"AcceptTermsBody">;
+export type MemberProfileResponse = Schema<"MemberProfileBody">;
+export type MemberProfilePatch = Schema<"UpdateMemberProfileBody">;
+export type CapabilityReadiness = Schema<"CapabilityReadinessBody">;
+export type ReadinessCapability = CapabilityReadiness["capability"];
+export type EligibilityOutcome = CapabilityReadiness["outcome"];
+export type KycReadinessStatus = Schema<"KycReadinessBody">["status"];
+export type MemberReadinessResponse = Schema<"MemberReadinessBody">;
 
 export type DepositMethodSummary = Schema<"DepositMethodSummaryBody">;
 export type DepositMethodDescription = Schema<"DepositMethodDescriptionBody">;
@@ -167,8 +76,8 @@ class MemberApiClient {
     return this.request<MemberTermsResponse>("terms");
   }
 
-  acceptTerms(documentId: string): Promise<unknown> {
-    return this.request("terms/accept", {
+  acceptTerms(documentId: string): Promise<AcceptTermsResponse> {
+    return this.request<AcceptTermsResponse>("terms/accept", {
       method: "POST",
       body: { documentId },
       idempotencyKey: createIdempotencyKey(),
