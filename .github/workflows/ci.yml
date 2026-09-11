@@ -45,6 +45,8 @@ jobs:
         with:
           node-version: 24.20.0
           cache: pnpm
+      - name: Validate operational scripts
+        run: bash -n infra/ops/postgres-pitr/*.sh
       - name: Scan repository secrets
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
