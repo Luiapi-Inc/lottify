@@ -5,6 +5,7 @@ type Schema<Name extends keyof components["schemas"]> = components["schemas"][Na
 export type MemberAuthPurpose = "LOGIN" | "REGISTER";
 export type OtpRequestResponse = Schema<"OtpRequestResponse">;
 export type MemberSessionResponse = Schema<"MemberSessionResponse">;
+export type MemberRefreshResponse = Schema<"MemberRefreshResponse">;
 export type RequiredTerms = Schema<"RequiredTermsBody">;
 export type MemberTermsResponse = Schema<"MemberTermsBody">;
 export type AcceptTermsResponse = Schema<"AcceptTermsBody">;
@@ -169,7 +170,7 @@ class MemberApiClient {
 
   private refresh(): Promise<string> {
     if (!this.refreshing) {
-      this.refreshing = this.publicRequest<{ accessToken: string }>("auth/refresh", {})
+      this.refreshing = this.publicRequest<MemberRefreshResponse>("auth/refresh", {})
         .then(({ accessToken }) => {
           this.accessToken = accessToken;
           return accessToken;
