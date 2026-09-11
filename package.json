@@ -26,7 +26,8 @@
     "prisma:migrate:status": "prisma migrate status",
     "openapi:spec": "tsx apps/api/scripts/generate-openapi.ts",
     "openapi:client": "openapi-typescript apps/api/openapi/openapi.json -o packages/contracts/src/generated/api.ts",
-    "openapi:generate": "pnpm openapi:spec && pnpm openapi:client",
+    "openapi:docs": "node apps/api/scripts/generate-api-docs.mjs",
+    "openapi:generate": "pnpm openapi:spec && pnpm openapi:client && pnpm openapi:docs",
     "check": "pnpm prisma:generate && pnpm openapi:generate && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
