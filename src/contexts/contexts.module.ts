@@ -12,8 +12,10 @@ import { DepositService } from "./payments/application/deposit.service";
 import { WithdrawalService } from "./payments/application/withdrawal.service";
 import { PayoutDestinationService } from "./payments/application/payout-destination.service";
 import { DEPOSIT_LEDGER_PORT } from "./payments/application/deposit-ledger.port";
+import { BettingQuoteService } from "./betting/application/betting-quote.service";
 import { BettingOrderService } from "./betting/application/betting-order.service";
 import { BET_ORDER_WALLET_PORT } from "./betting/application/betting-order-wallet.port";
+import { BETTING_ELIGIBILITY_PORT } from "./betting/application/betting-eligibility.port";
 import { SettlementService } from "./result-settlement/application/settlement.service";
 import {
   SETTLEMENT_DRAW_PORT,
@@ -47,6 +49,7 @@ import { PromotionLedgerAdapter } from "../platform/integration/promotion-ledger
 import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-member-facts.adapter";
 import { CapabilityRestrictionAdapter } from "../platform/integration/capability-restriction.adapter";
 import { MemberReadinessFactsAdapter } from "../platform/integration/member-readiness-facts.adapter";
+import { BettingEligibilityAdapter } from "../platform/integration/betting-eligibility.adapter";
 import { CAPABILITY_RESTRICTION_PORT } from "./kyc-risk/application/capability-restriction.port";
 import { MEMBER_READINESS_FACTS_PORT } from "./kyc-risk/application/member-readiness-facts.port";
 import { EligibilityService } from "./kyc-risk/application/eligibility.service";
@@ -92,6 +95,12 @@ import { CapabilityRestrictionAdminService } from "./member/application/capabili
       provide: BET_ORDER_WALLET_PORT,
       useExisting: BetOrderWalletAdapter,
     },
+    BettingEligibilityAdapter,
+    {
+      provide: BETTING_ELIGIBILITY_PORT,
+      useExisting: BettingEligibilityAdapter,
+    },
+    BettingQuoteService,
     BettingOrderService,
     // Result & Settlement orchestration lives here (not in ResultSettlementModule)
     // so the settlement -> lottery draw, wallet-ledger and betting-orders port
@@ -182,6 +191,7 @@ import { CapabilityRestrictionAdminService } from "./member/application/capabili
     // modules keeps a single instance per service instead of duplicating providers.
     AuditModule,
     AdminApprovalModule,
+    BettingQuoteService,
     BettingOrderService,
     SettlementService,
   ],

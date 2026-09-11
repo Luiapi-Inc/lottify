@@ -23,8 +23,13 @@ import {
   BETTING_QUOTE_DRAW_PORT,
   type BettingQuoteDrawPort,
 } from "./betting-quote-draw.port";
+import {
+  BETTING_ELIGIBILITY_PORT,
+  type BettingEligibilityPort,
+} from "./betting-eligibility.port";
 
 export type BettingQuoteErrorCode =
+  | "MEMBER_NOT_ELIGIBLE"
   | "DRAW_NOT_FOUND"
   | "DRAW_NOT_OPEN"
   | "QUOTE_CUTOFF_REACHED"
@@ -76,6 +81,7 @@ export class BettingQuoteService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(BETTING_QUOTE_DRAW_PORT) private readonly drawSource: BettingQuoteDrawPort,
+    @Inject(BETTING_ELIGIBILITY_PORT) private readonly eligibility: BettingEligibilityPort,
   ) {}
 
   now(): Date {
@@ -150,6 +156,23 @@ export class BettingQuoteService {
         );
       }
       return this.toQuote(existing, serverNow);
+    }
+
+    const eligibility = await this.eligibility.evaluate(input.memberId, serverNow);
+    if (eligibility.outcome !== "ALLOW") {
+      throw new BettingQuoteError(
+        "MEMBER_NOT_ELIGIBLE",
+        "Member is not eligible to create a betting Quote",
+        403,
+        {
+          outcome: eligibility.outcome,
+          reasonCodes: [...eligibility.reasonCodes],
+          policyVersion: eligibility.policyVersion,
+          ...(eligibility.evidenceRefs
+            ? { evidenceRefs: [...eligibility.evidenceRefs] }
+            : {}),
+        },
+      );
     }
 
     // Load the Draw + effective (override-resolved) configuration through the port.

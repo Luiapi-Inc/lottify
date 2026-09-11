@@ -41,6 +41,10 @@ import {
   type BettingQuoteDrawPort,
 } from "./betting-quote-draw.port";
 import {
+  BETTING_ELIGIBILITY_PORT,
+  type BettingEligibilityPort,
+} from "./betting-eligibility.port";
+import {
   BET_ORDER_WALLET_PORT,
   BetOrderWalletError,
   type BetOrderWalletPort,
@@ -155,6 +159,7 @@ export class BettingOrderService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(BETTING_QUOTE_DRAW_PORT) private readonly drawSource: BettingQuoteDrawPort,
     @Inject(BET_ORDER_WALLET_PORT) private readonly wallet: BetOrderWalletPort,
+    @Inject(BETTING_ELIGIBILITY_PORT) private readonly eligibility: BettingEligibilityPort,
   ) {}
 
   now(): Date {
@@ -485,6 +490,9 @@ export class BettingOrderService {
     if (serverNow.getTime() >= order.quoteExpiresAt.getTime()) {
       return "QUOTE_EXPIRED";
     }
+
+    const eligibility = await this.eligibility.evaluate(order.memberId, serverNow);
+    if (eligibility.outcome !== "ALLOW") return "MEMBER_NOT_ELIGIBLE";
 
     const effective = await this.drawSource.loadEffectiveDraw(order.drawId, serverNow);
     if (!effective) return "DRAW_NOT_FOUND";
