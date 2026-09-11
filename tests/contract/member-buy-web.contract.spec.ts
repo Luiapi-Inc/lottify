@@ -9,20 +9,24 @@ function source(path: string): string {
 const demoMarkers = [
   "02:00:34",
   "05:14:00",
+  "12,450.00",
+  "สมาชิกใหม่ รับโบนัส 100 บาท",
+  "1 โพย · 6 รายการ",
   "QT-20260910",
   "ORD-20260910",
   "ทดสอบสถานะ Quote",
   "จำลองคืนเงินสำเร็จ",
 ];
 
-describe("Member buy web live-data contract", () => {
+describe("Member dashboard and buy web live-data contract", () => {
+  const home = source("apps/member-web/app/page.tsx");
   const buy = source("apps/member-web/app/buy/page.tsx");
   const bet = source("apps/member-web/app/buy/bet/bet-editor.tsx");
   const quote = source("apps/member-web/app/buy/quote/quote-review.tsx");
   const receipt = source("apps/member-web/app/buy/receipt/receipt-view.tsx");
-  const criticalSources = [buy, bet, quote, receipt];
+  const criticalSources = [home, buy, bet, quote, receipt];
 
-  it("does not ship the diagnosed demo fixtures in the critical purchase path", () => {
+  it("does not ship the diagnosed demo fixtures in the Member dashboard or purchase path", () => {
     for (const marker of demoMarkers) {
       for (const content of criticalSources) {
         expect(content).not.toContain(marker);
@@ -30,7 +34,12 @@ describe("Member buy web live-data contract", () => {
     }
   });
 
-  it("binds every critical purchase stage to the Member API", () => {
+  it("binds the dashboard and every critical purchase stage to the Member API", () => {
+    expect(home).toContain("memberApi.getWallet");
+    expect(home).toContain("memberApi.getOrders");
+    expect(home).toContain("memberApi.getPromotions");
+    expect(home).toContain("memberApi.listProducts");
+    expect(home).toContain("memberApi.listProductDraws");
     expect(buy).toContain("memberApi.listProducts");
     expect(buy).toContain("memberApi.listProductDraws");
     expect(bet).toContain("memberApi.getDraw");
