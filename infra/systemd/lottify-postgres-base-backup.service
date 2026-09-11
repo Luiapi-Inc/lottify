@@ -1,0 +1,10 @@
+[Unit]
+Description=Lottify PostgreSQL physical PITR base backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/lottify/infra/ops/postgres-pitr/base-backup.sh
+UMask=0077

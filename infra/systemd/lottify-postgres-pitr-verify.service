@@ -1,0 +1,10 @@
+[Unit]
+Description=Lottify PostgreSQL isolated PITR restore verification
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/lottify/infra/ops/postgres-pitr/verify-latest.sh
+UMask=0077

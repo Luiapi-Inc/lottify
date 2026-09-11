@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Lottify PostgreSQL physical PITR base backup
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Bangkok
+Persistent=true
+RandomizedDelaySec=300
+Unit=lottify-postgres-base-backup.service
+
+[Install]
+WantedBy=timers.target
