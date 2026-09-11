@@ -38,6 +38,8 @@ describe("Member API contract", () => {
     );
     expect(document.paths["/api/v1/member/auth/otp/request"]?.post).toBeDefined();
     expect(document.paths["/api/v1/member/auth/otp/verify"]?.post).toBeDefined();
+    expect(document.paths["/api/v1/member/auth/recovery/otp/request"]?.post).toBeDefined();
+    expect(document.paths["/api/v1/member/auth/recovery/otp/verify"]?.post).toBeDefined();
     expect(document.paths["/api/v1/member/auth/refresh"]?.post).toBeDefined();
     expect(document.paths["/api/v1/member/auth/logout"]?.post).toBeDefined();
     expect(document.paths["/api/v1/member/auth/revoke-all"]?.post).toBeDefined();
@@ -46,6 +48,23 @@ describe("Member API contract", () => {
     expect(document.paths["/api/v1/member/sessions/{id}"]?.delete).toBeDefined();
     expect(document.paths["/api/v1/member/devices"]?.get).toBeDefined();
     expect(document.paths["/api/v1/member/devices/{id}"]?.delete).toBeDefined();
+  });
+
+  it("publishes RECOVERY OTP as possession evidence without a session response", () => {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("test").setVersion("1").build(),
+    );
+    const schema = document.components?.schemas?.RecoveryOtpVerificationResponse as
+      | { properties?: Record<string, unknown> }
+      | undefined;
+    expect(schema).toBeDefined();
+    expect(Object.keys(schema?.properties ?? {})).toEqual(
+      expect.arrayContaining(["purpose", "verified", "evidenceRef"]),
+    );
+    expect(Object.keys(schema?.properties ?? {})).not.toContain("accessToken");
+    expect(Object.keys(schema?.properties ?? {})).not.toContain("refreshToken");
+    expect(Object.keys(schema?.properties ?? {})).not.toContain("memberId");
   });
 
   it("does not leak Prisma persistence models into the contract schemas", () => {
