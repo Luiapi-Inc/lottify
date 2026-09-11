@@ -16,10 +16,10 @@ import {
   decideOtpVerify,
   generateOtpCode,
   hashOtpCode,
-  isMemberOtpPurpose,
   type MemberOtpPolicy,
   type MemberOtpPurpose,
 } from "../domain/identity-otp-policy";
+import type { MemberOtpChallengeRecord } from "../domain/identity-auth.repository";
 import { MEMBER_OTP_DELIVERY_PORT, type MemberOtpDeliveryPort } from "./member-otp-delivery.port";
 
 export interface MemberAuthenticatedContext {
@@ -28,8 +28,8 @@ export interface MemberAuthenticatedContext {
   deviceId: string | null;
 }
 
-export interface RequestMemberOtpResult {
-  purpose: MemberOtpPurpose;
+export interface RequestMemberOtpResult<Purpose extends MemberOtpPurpose = MemberOtpPurpose> {
+  purpose: Purpose;
   deliveredTo: string;
   retryAfterSeconds: number | null;
 }
@@ -40,6 +40,12 @@ export interface VerifyMemberOtpResult {
   memberId: string;
   accountCreated: boolean;
   deviceId: string | null;
+}
+
+export interface VerifyRecoveryOtpResult {
+  purpose: "RECOVERY";
+  verified: true;
+  evidenceRef: string;
 }
 
 export interface MemberSessionView {
@@ -63,15 +69,25 @@ export class MemberAuthService {
     purposeRaw: string,
     phoneRaw: string,
   ): Promise<RequestMemberOtpResult> {
-    const env = getEnvironment();
-    if (!isMemberOtpPurpose(purposeRaw) || purposeRaw === "REAUTH") {
+    if (purposeRaw !== "LOGIN" && purposeRaw !== "REGISTER") {
       throw new UnauthorizedException({
         code: "OTP_PURPOSE_INVALID",
         message: "OTP purpose is not supported",
         details: {},
       });
     }
-    const purpose = purposeRaw as MemberOtpPurpose;
+    return this.requestOtpForPurpose(purposeRaw, phoneRaw);
+  }
+
+  requestRecoveryOtp(phoneRaw: string): Promise<RequestMemberOtpResult<"RECOVERY">> {
+    return this.requestOtpForPurpose("RECOVERY", phoneRaw);
+  }
+
+  private async requestOtpForPurpose<Purpose extends MemberOtpPurpose>(
+    purpose: Purpose,
+    phoneRaw: string,
+  ): Promise<RequestMemberOtpResult<Purpose>> {
+    const env = getEnvironment();
     const phone = parsePhone(phoneRaw);
     const now = new Date();
     const policy = memberOtpPolicyFor(purpose, env);
@@ -131,51 +147,19 @@ export class MemberAuthService {
     code: string,
     deviceName?: string,
   ): Promise<VerifyMemberOtpResult> {
-    const env = getEnvironment();
-    if (!isMemberOtpPurpose(purposeRaw) || purposeRaw === "REAUTH") {
+    if (purposeRaw !== "LOGIN" && purposeRaw !== "REGISTER") {
       throw new UnauthorizedException({
         code: "OTP_PURPOSE_INVALID",
         message: "OTP purpose is not supported",
         details: {},
       });
     }
-    const purpose = purposeRaw as MemberOtpPurpose;
-    const phone = parsePhone(phoneRaw);
-    const policy = memberOtpPolicyFor(purpose, env);
-    const now = new Date();
-    const challenge = await this.members.findLatestActiveChallenge({
-      phone,
+    const purpose = purposeRaw;
+    const { phone, challenge, verifiedAt: now } = await this.verifyChallenge(
       purpose,
-    });
-
-    const decision = decideOtpVerify({
-      purpose,
-      policy,
-      challenge: challenge
-        ? {
-            codeHash: challenge.codeHash,
-            attemptsUsed: challenge.attemptsUsed,
-            expiresAt: challenge.expiresAt,
-            consumedAt: challenge.consumedAt,
-          }
-        : null,
-      submittedHash: hashOtpCode(code.trim()),
-      now,
-    });
-
-    if (decision.outcome !== "success") {
-      if (challenge && decision.outcome !== "expired") {
-        await this.members.recordChallengeAttempt(
-          challenge.id,
-          challenge.attemptsUsed + 1,
-        );
-      }
-      throw new UnauthorizedException({
-        code: otpFailureCode(decision.outcome),
-        message: "OTP verification failed",
-        details: {},
-      });
-    }
+      phoneRaw,
+      code,
+    );
 
     const existing = await this.members.findByPhone(phone);
     let member = existing;
@@ -204,15 +188,6 @@ export class MemberAuthService {
       });
     }
 
-    if (!challenge) {
-      // Unreachable when the verify decision succeeded, but keep the data
-      // access safe against concurrent deletion of the challenge.
-      throw new UnauthorizedException({
-        code: "OTP_NOT_FOUND",
-        message: "OTP verification failed",
-        details: {},
-      });
-    }
     // A verified challenge is single-use: only the caller that atomically wins
     // the claim proceeds; a concurrent replay of the same code is denied.
     const claimed = await this.members.consumeChallenge(challenge.id, member.id, now);
@@ -239,6 +214,89 @@ export class MemberAuthService {
       accountCreated,
       deviceId: device.id,
     };
+  }
+
+  async verifyRecoveryOtp(
+    phoneRaw: string,
+    code: string,
+  ): Promise<VerifyRecoveryOtpResult> {
+    const { challenge, verifiedAt } = await this.verifyChallenge(
+      "RECOVERY",
+      phoneRaw,
+      code,
+    );
+    const claimed = await this.members.consumeChallenge(
+      challenge.id,
+      null,
+      verifiedAt,
+    );
+    if (!claimed) {
+      throw new UnauthorizedException({
+        code: "OTP_ALREADY_USED",
+        message: "This OTP has already been used",
+        details: {},
+      });
+    }
+    return {
+      purpose: "RECOVERY",
+      verified: true,
+      evidenceRef: `otp-challenge:${challenge.id}`,
+    };
+  }
+
+  private async verifyChallenge(
+    purpose: MemberOtpPurpose,
+    phoneRaw: string,
+    code: string,
+  ): Promise<{
+    phone: string;
+    challenge: MemberOtpChallengeRecord;
+    verifiedAt: Date;
+  }> {
+    const env = getEnvironment();
+    const phone = parsePhone(phoneRaw);
+    const policy = memberOtpPolicyFor(purpose, env);
+    const now = new Date();
+    const challenge = await this.members.findLatestActiveChallenge({
+      phone,
+      purpose,
+    });
+    const decision = decideOtpVerify({
+      purpose,
+      policy,
+      challenge: challenge
+        ? {
+            codeHash: challenge.codeHash,
+            attemptsUsed: challenge.attemptsUsed,
+            expiresAt: challenge.expiresAt,
+            consumedAt: challenge.consumedAt,
+          }
+        : null,
+      submittedHash: hashOtpCode(code.trim()),
+      now,
+    });
+
+    if (decision.outcome !== "success") {
+      if (challenge && decision.outcome !== "expired") {
+        await this.members.recordChallengeAttempt(
+          challenge.id,
+          challenge.attemptsUsed + 1,
+        );
+      }
+      throw new UnauthorizedException({
+        code: otpFailureCode(decision.outcome),
+        message: "OTP verification failed",
+        details: {},
+      });
+    }
+    if (!challenge) {
+      throw new UnauthorizedException({
+        code: "OTP_NOT_FOUND",
+        message: "OTP verification failed",
+        details: {},
+      });
+    }
+    return { phone, challenge, verifiedAt: now };
   }
 
   async refresh(refreshToken: string): Promise<{

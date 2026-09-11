@@ -30,8 +30,30 @@ describe("member OTP purpose", () => {
     expect(isMemberOtpPurpose("LOGIN")).toBe(true);
     expect(isMemberOtpPurpose("REGISTER")).toBe(true);
     expect(isMemberOtpPurpose("REAUTH")).toBe(true);
+    expect(isMemberOtpPurpose("RECOVERY")).toBe(true);
     expect(isMemberOtpPurpose("PASSWORD_RESET")).toBe(false);
     expect(isMemberOtpPurpose("")).toBe(false);
+  });
+
+  it("applies the same configured controls to the RECOVERY purpose", () => {
+    const policy = buildMemberOtpPolicy("RECOVERY", {
+      codeLength: 6,
+      ttlSeconds: 300,
+      maxAttempts: 3,
+      resendCooldownSeconds: 60,
+      requestWindowSeconds: 900,
+      requestMaxPerWindow: 5,
+    });
+    expect(policy).toMatchObject({
+      purpose: "RECOVERY",
+      codeLength: 6,
+      ttlSeconds: 300,
+      maxAttempts: 3,
+      resendCooldownSeconds: 60,
+      requestWindowSeconds: 900,
+      requestMaxPerWindow: 5,
+      policyVersion: "member-otp-v1",
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import { createHash, randomBytes } from "node:crypto";
 
-export const MEMBER_OTP_PURPOSES = ["LOGIN", "REGISTER", "REAUTH"] as const;
+export const MEMBER_OTP_PURPOSES = ["LOGIN", "REGISTER", "REAUTH", "RECOVERY"] as const;
 export type MemberOtpPurpose = (typeof MEMBER_OTP_PURPOSES)[number];
 
 export function isMemberOtpPurpose(value: string): value is MemberOtpPurpose {

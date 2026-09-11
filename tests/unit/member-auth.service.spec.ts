@@ -100,7 +100,7 @@ class InMemoryMemberRepository implements MemberAuthRepository {
     const c = this.challenges.get(id);
     if (c) this.challenges.set(id, { ...c, attemptsUsed });
   }
-  async consumeChallenge(id: string, memberId: string, consumedAt: Date): Promise<boolean> {
+  async consumeChallenge(id: string, memberId: string | null, consumedAt: Date): Promise<boolean> {
     const c = this.challenges.get(id);
     if (c && !c.consumedAt) {
       this.challenges.set(id, { ...c, consumedAt, memberId });
@@ -264,6 +264,54 @@ describe("MemberAuthService registration and login", () => {
     await auth.requestOtp("LOGIN", PHONE);
     const code = delivery.lastCode(PHONE, "LOGIN");
     await expect(auth.verifyOtp("LOGIN", PHONE, code!, "Phone")).rejects.toThrow();
+  });
+});
+
+describe("MemberAuthService recovery possession evidence", () => {
+  it("verifies RECOVERY OTP once without creating a Member, device, or session", async () => {
+    const { auth, delivery, members, sessionsRepo } = harness();
+    await expect(auth.requestRecoveryOtp(PHONE)).resolves.toMatchObject({
+      purpose: "RECOVERY",
+      retryAfterSeconds: null,
+    });
+    const code = delivery.lastCode(PHONE, "RECOVERY");
+    expect(code).toBeTruthy();
+
+    const result = await auth.verifyRecoveryOtp(PHONE, code!);
+    expect(result).toMatchObject({ purpose: "RECOVERY", verified: true });
+    expect(result.evidenceRef).toMatch(/^otp-challenge:/);
+    expect(members.members.size).toBe(0);
+    expect(members.devices.size).toBe(0);
+    expect(sessionsRepo.records.size).toBe(0);
+
+    await expect(auth.verifyRecoveryOtp(PHONE, code!)).rejects.toThrow();
+    expect(members.members.size).toBe(0);
+    expect(sessionsRepo.records.size).toBe(0);
+  });
+
+  it("rejects wrong, expired, and exhausted RECOVERY challenges without auth side effects", async () => {
+    const { auth, delivery, members, sessionsRepo } = harness();
+    await auth.requestRecoveryOtp(PHONE);
+    const code = delivery.lastCode(PHONE, "RECOVERY")!;
+    const wrong = code === "000000" ? "111111" : "000000";
+
+    await expect(auth.verifyRecoveryOtp(PHONE, wrong)).rejects.toThrow();
+    const challenge = [...members.challenges.values()][0]!;
+    members.challenges.set(challenge.id, {
+      ...challenge,
+      expiresAt: new Date(Date.now() - 1),
+    });
+    await expect(auth.verifyRecoveryOtp(PHONE, code)).rejects.toThrow();
+
+    members.challenges.set(challenge.id, {
+      ...challenge,
+      expiresAt: new Date(Date.now() + 60_000),
+      attemptsUsed: 10,
+    });
+    await expect(auth.verifyRecoveryOtp(PHONE, code)).rejects.toThrow();
+    expect(members.members.size).toBe(0);
+    expect(members.devices.size).toBe(0);
+    expect(sessionsRepo.records.size).toBe(0);
   });
 });
 

@@ -62,7 +62,7 @@ export interface MemberAuthRepository {
   recordChallengeAttempt(id: string, attemptsUsed: number): Promise<void>;
   // Atomically marks a challenge consumed only if it is still unconsumed.
   // Returns true when this caller won the single-use claim.
-  consumeChallenge(id: string, memberId: string, consumedAt: Date): Promise<boolean>;
+  consumeChallenge(id: string, memberId: string | null, consumedAt: Date): Promise<boolean>;
   recordMemberLogin(id: string, at: Date): Promise<void>;
   upsertDevice(input: {
     memberId: string;

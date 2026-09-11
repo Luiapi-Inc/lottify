@@ -137,7 +137,7 @@ export class PrismaMemberAuthRepository implements MemberAuthRepository {
 
   async consumeChallenge(
     id: string,
-    memberId: string,
+    memberId: string | null,
     consumedAt: Date,
   ): Promise<boolean> {
     const result = await this.prisma.memberOtpChallenge.updateMany({
