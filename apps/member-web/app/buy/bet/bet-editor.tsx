@@ -73,6 +73,7 @@ export default function BetEditor({ drawId }: { drawId: string }) {
   const [loading, setLoading] = useState(Boolean(drawId));
   const [submitting, setSubmitting] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
+  const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const quoteCommand = useRef<{ fingerprint: string; key: string } | null>(null);
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export default function BetEditor({ drawId }: { drawId: string }) {
       .then((loaded) => {
         if (!active) return;
         setDraw(loaded);
+        setServerOffsetMs(new Date(loaded.serverNow).getTime() - Date.now());
         const first = loaded.betTypes[0];
         if (first) {
           setBetTypeCode(first.betTypeCode);
@@ -120,9 +122,7 @@ export default function BetEditor({ drawId }: { drawId: string }) {
     () => lines.reduce((sum, line) => sum + BigInt(line.stakeMinor), 0n).toString(),
     [lines],
   );
-  const serverNow = draw
-    ? new Date(clock + (new Date(draw.serverNow).getTime() - new Date(draw.serverNow).getTime() + (new Date(draw.serverNow).getTime() - Date.now()))).toISOString()
-    : "";
+  const serverNow = draw ? new Date(clock + serverOffsetMs).toISOString() : "";
   const remaining = draw ? formatRemaining(draw.cutoffAt, serverNow) : "—";
   const open = draw?.state === "OPEN" && remaining !== "ปิดรับแล้ว";
 
