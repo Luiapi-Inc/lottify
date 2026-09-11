@@ -107,6 +107,27 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     await expect(auth.verifyOtp("REGISTER", phone, code, "Phone")).rejects.toThrow();
   });
 
+  it("persists single-use RECOVERY possession evidence without creating authentication state", async () => {
+    const phone = freshPhone();
+    await auth.requestRecoveryOtp(phone);
+    const code = delivery.lastCode(phone, "RECOVERY");
+    expect(code).toMatch(/^\d{6}$/);
+
+    const result = await auth.verifyRecoveryOtp(phone, code!);
+    expect(result).toMatchObject({ purpose: "RECOVERY", verified: true });
+    expect(result.evidenceRef).toMatch(/^otp-challenge:/);
+
+    const challenge = await prisma.memberOtpChallenge.findFirstOrThrow({
+      where: { phone, purpose: "RECOVERY" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(challenge.consumedAt).not.toBeNull();
+    expect(challenge.memberId).toBeNull();
+    expect(await prisma.member.findUnique({ where: { phone } })).toBeNull();
+
+    await expect(auth.verifyRecoveryOtp(phone, code!)).rejects.toThrow();
+  });
+
   it("enforces the resend cooldown per purpose and keeps buckets isolated", async () => {
     const phone = freshPhone();
     // First request issues immediately (no prior challenge for this phone+purpose).
