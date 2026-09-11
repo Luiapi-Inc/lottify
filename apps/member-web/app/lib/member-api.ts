@@ -28,6 +28,24 @@ export type WithdrawalList = Schema<"WithdrawalListBody">;
 export type PayoutDestination = Schema<"PayoutDestinationBody">;
 export type PayoutDestinationList = Schema<"PayoutDestinationListBody">;
 
+export type MemberProductPage = Schema<"MemberProductPageBody">;
+export type MemberDrawPage = Schema<"MemberDrawPageBody">;
+export type MemberDraw = Schema<"MemberDrawDetailBody">;
+export type BettingQuote = Schema<"BettingQuoteBody">;
+export type BetOrder = Schema<"BetOrderBody">;
+export type BetReceipt = Schema<"BetReceiptBody">;
+
+export interface CreateQuoteLineInput {
+  betTypeCode: string;
+  canonicalNumber: string;
+  stakeMinor: string;
+}
+
+export interface CreateQuoteInput {
+  currency: "THB";
+  lines: CreateQuoteLineInput[];
+}
+
 export class MemberApiFailure extends Error {
   constructor(
     public code: string,
@@ -156,6 +174,64 @@ class MemberApiClient {
       method: "POST",
       idempotencyKey,
     });
+  }
+
+  listProducts(limit = 100): Promise<MemberProductPage> {
+    return this.request<MemberProductPage>(`products?limit=${limit}`);
+  }
+
+  listProductDraws(productId: string, state = "OPEN", limit = 100): Promise<MemberDrawPage> {
+    const params = new URLSearchParams({ state, limit: String(limit) });
+    return this.request<MemberDrawPage>(
+      `products/${encodeURIComponent(productId)}/draws?${params.toString()}`,
+    );
+  }
+
+  getDraw(drawId: string): Promise<MemberDraw> {
+    return this.request<MemberDraw>(`draws/${encodeURIComponent(drawId)}`);
+  }
+
+  createQuote(drawId: string, body: CreateQuoteInput, idempotencyKey: string): Promise<BettingQuote> {
+    return this.request<BettingQuote>(`draws/${encodeURIComponent(drawId)}/quotes`, {
+      method: "POST",
+      body,
+      idempotencyKey,
+    });
+  }
+
+  getQuote(quoteId: string): Promise<BettingQuote> {
+    return this.request<BettingQuote>(`quotes/${encodeURIComponent(quoteId)}`);
+  }
+
+  createOrder(quoteId: string, idempotencyKey: string): Promise<BetOrder> {
+    return this.request<BetOrder>(`quotes/${encodeURIComponent(quoteId)}/orders`, {
+      method: "POST",
+      idempotencyKey,
+    });
+  }
+
+  getOrder(orderId: string): Promise<BetOrder> {
+    return this.request<BetOrder>(`orders/${encodeURIComponent(orderId)}`);
+  }
+
+  confirmOrder(orderId: string, version: number, idempotencyKey: string): Promise<BetOrder> {
+    return this.request<BetOrder>(`orders/${encodeURIComponent(orderId)}/confirm`, {
+      method: "POST",
+      body: { version },
+      idempotencyKey,
+    });
+  }
+
+  cancelOrder(orderId: string, version: number, idempotencyKey: string): Promise<BetOrder> {
+    return this.request<BetOrder>(`orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: "POST",
+      body: { version },
+      idempotencyKey,
+    });
+  }
+
+  getReceipt(orderId: string): Promise<BetReceipt> {
+    return this.request<BetReceipt>(`orders/${encodeURIComponent(orderId)}/receipt`);
   }
 
   private async publicRequest<T>(path: string, body?: unknown): Promise<T> {
