@@ -42,6 +42,13 @@ const otpVerifySchema = z.object({
   code: z.string().regex(/^\d{4,8}$/),
   deviceName: z.string().trim().max(200).optional(),
 });
+const recoveryOtpRequestSchema = z.object({
+  phone: z.string().trim().min(1),
+});
+const recoveryOtpVerifySchema = z.object({
+  phone: z.string().trim().min(1),
+  code: z.string().regex(/^\d{4,8}$/),
+});
 
 class OtpRequestBody {
   @ApiProperty({ enum: ["LOGIN", "REGISTER"] })
@@ -88,6 +95,41 @@ class MemberSessionResponse {
 
   @ApiProperty({ type: String, nullable: true })
   deviceId!: string | null;
+}
+
+class RecoveryOtpRequestBody {
+  @ApiProperty({ type: String, example: "+66812345678" })
+  phone!: string;
+}
+
+class RecoveryOtpVerifyBody {
+  @ApiProperty({ type: String, example: "+66812345678" })
+  phone!: string;
+
+  @ApiProperty({ type: String, pattern: "^[0-9]{4,8}$", example: "123456" })
+  code!: string;
+}
+
+class RecoveryOtpRequestResponse {
+  @ApiProperty({ enum: ["RECOVERY"] })
+  purpose!: "RECOVERY";
+
+  @ApiProperty({ type: String, description: "Delivery target for the recovery possession challenge" })
+  deliveredTo!: string;
+
+  @ApiProperty({ type: Number, nullable: true })
+  retryAfterSeconds!: number | null;
+}
+
+class RecoveryOtpVerificationResponse {
+  @ApiProperty({ enum: ["RECOVERY"] })
+  purpose!: "RECOVERY";
+
+  @ApiProperty({ type: Boolean, example: true })
+  verified!: true;
+
+  @ApiProperty({ type: String, description: "Opaque possession-evidence reference for the later recovery workflow" })
+  evidenceRef!: string;
 }
 
 // A refresh rotates the credential in place: the rotating refresh token is set as
@@ -155,6 +197,34 @@ export class MemberAuthController {
       accountCreated: result.accountCreated,
       deviceId: result.deviceId,
     };
+  }
+
+  @Post("recovery/otp/request")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Request a RECOVERY OTP possession challenge without establishing authentication",
+  })
+  @ApiBody({ type: RecoveryOtpRequestBody })
+  @ApiOkResponse({ type: RecoveryOtpRequestResponse })
+  requestRecoveryOtp(
+    @Body() body: RecoveryOtpRequestBody,
+  ): Promise<RecoveryOtpRequestResponse> {
+    const input = parseBody(recoveryOtpRequestSchema, body);
+    return this.memberAuth.requestRecoveryOtp(input.phone);
+  }
+
+  @Post("recovery/otp/verify")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Verify RECOVERY OTP possession evidence without issuing a Member session",
+  })
+  @ApiBody({ type: RecoveryOtpVerifyBody })
+  @ApiOkResponse({ type: RecoveryOtpVerificationResponse })
+  verifyRecoveryOtp(
+    @Body() body: RecoveryOtpVerifyBody,
+  ): Promise<RecoveryOtpVerificationResponse> {
+    const input = parseBody(recoveryOtpVerifySchema, body);
+    return this.memberAuth.verifyRecoveryOtp(input.phone, input.code);
   }
 
   @Post("refresh")
