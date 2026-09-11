@@ -1,54 +1,54 @@
 # Lottify v1 — API Specification (complete)
 
-Generated from the live OpenAPI 3.0.0 contract (`apps/api/openapi/openapi.json`).
+Generated deterministically from the authoritative OpenAPI contract at `apps/api/openapi/openapi.json`.
 
-**110 paths · 121 operations · 139 schemas**
+**116 paths · 126 operations · 146 schemas**
 
-Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
+Source: `apps/api/openapi/openapi.json` · regenerate with `pnpm openapi:generate`.
 
----
 ## Contents
 
 - **Member API**
-  - [`/member/auth`](#member--auth)
-  - [`/member/bet-types`](#member--bet-types)
-  - [`/member/deposits`](#member--deposits)
-  - [`/member/devices`](#member--devices)
-  - [`/member/draws`](#member--draws)
-  - [`/member/notification-preferences`](#member--notification-preferences)
-  - [`/member/orders`](#member--orders)
-  - [`/member/payout-destinations`](#member--payout-destinations)
-  - [`/member/products`](#member--products)
-  - [`/member/profile`](#member--profile)
-  - [`/member/promotions`](#member--promotions)
-  - [`/member/quotes`](#member--quotes)
-  - [`/member/readiness`](#member--readiness)
-  - [`/member/sessions`](#member--sessions)
-  - [`/member/terms`](#member--terms)
-  - [`/member/wallet`](#member--wallet)
-  - [`/member/withdrawals`](#member--withdrawals)
+  - [`/member/auth`](#member-auth)
+  - [`/member/bet-types`](#member-bet-types)
+  - [`/member/deposits`](#member-deposits)
+  - [`/member/devices`](#member-devices)
+  - [`/member/draws`](#member-draws)
+  - [`/member/notification-preferences`](#member-notification-preferences)
+  - [`/member/orders`](#member-orders)
+  - [`/member/payout-destinations`](#member-payout-destinations)
+  - [`/member/products`](#member-products)
+  - [`/member/profile`](#member-profile)
+  - [`/member/promotions`](#member-promotions)
+  - [`/member/quotes`](#member-quotes)
+  - [`/member/readiness`](#member-readiness)
+  - [`/member/sessions`](#member-sessions)
+  - [`/member/terms`](#member-terms)
+  - [`/member/wallet`](#member-wallet)
+  - [`/member/withdrawals`](#member-withdrawals)
 - **Admin API**
-  - [`/admin/accounting-periods`](#admin--accounting-periods)
-  - [`/admin/approvals`](#admin--approvals)
-  - [`/admin/audit`](#admin--audit)
-  - [`/admin/auth`](#admin--auth)
-  - [`/admin/draws`](#admin--draws)
-  - [`/admin/lottery`](#admin--lottery)
-  - [`/admin/member-terms`](#admin--member-terms)
-  - [`/admin/member-capability-restrictions`](#admin--member-capability-restrictions)
-  - [`/admin/products`](#admin--products)
-  - [`/admin/promotions`](#admin--promotions)
-  - [`/admin/reconciliation`](#admin--reconciliation)
-  - [`/admin/reports`](#admin--reports)
-  - [`/admin/settlement`](#admin--settlement)
-  - [`/admin/withdrawals`](#admin--withdrawals)
-- **Common** — [conventions](#common-conventions) · [schemas](#schemas)
----
+  - [`/admin/accounting-periods`](#admin-accounting-periods)
+  - [`/admin/approvals`](#admin-approvals)
+  - [`/admin/audit`](#admin-audit)
+  - [`/admin/auth`](#admin-auth)
+  - [`/admin/draws`](#admin-draws)
+  - [`/admin/lottery`](#admin-lottery)
+  - [`/admin/member-capability-restrictions`](#admin-member-capability-restrictions)
+  - [`/admin/member-terms`](#admin-member-terms)
+  - [`/admin/products`](#admin-products)
+  - [`/admin/promotions`](#admin-promotions)
+  - [`/admin/reconciliation`](#admin-reconciliation)
+  - [`/admin/reports`](#admin-reports)
+  - [`/admin/settlement`](#admin-settlement)
+  - [`/admin/withdrawals`](#admin-withdrawals)
+- **Common API** — [root operations](#common-api)
+- **Schemas** — [component schemas](#schemas)
 
+---
 
 ## Member API
 
-<a id="member--auth"></a>
+<a id="member-auth"></a>
 ### `/member/auth`
 
 #### `POST /api/v1/member/auth/logout`
@@ -83,6 +83,24 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `MemberSessionResponse`
 
+#### `POST /api/v1/member/auth/recovery/otp/request`
+
+*Request a RECOVERY OTP possession challenge without establishing authentication*
+
+- **Request** `application/json`: `RecoveryOtpRequestBody`
+
+- **Responses:**
+  - `200` → `RecoveryOtpRequestResponse`
+
+#### `POST /api/v1/member/auth/recovery/otp/verify`
+
+*Verify RECOVERY OTP possession evidence without issuing a Member session*
+
+- **Request** `application/json`: `RecoveryOtpVerifyBody`
+
+- **Responses:**
+  - `200` → `RecoveryOtpVerificationResponse`
+
 #### `POST /api/v1/member/auth/refresh`
 
 *Rotate the Member refresh credential*
@@ -97,7 +115,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `MemberRevokedResponse`
 
-<a id="member--bet-types"></a>
+<a id="member-bet-types"></a>
 ### `/member/bet-types`
 
 #### `GET /api/v1/member/bet-types`
@@ -106,8 +124,8 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `MemberBetTypePageBody`
@@ -119,24 +137,14 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `MemberBetTypeDetailBody`
 
-<a id="member--deposits"></a>
+<a id="member-deposits"></a>
 ### `/member/deposits`
 
-#### `GET /api/v1/member/deposits/methods`
-
-*List deposit methods available to the Member for deposit discovery*
-
-- **Responses:**
-  - `200` → array<`DepositMethodSummaryBody`>
-
-#### `GET /api/v1/member/deposits/methods/{code}`
-
-*Describe one deposit method including the v1 fee quote and payment instructions*
-
-- **Responses:**
-  - `200` → `DepositMethodDescriptionBody`
-
 #### `POST /api/v1/member/deposits`
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
 
 - **Request** `application/json`: `DepositInitiateBody`
 
@@ -157,7 +165,21 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `DepositBody`
 
-<a id="member--devices"></a>
+#### `GET /api/v1/member/deposits/methods`
+
+*List deposit methods available to the Member*
+
+- **Responses:**
+  - `200` → array<`DepositMethodSummaryBody`>
+
+#### `GET /api/v1/member/deposits/methods/{code}`
+
+*Describe one deposit method including fee and payment instructions*
+
+- **Responses:**
+  - `200` → `DepositMethodDescriptionBody`
+
+<a id="member-devices"></a>
 ### `/member/devices`
 
 #### `GET /api/v1/member/devices`
@@ -174,12 +196,16 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `MemberRevokedResponse`
 
-<a id="member--draws"></a>
+<a id="member-draws"></a>
 ### `/member/draws`
 
 #### `POST /api/v1/member/draws/{drawId}/quotes`
 
 *Create a betting Quote: server-authoritative resolution of bet lines*
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
 
 - **Request** `application/json`: array<`QuoteCreateBody`>
 
@@ -200,7 +226,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `MemberDrawEligibilityBody`
 
-<a id="member--notification-preferences"></a>
+<a id="member-notification-preferences"></a>
 ### `/member/notification-preferences`
 
 #### `GET /api/v1/member/notification-preferences`
@@ -217,18 +243,20 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `NotificationPreferencesBody`
 
-<a id="member--orders"></a>
+<a id="member-orders"></a>
 ### `/member/orders`
 
 #### `GET /api/v1/member/orders`
 
 *List the Member's own Bet Orders (my slips)*
 
+Deterministic keyset pagination over (createdAt DESC, id DESC). Only the requesting Member's Orders are ever returned.
+
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `BetOrderListBody`
@@ -244,6 +272,12 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Cancel a confirmed Bet Order (explicit command)*
 
+A Member may cancel before the Draw cutoff. The Order becomes CANCELLED only after the refund posting is durable.
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
 - **Request** `application/json`: `BetOrderCommandBody`
 
 - **Responses:**
@@ -252,6 +286,12 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/member/orders/{id}/confirm`
 
 *Confirm a Bet Order (explicit command)*
+
+Revalidates the Quote and the authoritative Draw cutoff, then requires the durable Wallet & Ledger stake reserve/commit before the Order becomes CONFIRMED. Denials resolve to REJECTED with no money moved.
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
 
 - **Request** `application/json`: `BetOrderCommandBody`
 
@@ -269,11 +309,20 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Read the settlement outcome of a Member Bet Order*
 
+The outcome is authoritative only once the settlement batch has COMPLETED; an in-flight or failed batch reports authoritative=false and never exposes a partial financial outcome.
+
 - **Responses:**
   - `200` → `MemberSettlementOutcomeBody`
 
-<a id="member--payout-destinations"></a>
+<a id="member-payout-destinations"></a>
 ### `/member/payout-destinations`
+
+#### `GET /api/v1/member/payout-destinations`
+
+*List the Member's Payout Destinations*
+
+- **Responses:**
+  - `200` → `PayoutDestinationListBody`
 
 #### `POST /api/v1/member/payout-destinations`
 
@@ -283,13 +332,6 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 - **Responses:**
   - `201` → `PayoutDestinationBody`
-
-#### `GET /api/v1/member/payout-destinations`
-
-*List the Member's Payout Destinations*
-
-- **Responses:**
-  - `200` → `PayoutDestinationListBody`
 
 #### `GET /api/v1/member/payout-destinations/{id}`
 
@@ -305,17 +347,19 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `PayoutDestinationBody`
 
-<a id="member--products"></a>
+<a id="member-products"></a>
 ### `/member/products`
 
 #### `GET /api/v1/member/products`
 
 *List published Lottery Products available to the Member*
 
+Discovery exposes only PUBLISHED configuration; DRAFT/REVIEW work in progress is never visible to a Member.
+
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `MemberProductPageBody`
@@ -333,14 +377,14 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `MemberDrawPageBody`
 
-<a id="member--profile"></a>
+<a id="member-profile"></a>
 ### `/member/profile`
 
 #### `GET /api/v1/member/profile`
@@ -354,22 +398,14 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Update the Member's own profile fields*
 
+Editable fields are the mandatory profile data only. Server-owned facts (phone, account status, KYC and Terms state) can never be set through the profile.
+
 - **Request** `application/json`: `UpdateMemberProfileBody`
 
 - **Responses:**
   - `200` → `MemberProfileBody`
 
-<a id="member--readiness"></a>
-### `/member/readiness`
-
-#### `GET /api/v1/member/readiness`
-
-*Read the Member's capability readiness and KYC state*
-
-- **Responses:**
-  - `200` → `MemberReadinessBody`
-
-<a id="member--promotions"></a>
+<a id="member-promotions"></a>
 ### `/member/promotions`
 
 #### `GET /api/v1/member/promotions`
@@ -385,14 +421,18 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `PromotionEntitlementPageBody`
 
 #### `POST /api/v1/member/promotions/entitlements`
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
 
 - **Request** `application/json`: `ClaimPromotionBody`
 
@@ -406,7 +446,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `PromotionEntitlementBody`
 
-<a id="member--quotes"></a>
+<a id="member-quotes"></a>
 ### `/member/quotes`
 
 #### `GET /api/v1/member/quotes/{id}`
@@ -420,10 +460,28 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Create a Bet Order from an authorised Quote*
 
+Creates the Order that accepts a Quote. No money moves at creation; only Confirm has a financial effect.
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
 - **Responses:**
   - `200` → `BetOrderBody`
 
-<a id="member--sessions"></a>
+<a id="member-readiness"></a>
+### `/member/readiness`
+
+#### `GET /api/v1/member/readiness`
+
+*Read the Member's capability readiness and KYC state*
+
+Reports, per capability, whether the Member is currently allowed, denied, or requires review, with coded reasons and the outstanding explicit requirements (Terms, profile, KYC). Decisions follow the locked deny-first layer precedence and are point-in-time; an ALLOW is never fabricated and evidence contents are never exposed.
+
+- **Responses:**
+  - `200` → `MemberReadinessBody`
+
+<a id="member-sessions"></a>
 ### `/member/sessions`
 
 #### `GET /api/v1/member/sessions`
@@ -440,12 +498,14 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `MemberRevokedResponse`
 
-<a id="member--terms"></a>
+<a id="member-terms"></a>
 ### `/member/terms`
 
 #### `GET /api/v1/member/terms`
 
 *Read the Member's currently required Terms version(s) and acceptance status*
+
+Reports the Terms version(s) that are published and effective right now, plus this Member's durable acceptances. An acceptance is never assumed.
 
 - **Responses:**
   - `200` → `MemberTermsBody`
@@ -454,12 +514,18 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Accept the currently required Terms version*
 
+Records immutable acceptance evidence once per Member + Terms version. Idempotent: replaying the same Idempotency-Key returns the prior result, and re-accepting the same version returns the existing evidence instead of duplicating it. A version that is not currently required is denied.
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
 - **Request** `application/json`: `AcceptTermsRequestBody`
 
 - **Responses:**
   - `200` → `AcceptTermsBody`
 
-<a id="member--wallet"></a>
+<a id="member-wallet"></a>
 ### `/member/wallet`
 
 #### `GET /api/v1/member/wallet`
@@ -475,30 +541,14 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `WalletTransactionPageBody`
 
-<a id="member--withdrawals"></a>
+<a id="member-withdrawals"></a>
 ### `/member/withdrawals`
-
-#### `POST /api/v1/member/withdrawals/preflight`
-
-*Evaluate destination eligibility and authoritative CASH balance readiness without creating a Withdrawal or reserving funds*
-
-- **Request** `application/json`: `CreateWithdrawalBody`
-
-- **Responses:**
-  - `200` → `WithdrawalPreflightBody`
-
-#### `POST /api/v1/member/withdrawals`
-
-- **Request** `application/json`: `CreateWithdrawalBody`
-
-- **Responses:**
-  - `202` → `WithdrawalBody`
 
 #### `GET /api/v1/member/withdrawals`
 
@@ -506,11 +556,22 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `WithdrawalListBody`
+
+#### `POST /api/v1/member/withdrawals`
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
+- **Request** `application/json`: `CreateWithdrawalBody`
+
+- **Responses:**
+  - `202` → `WithdrawalBody`
 
 #### `GET /api/v1/member/withdrawals/{id}`
 
@@ -523,13 +584,25 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Cancel a Withdrawal before payout; releases the Reservation through Wallet & Ledger*
 
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
 - **Responses:**
   - `200` → `WithdrawalBody`
 
+#### `POST /api/v1/member/withdrawals/preflight`
+
+*Evaluate withdrawal readiness without creating a Withdrawal or reserving funds*
+
+- **Request** `application/json`: `CreateWithdrawalBody`
+
+- **Responses:**
+  - `200` → `WithdrawalPreflightBody`
 
 ## Admin API
 
-<a id="admin--accounting-periods"></a>
+<a id="admin-accounting-periods"></a>
 ### `/admin/accounting-periods`
 
 #### `GET /api/v1/admin/accounting-periods`
@@ -538,12 +611,12 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `effectiveTo` | query | string | no |
-| `effectiveFrom` | query | string | no |
-| `mode` | query | string | no |
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `effectiveTo` | query | `string (date-time)` | no |
+| `effectiveFrom` | query | `string (date-time)` | no |
+| `mode` | query | `string` | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `AccountingPeriodListResponse`
@@ -551,26 +624,13 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
   - `401` → `ApiErrorResponse`
   - `403` → `ApiErrorResponse`
 
-#### `POST /api/v1/admin/accounting-periods/create-custom`
-
-*Create a governed Custom Accounting Period DRAFT and replacement preview*
-
-- **Request** `application/json`: `CreateCustomAccountingPeriodBody`
-
-- **Responses:**
-  - `201` → `AccountingPeriodCommandResponse`
-  - `400` → `ApiErrorResponse`
-  - `401` → `ApiErrorResponse`
-  - `403` → `ApiErrorResponse`
-  - `409` → `ApiErrorResponse`
-
 #### `GET /api/v1/admin/accounting-periods/{id}`
 
 *Get one authoritative Accounting Period*
 
 | param | in | type | required |
 |---|---|---|---|
-| `id` | path | string | yes |
+| `id` | path | `string` | yes |
 
 - **Responses:**
   - `200` → `AccountingPeriodResponse`
@@ -584,7 +644,8 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `id` | path | string | yes |
+| `Idempotency-Key` | header | `string` | yes |
+| `id` | path | `string` | yes |
 
 - **Request** `application/json`: `ApproveAccountingPeriodBody`
 
@@ -602,7 +663,8 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `id` | path | string | yes |
+| `Idempotency-Key` | header | `string` | yes |
+| `id` | path | `string` | yes |
 
 - **Request** `application/json`: `CancelAccountingPeriodBody`
 
@@ -620,7 +682,8 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `id` | path | string | yes |
+| `Idempotency-Key` | header | `string` | yes |
+| `id` | path | `string` | yes |
 
 - **Request** `application/json`: `CloseAccountingPeriodBody`
 
@@ -638,7 +701,8 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `id` | path | string | yes |
+| `Idempotency-Key` | header | `string` | yes |
+| `id` | path | `string` | yes |
 
 - **Request** `application/json`: `SubmitAccountingPeriodBody`
 
@@ -650,7 +714,24 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
   - `404` → `ApiErrorResponse`
   - `409` → `ApiErrorResponse`
 
-<a id="admin--approvals"></a>
+#### `POST /api/v1/admin/accounting-periods/create-custom`
+
+*Create a governed Custom Accounting Period DRAFT and replacement preview*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
+- **Request** `application/json`: `CreateCustomAccountingPeriodBody`
+
+- **Responses:**
+  - `201` → `AccountingPeriodCommandResponse`
+  - `400` → `ApiErrorResponse`
+  - `401` → `ApiErrorResponse`
+  - `403` → `ApiErrorResponse`
+  - `409` → `ApiErrorResponse`
+
+<a id="admin-approvals"></a>
 ### `/admin/approvals`
 
 #### `GET /api/v1/admin/approvals`
@@ -659,14 +740,14 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
-| `to` | query | string | no |
-| `from` | query | string | no |
-| `resourceId` | query | string | no |
-| `resourceType` | query | string | no |
-| `action` | query | string | no |
-| `state` | query | string | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
+| `to` | query | `string` | no |
+| `from` | query | `string` | no |
+| `resourceId` | query | `string` | no |
+| `resourceType` | query | `string` | no |
+| `action` | query | `string` | no |
+| `state` | query | `string` | no |
 
 - **Responses:**
   - `200` → `AdminApprovalListResponse`
@@ -684,7 +765,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
   - `403` — ACCESS_DENIED
   - `404` — NOT_FOUND
 
-<a id="admin--audit"></a>
+<a id="admin-audit"></a>
 ### `/admin/audit`
 
 #### `GET /api/v1/admin/audit/records`
@@ -693,15 +774,15 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
-| `to` | query | string | no |
-| `from` | query | string | no |
-| `outcome` | query | string | no |
-| `resourceId` | query | string | no |
-| `resourceType` | query | string | no |
-| `action` | query | string | no |
-| `actor` | query | string | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
+| `to` | query | `string` | no |
+| `from` | query | `string` | no |
+| `outcome` | query | `string` | no |
+| `resourceId` | query | `string` | no |
+| `resourceType` | query | `string` | no |
+| `action` | query | `string` | no |
+| `actor` | query | `string` | no |
 
 - **Responses:**
   - `200` → `AuditRecordListResponse`
@@ -719,7 +800,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
   - `403` — ACCESS_DENIED
   - `404` — NOT_FOUND
 
-<a id="admin--auth"></a>
+<a id="admin-auth"></a>
 ### `/admin/auth`
 
 #### `POST /api/v1/admin/auth/login`
@@ -787,7 +868,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200` → `AdminRevokedResponse`
 
-<a id="admin--draws"></a>
+<a id="admin-draws"></a>
 ### `/admin/draws`
 
 #### `GET /api/v1/admin/draws`
@@ -796,10 +877,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `productId` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `productId` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200`
@@ -834,19 +915,19 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `201`
 
-#### `POST /api/v1/admin/draws/{drawId}/settlement`
-
-*Run (or resume) the durable Settlement Batch for a Draw*
-
-- **Responses:**
-  - `201`
-
 #### `GET /api/v1/admin/draws/{drawId}/settlement`
 
 *Read the Settlement Batch for a Draw*
 
 - **Responses:**
   - `200`
+
+#### `POST /api/v1/admin/draws/{drawId}/settlement`
+
+*Run (or resume) the durable Settlement Batch for a Draw*
+
+- **Responses:**
+  - `201`
 
 #### `GET /api/v1/admin/draws/{id}`
 
@@ -873,12 +954,16 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `201`
 
-<a id="admin--lottery"></a>
+<a id="admin-lottery"></a>
 ### `/admin/lottery`
 
 #### `POST /api/v1/admin/lottery/bet-type-versions/{id}/approve`
 
 *Approve and publish a Lottery Bet Type version*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Request** `application/json`: `ExpectedVersionBody`
 
@@ -888,6 +973,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/lottery/bet-type-versions/{id}/submit`
 
 *Submit a Lottery Bet Type version for approval*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Request** `application/json`: `ExpectedVersionBody`
 
@@ -900,9 +989,9 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200`
@@ -910,6 +999,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/lottery/bet-types`
 
 *Create a Lottery Bet Type identity*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Request** `application/json`: `CreateBetTypeBody`
 
@@ -922,7 +1015,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
+| `state` | query | `string` | no |
 
 - **Responses:**
   - `200`
@@ -930,6 +1023,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/lottery/bet-types/{id}/versions`
 
 *Create a Lottery Bet Type DRAFT version*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Request** `application/json`: `CreateBetTypeVersionBody`
 
@@ -940,6 +1037,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Approve and publish a Lottery Product version*
 
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
 - **Request** `application/json`: `ExpectedVersionBody`
 
 - **Responses:**
@@ -948,6 +1049,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/lottery/product-versions/{id}/submit`
 
 *Submit a Lottery Product version for approval*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Request** `application/json`: `ExpectedVersionBody`
 
@@ -960,9 +1065,9 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200`
@@ -970,6 +1075,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/lottery/products`
 
 *Create a Lottery Product identity*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Responses:**
   - `201`
@@ -980,7 +1089,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
+| `state` | query | `string` | no |
 
 - **Responses:**
   - `200`
@@ -989,12 +1098,47 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Create a Lottery Product DRAFT version*
 
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
 - **Request** `application/json`: `CreateProductVersionBody`
 
 - **Responses:**
   - `201`
 
-<a id="admin--member-terms"></a>
+<a id="admin-member-capability-restrictions"></a>
+### `/admin/member-capability-restrictions`
+
+#### `POST /api/v1/admin/member-capability-restrictions`
+
+*Apply an independent per-capability restriction to a Member*
+
+Sets one independent control (BET_BLOCKED etc.) with source, reason, effective period and an actor-or-policy reference. Governed by the member-readiness.manage capability and audited; never replaces the Member's account status.
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
+- **Request** `application/json`: `SetRestrictionBody`
+
+- **Responses:**
+  - `201` → `CapabilityRestrictionBody`
+
+#### `DELETE /api/v1/admin/member-capability-restrictions/{id}`
+
+*Remove a capability restriction an Admin set*
+
+Clears a normal Admin-set restriction and audits the removal. A self-exclusion restriction cannot be removed through this normal Admin path.
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
+- **Responses:**
+  - `200` → `ClearRestrictionBody`
+
+<a id="admin-member-terms"></a>
 ### `/admin/member-terms`
 
 #### `GET /api/v1/admin/member-terms`
@@ -1003,9 +1147,9 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200` → `TermsVersionListBody`
@@ -1013,6 +1157,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/member-terms`
 
 *Author a DRAFT Member Terms version*
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
 
 - **Request** `application/json`: `CreateTermsVersionBody`
 
@@ -1030,6 +1178,12 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Approve and publish a Member Terms version (fresh MFA required)*
 
+Maker-checker: the publishing Admin must differ from the author. A published version becomes the required Terms for every Member inside its effective window and can never be rewritten.
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
 - **Request** `application/json`: `ExpectedRevisionBody`
 
 - **Responses:**
@@ -1039,51 +1193,33 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Retire a published Member Terms version*
 
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
 - **Request** `application/json`: `ExpectedRevisionBody`
 
 - **Responses:**
   - `200` → `TermsVersionBody`
 
-<a id="admin--member-capability-restrictions"></a>
-### `/admin/member-capability-restrictions`
-
-#### `POST /api/v1/admin/member-capability-restrictions`
-
-*Apply an independent per-capability restriction to a Member*
-
-- **Request** `application/json`: `SetRestrictionBody`
-
-- **Responses:**
-  - `201` → `CapabilityRestrictionBody`
-
-#### `DELETE /api/v1/admin/member-capability-restrictions/{id}`
-
-*Remove a capability restriction an Admin set*
-
-- **Responses:**
-  - `200` → `ClearRestrictionBody`
-
-<a id="admin--products"></a>
+<a id="admin-products"></a>
 ### `/admin/products`
 
 #### `POST /api/v1/admin/products/{productId}/draws/generate`
 
 *Idempotent rolling Draw generation from schedule occurrences*
 
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
 - **Request** `application/json`: `GenerateDrawsBody`
 
 - **Responses:**
   - `201`
 
-<a id="admin--promotions"></a>
+<a id="admin-promotions"></a>
 ### `/admin/promotions`
-
-#### `POST /api/v1/admin/promotions`
-
-*Create a DRAFT Promotion Campaign version*
-
-- **Responses:**
-  - `201`
 
 #### `GET /api/v1/admin/promotions`
 
@@ -1091,12 +1227,23 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `state` | query | string | no |
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
+| `state` | query | `string` | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
 
 - **Responses:**
   - `200`
+
+#### `POST /api/v1/admin/promotions`
+
+*Create a DRAFT Promotion Campaign version*
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
+- **Responses:**
+  - `201`
 
 #### `GET /api/v1/admin/promotions/{id}`
 
@@ -1108,6 +1255,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/promotions/{id}/approve`
 
 *Approve and publish a validated Promotion Campaign version (fresh MFA required)*
+
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
 
 - **Responses:**
   - `200`
@@ -1123,6 +1274,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Retire a published Promotion Campaign version*
 
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
 - **Responses:**
   - `200`
 
@@ -1130,10 +1285,14 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Validate a DRAFT Promotion Campaign version*
 
+| param | in | type | required |
+|---|---|---|---|
+| `idempotency-key` | header | `string` | yes |
+
 - **Responses:**
   - `200`
 
-<a id="admin--reconciliation"></a>
+<a id="admin-reconciliation"></a>
 ### `/admin/reconciliation`
 
 #### `GET /api/v1/admin/reconciliation/discrepancies`
@@ -1142,15 +1301,15 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
-| `to` | query | string | no |
-| `from` | query | string | no |
-| `severity` | query | string | no |
-| `status` | query | string | no |
-| `currency` | query | string | no |
-| `memberId` | query | string | no |
-| `runId` | query | string | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
+| `to` | query | `string` | no |
+| `from` | query | `string` | no |
+| `severity` | query | `string` | no |
+| `status` | query | `string` | no |
+| `currency` | query | `string` | no |
+| `memberId` | query | `string` | no |
+| `runId` | query | `string` | no |
 
 - **Responses:**
   - `200` → `ReconciliationDiscrepancyListResponse`
@@ -1174,13 +1333,13 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
-| `to` | query | string | no |
-| `from` | query | string | no |
-| `result` | query | string | no |
-| `currency` | query | string | no |
-| `memberId` | query | string | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
+| `to` | query | `string` | no |
+| `from` | query | `string` | no |
+| `result` | query | `string` | no |
+| `currency` | query | `string` | no |
+| `memberId` | query | `string` | no |
 
 - **Responses:**
   - `200` → `ReconciliationRunListResponse`
@@ -1198,7 +1357,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
   - `403` — ACCESS_DENIED
   - `404` — NOT_FOUND
 
-<a id="admin--reports"></a>
+<a id="admin-reports"></a>
 ### `/admin/reports`
 
 #### `GET /api/v1/admin/reports/accounting-period-financial`
@@ -1207,10 +1366,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `timezone` | query | string | no |
-| `to` | query | string | no |
-| `from` | query | string | no |
-| `accountingPeriodId` | query | string | no |
+| `timezone` | query | `string` | no |
+| `to` | query | `string` | no |
+| `from` | query | `string` | no |
+| `accountingPeriodId` | query | `string` | no |
 
 - **Responses:**
   - `200` → `AccountingPeriodFinancialReportResponse`
@@ -1219,7 +1378,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
   - `403` — ACCESS_DENIED
   - `404` — NOT_FOUND
 
-<a id="admin--settlement"></a>
+<a id="admin-settlement"></a>
 ### `/admin/settlement`
 
 #### `GET /api/v1/admin/settlement/{batchId}/orders`
@@ -1229,7 +1388,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 - **Responses:**
   - `200`
 
-<a id="admin--withdrawals"></a>
+<a id="admin-withdrawals"></a>
 ### `/admin/withdrawals`
 
 #### `GET /api/v1/admin/withdrawals`
@@ -1238,10 +1397,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `cursor` | query | string | no |
-| `limit` | query | number | no |
-| `state` | query | string | no |
-| `queue` | query | string | no |
+| `cursor` | query | `string` | no |
+| `limit` | query | `number` | no |
+| `state` | query | `string` | no |
+| `queue` | query | `string` | no |
 
 - **Responses:**
   - `200` → `AdminWithdrawalListBody`
@@ -1252,7 +1411,7 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 | param | in | type | required |
 |---|---|---|---|
-| `id` | path | string | yes |
+| `id` | path | `string` | yes |
 
 - **Responses:**
   - `200` → `AdminWithdrawalDetailBody`
@@ -1261,6 +1420,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/withdrawals/{id}/approve`
 
 *Approve the withdrawal review and release it for payout*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Request** `application/json`: `WithdrawalCommandBody`
 
@@ -1276,6 +1439,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Finalize a confirmed payout: consume the Reservation and post WITHDRAWAL_FINALIZE exactly once*
 
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
 - **Request** `application/json`: `WithdrawalCommandBody`
 
 - **Responses:**
@@ -1289,6 +1456,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 #### `POST /api/v1/admin/withdrawals/{id}/payout`
 
 *Request the external payout for an approved withdrawal; an unknown outcome enters reconciliation*
+
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
 
 - **Request** `application/json`: `WithdrawalCommandBody`
 
@@ -1304,6 +1475,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Reconcile an in-flight or ambiguous payout by provider reference; never re-initiates payout*
 
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
 - **Request** `application/json`: `WithdrawalCommandBody`
 
 - **Responses:**
@@ -1318,6 +1493,10 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
 
 *Reject the withdrawal review; the Reservation is released authoritatively*
 
+| param | in | type | required |
+|---|---|---|---|
+| `Idempotency-Key` | header | `string` | yes |
+
 - **Request** `application/json`: `WithdrawalCommandBody`
 
 - **Responses:**
@@ -1328,158 +1507,1552 @@ Source: `codex/member-readiness-kyc @ ddeb43a` · generated 2026-09-11 (+07)
   - `404` → `ApiErrorResponse`
   - `409` → `ApiErrorResponse`
 
+## Common API
 
----
+#### `GET /api/v1`
 
-## Common conventions
+*Lottify v1 API contract root*
 
-- **Base** `/api/v1`. JSON in/out. Errors: canonical `{ code, message, correlationId }`.
-- **Auth** — Member/Admin token spaces are mutually exclusive; `Authorization: Bearer <access>`.
-  - Member: phone identity; purpose-scoped OTP → short-lived access + rotating refresh (httpOnly cookie); refresh reuse revokes the session family; sessions/devices first-class.
-  - Admin: password + mandatory TOTP MFA; `auth/reauth` yields fresh-MFA evidence; `auth/revoke-all` kills admin sessions.
-- **Idempotency** — critical mutations require `Idempotency-Key`. Same key + same payload → prior result; changed payload → `IDEMPOTENCY_CONFLICT`.
-- **Optimistic concurrency** — versioned aggregates return `version` + `allowedActions`; stale writes → `VERSION_CONFLICT`.
-- **Pagination** — deterministic keyset/cursor over `(createdAt DESC, id DESC)` with a stable tie-breaker; allowlisted filters per resource.
-- **Member visibility** — Member discovery only ever exposes PUBLISHED lottery configuration; a Product/Bet Type with no PUBLISHED version is not part of the Member catalog. History reads return only the requesting Member's own rows.
-- **Time** — half-open `[from,to)`; server-authoritative instants; read models expose `dataAsOf`/`generatedAt` + completeness state.
-- **Status codes** — 400 validation · 401 no auth · 403 capability denied · 404 missing · 409 idempotency/version conflict · 429 rate limit.
-
+- **Responses:**
+  - `200`
 
 ## Schemas
 
-132 component schemas (full definitions in the OpenAPI document).
+### `AcceptTermsBody`
 
-| schema | shape |
-|---|---|
-| `AcceptTermsBody` | object · 9 fields · required: acceptanceId, memberId, documentId, documentCode, documentVersion, contentDigest, source, acceptedAt, alreadyAccepted |
-| `AcceptTermsRequestBody` | object · 1 fields · required: documentId |
-| `AccountingPeriodAcceptedExceptionReferenceBody` | object · 2 fields · required: discrepancyReference, exceptionReference |
-| `AccountingPeriodAcceptedExceptionReferenceResponse` | object · 2 fields · required: discrepancyReference, exceptionReference |
-| `AccountingPeriodCancellationResponse` | object · 1 fields · required: period |
-| `AccountingPeriodCloseEvidenceResponse` | object · 8 fields · required: closedAt, approvalId, reconciliationReferences, checkpointReferences, blockingDiscrepancyReferences, acceptedExceptionReferences |
-| `AccountingPeriodCloseResponse` | object · 1 fields · required: period |
-| `AccountingPeriodCommandResponse` | object · 2 fields · required: period, replacementPreview |
-| `AccountingPeriodCorrectionLineageResponse` | object · 5 fields · required: transactionId, correctionKind, accountingPeriodId, correctsTransactionId, originalAccountingPeriodId |
-| `AccountingPeriodFinancialReportResponse` | object · 9 fields · required: generatedAt, dataAsOf, projectionLagMs, completeness, reportingTimezone, range |
-| `AccountingPeriodListResponse` | object · 2 fields · required: items, nextCursor |
-| `AccountingPeriodPreviewPeriodResponse` | object · 4 fields · required: id, effectiveStart, effectiveEnd, generationKind |
-| `AccountingPeriodReplacementPreviewResponse` | object · 2 fields · required: affectedAutomaticPeriods, residualFragments |
-| `AccountingPeriodReportCoverageGapResponse` | object · 2 fields · required: from, to |
-| `AccountingPeriodReportCoverageResponse` | object · 3 fields · required: authoritativePeriodCount, uncoveredRanges, unobservedRange |
-| `AccountingPeriodReportGroupResponse` | object · 9 fields · required: accountingPeriodId, mode, generationKind, effectiveStart, effectiveEnd, state |
-| `AccountingPeriodReportRangeResponse` | object · 5 fields · required: from, to, boundary, source, accountingPeriodId |
-| `AccountingPeriodResidualFragmentResponse` | object · 4 fields · required: sourcePeriodId, effectiveStart, effectiveEnd, generationKind |
-| `AccountingPeriodResponse` | object · 25 fields · required: id, mode, generationKind, effectiveStart, effectiveEnd, accountingTimezone |
-| `AddPayoutDestinationBody` | object · 4 fields · required: type, bankCode, accountNumber, accountHolderName |
-| `AdminAccessTokenResponse` | object · 1 fields · required: accessToken |
-| `AdminApprovalLinkedAuditResponse` | object · 3 fields · required: id, outcome, createdAt |
-| `AdminApprovalListResponse` | object · 3 fields · required: items, nextCursor, dataAsOf |
-| `AdminApprovalPrincipalResponse` | object · 4 fields · required: id, email, name, role |
-| `AdminApprovalReauthResponse` | object · 4 fields · required: id, actionClass, verifiedAt, expiresAt |
-| `AdminApprovalResponse` | object · 20 fields · required: id, action, resourceType, resourceId, requesterAdminId, approverAdminId |
-| `AdminMeResponse` | object · 5 fields · required: id, email, name, role, capabilities |
-| `AdminReauthBody` | object · 2 fields · required: actionClass, code |
-| `AdminReauthResponse` | object · 3 fields · required: actionClass, verifiedAt, expiresAt |
-| `AdminRevokedResponse` | object · 1 fields · required: revoked |
-| `AdminWithdrawalBody` | object · 25 fields · required: id, memberId, payoutDestinationId, amountMinor, feeMinor, currency |
-| `AdminWithdrawalDetailBody` | object · 2 fields · required: withdrawal, timeline |
-| `AdminWithdrawalListBody` | object · 2 fields · required: items, nextCursor |
-| `AdminWithdrawalTimelineEntry` | object · 9 fields · required: id, fromState, toState, actorType, actorId, reason |
-| `ApiErrorResponse` | object · 4 fields · required: code, message, details, correlationId |
-| `ApproveAccountingPeriodBody` | object · 1 fields · required: expectedVersion |
-| `AuditActorReferenceResponse` | object · 4 fields · required: id, email, name, role |
-| `AuditLinkedApprovalResponse` | object · 7 fields · required: id, action, resourceType, resourceId, requesterAdminId, approverAdminId |
-| `AuditLinkedReauthResponse` | object · 4 fields · required: id, actionClass, verifiedAt, expiresAt |
-| `AuditRecordListResponse` | object · 3 fields · required: items, nextCursor, dataAsOf |
-| `AuditRecordResponse` | object · 17 fields · required: id, actorAdminId, actorRole, sessionId, action, resourceType |
-| `BetOrderBody` | object · 25 fields · required: id, memberId, quoteId, drawId, productId, productVersionId |
-| `BetOrderCommandBody` | object · 2 fields · required: version |
-| `BetOrderLineBody` | object · 8 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
-| `BetOrderListBody` | object · 2 fields · required: items, nextCursor |
-| `BetReceiptBody` | object · 7 fields · required: id, orderId, memberId, orderVersion, contentDigest, terms |
-| `BetReceiptLineBody` | object · 5 fields · required: betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
-| `BetReceiptTermsBody` | object · 9 fields · required: productId, productVersionId, drawReference, drawCutoffAt, currency, totalStakeMinor |
-| `BettingQuoteBody` | object · 12 fields · required: id, memberId, drawId, productId, productVersionId, currency |
-| `CancelAccountingPeriodBody` | object · 2 fields · required: expectedVersion, reason |
-| `CatalogEnabledBetTypeBody` | object · 6 fields · required: betTypeId, betTypeCode, betTypeVersionId, betTypeVersion, betTypeVersionState, betTypeVersionRevision |
-| `CatalogVersionBody` | object · 6 fields · required: id, version, revision, state, effectiveFrom, effectiveUntil |
-| `ClaimPromotionBody` | object · 1 fields · required: campaignVersionId |
-| `CloseAccountingPeriodBody` | object · 6 fields · required: expectedVersion, reason, reconciliationReferences, checkpointReferences, blockingDiscrepancyReferences, acceptedExceptionReferences |
-| `CreateBetTypeBody` | object · 1 fields · required: code |
-| `CreateBetTypeVersionBody` | object · 12 fields · required: version, canonicalNumberFormat, validationPattern, defaultPayout, minStakeMinor, maxStakeMinor |
-| `CreateCustomAccountingPeriodBody` | object · 3 fields · required: startDate, endDate, reason |
-| `CreateProductVersionBody` | object · 12 fields · required: version, timezone, scheduleTemplateRef, resultSchemaVersionRef, settlementRuleVersionRef, defaultPayoutPolicyRef |
-| `CreateTermsVersionBody` | object · 8 fields · required: version, title, body, policyVersion, effectiveFrom |
-| `CreateWithdrawalBody` | object · 3 fields · required: payoutDestinationId, amountMinor, currency |
-| `DepositBody` | object · 10 fields · required: id, memberId, providerCode, methodCode, amountMinor, currency |
-| `DepositInitiateBody` | object · 4 fields · required: providerCode, methodCode, amountMinor, currency |
-| `EnabledBetTypeReferenceBody` | object · 2 fields · required: betTypeId, betTypeVersionId |
-| `ExpectedRevisionBody` | object · 2 fields · required: expectedRevision |
-| `ExpectedVersionBody` | object · 1 fields · required: expectedVersion |
-| `GenerateDrawsBody` | object · 1 fields · required: baseOccurrences |
-| `MemberBetTypeDetailBody` | object · 3 fields · required: id, code, versions |
-| `MemberBetTypePageBody` | object · 2 fields · required: items, nextCursor |
-| `MemberBetTypeSummaryBody` | object · 3 fields · required: id, code, versions |
-| `MemberBetTypeVersionBody` | object · 14 fields · required: id, version, revision, state, effectiveFrom, effectiveUntil |
-| `MemberDeviceViewBody` | object · 4 fields · required: deviceId, name, createdAt, lastUsedAt |
-| `MemberDrawBetTypeBody` | object · 11 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumberFormat, validationPattern, payout |
-| `MemberDrawCutoffBody` | object · 1 fields · required: cutoffAt |
-| `MemberDrawDetailBody` | object · 24 fields · required: id, productId, productVersionId, occurrenceIdentity, localDate, state |
-| `MemberDrawEligibilityBody` | object · 3 fields · required: eligible, cutoffAt, serverNow |
-| `MemberDrawPageBody` | object · 2 fields · required: items, nextCursor |
-| `MemberMeResponse` | object · 3 fields · required: memberId, phone, status |
-| `MemberProductDetailBody` | object · 2 fields · required: id, versions |
-| `MemberProductPageBody` | object · 2 fields · required: items, nextCursor |
-| `MemberProductSummaryBody` | object · 2 fields · required: id, versions |
-| `MemberProductVersionBody` | object · 14 fields · required: id, version, revision, state, effectiveFrom, effectiveUntil |
-| `MemberProfileBody` | object · 9 fields · required: memberId, phone, fullName, dateOfBirth, province, profileUpdatedAt, mandatoryFields, missingMandatoryFields, profileComplete |
-| `MemberRefreshResponse` | object · 1 fields · required: accessToken |
-| `MemberRevokedResponse` | object · 1 fields · required: revoked |
-| `MemberSessionResponse` | object · 4 fields · required: accessToken, memberId, accountCreated, deviceId |
-| `MemberSessionViewBody` | object · 3 fields · required: sessionId, deviceId, expiresAt |
-| `MemberSettlementOutcomeBody` | object · 5 fields · required: orderId, outcome, payoutMinor, batchState, authoritative |
-| `MemberTermsBody` | object · 5 fields · required: memberId, asOf, required, acceptances, satisfied |
-| `NotificationPreferenceBody` | object · 5 fields · required: topic, channel, enabled, version, updatedAt |
-| `NotificationPreferencesBody` | object · 2 fields · required: memberId, items |
-| `Object` | object · 0 fields |
-| `OccurrenceBody` | object · 6 fields · required: occurrenceIdentity, localDate, openAt, cutoffAt, drawAt, provenance |
-| `OtpRequestBody` | object · 2 fields · required: purpose, phone |
-| `OtpRequestResponse` | object · 3 fields · required: purpose, deliveredTo, retryAfterSeconds |
-| `OtpVerifyBody` | object · 4 fields · required: purpose, phone, code |
-| `OverrideBody` | object · 5 fields · required: reason, changes, approvalEvidenceRef, auditEvidenceRef |
-| `PayoutDestinationBody` | object · 13 fields · required: id, memberId, type, bankCode, accountNumberMasked, accountHolderName |
-| `PayoutDestinationListBody` | object · 1 fields · required: items |
-| `PromotionDiscoveryBody` | object · 3 fields · required: memberId, asOf, items |
-| `PromotionDiscoveryItemBody` | object · 14 fields · required: campaignVersionId, campaignCode, campaignVersion, rewardAmountMinor, currency, turnoverTargetMinor |
-| `PromotionEntitlementBody` | object · 19 fields · required: id, memberId, campaignCode, campaignVersionId, campaignVersion, state |
-| `PromotionEntitlementPageBody` | object · 2 fields · required: items, nextCursor |
-| `QuoteCreateBody` | object · 3 fields · required: betTypeCode, canonicalNumber, stakeMinor |
-| `QuoteLineBody` | object · 8 fields · required: betTypeId, betTypeCode, betTypeVersionId, canonicalNumber, stakeMinor, resolvedPayout |
-| `ReconciliationDiscrepancyFactsResponse` | object · 5 fields · required: memberId, currency, bucket, metric, amountMinor |
-| `ReconciliationDiscrepancyListResponse` | object · 3 fields · required: items, nextCursor, dataAsOf |
-| `ReconciliationDiscrepancyResponse` | object · 21 fields · required: id, reconciliationRunId, pair, identityKey, memberId, currency |
-| `ReconciliationDiscrepancySourceReferencesResponse` | object · 4 fields · required: pair, checkpointKey, memberId, ledgerAccountId |
-| `ReconciliationInspectedCountsResponse` | object · 5 fields · required: ledgerAccounts, ledgerPostings, activeReservationAllocations, walletBuckets, discrepancies |
-| `ReconciliationResultSummaryResponse` | object · 3 fields · required: matched, discrepancyCount, bucketCount |
-| `ReconciliationRunListResponse` | object · 3 fields · required: items, nextCursor, dataAsOf |
-| `ReconciliationRunResponse` | object · 14 fields · required: id, pair, checkpointKey, memberId, currency, asOf |
-| `ReconciliationSourceCheckpointResponse` | object · 8 fields · required: checkpointKey, memberId, currency, asOf, latestLedgerPostingId, latestLedgerPostingAt |
-| `ReconciliationSourceRangeResponse` | object · 2 fields · required: ledgerPostedAt, reservationLifecycle |
-| `ReconciliationTotalsResponse` | object · 3 fields · required: expected, observed, difference |
-| `RequiredTermsBody` | object · 12 fields · required: documentId, code, version, title, body, contentDigest, policyVersion, effectiveFrom, effectiveUntil, accepted, acceptedAt, acceptanceId |
-| `SubmitAccountingPeriodBody` | object · 1 fields · required: expectedVersion |
-| `TermsAcceptanceBody` | object · 8 fields · required: id, memberId, documentId, documentCode, documentVersion, contentDigest, source, acceptedAt |
-| `TermsVersionBody` | object · 16 fields · required: id, code, version, revision, state, title, body, contentDigest, policyVersion, effectiveFrom, effectiveUntil, reason, publishedAt, approvalEvidenceRef, createdAt, updatedAt |
-| `TermsVersionListBody` | object · 2 fields · required: items, nextCursor |
-| `TransitionBody` | object · 2 fields · required: command, expectedVersion |
-| `TurnoverEntryBody` | object · 5 fields · required: betReference, entryKind, state, contributionMinor, occurredAt |
-| `TurnoverProgressBody` | object · 6 fields · required: provisionalMinor, finalizedMinor, progressMinor, targetMinor, remainingMinor, releaseReached |
-| `UpdateMemberProfileBody` | object · 3 fields |
-| `UpdateNotificationPreferencesBody` | object · 1 fields · required: preferences |
-| `WalletBalanceBody` | object · 4 fields · required: memberId, currency, dataAsOf, buckets |
-| `WalletBucketBody` | object · 4 fields · required: bucket, postedMinor, reservedMinor, availableMinor |
-| `WalletTransactionBody` | object · 7 fields · required: id, businessTransactionId, operationType, correlationId, postedAt, effectiveAt |
-| `WalletTransactionPageBody` | object · 2 fields · required: items, nextCursor |
-| `WithdrawalBody` | object · 19 fields · required: id, memberId, payoutDestinationId, amountMinor, feeMinor, currency |
-| `WithdrawalCommandBody` | object · 1 fields · required: reason |
-| `WithdrawalListBody` | object · 2 fields · required: items, nextCursor |
+| property | type | required |
+|---|---|---|
+| `acceptanceId` | `string` | yes |
+| `memberId` | `string` | yes |
+| `documentId` | `string` | yes |
+| `documentCode` | `string` | yes |
+| `documentVersion` | `number` | yes |
+| `contentDigest` | `string` | yes |
+| `source` | `string` | yes |
+| `acceptedAt` | `string (date-time)` | yes |
+| `alreadyAccepted` | `boolean` | yes |
+
+### `AcceptTermsRequestBody`
+
+| property | type | required |
+|---|---|---|
+| `documentId` | `string (uuid)` | yes |
+
+### `AccountingPeriodAcceptedExceptionReferenceBody`
+
+| property | type | required |
+|---|---|---|
+| `discrepancyReference` | `string` | yes |
+| `exceptionReference` | `string` | yes |
+
+### `AccountingPeriodAcceptedExceptionReferenceResponse`
+
+| property | type | required |
+|---|---|---|
+| `discrepancyReference` | `string` | yes |
+| `exceptionReference` | `string` | yes |
+
+### `AccountingPeriodCancellationResponse`
+
+| property | type | required |
+|---|---|---|
+| `period` | `AccountingPeriodResponse` | yes |
+
+### `AccountingPeriodCloseEvidenceResponse`
+
+| property | type | required |
+|---|---|---|
+| `closedAt` | `string (date-time)` | yes |
+| `approvalId` | `string` | yes |
+| `reconciliationReferences` | array<`string`> | yes |
+| `checkpointReferences` | array<`string`> | yes |
+| `blockingDiscrepancyReferences` | array<`string`> | yes |
+| `acceptedExceptionReferences` | array<`AccountingPeriodAcceptedExceptionReferenceResponse`> | yes |
+| `actorAdminId` | `string` | yes |
+| `auditRecordId` | `string` | yes |
+
+### `AccountingPeriodCloseResponse`
+
+| property | type | required |
+|---|---|---|
+| `period` | `AccountingPeriodResponse` | yes |
+
+### `AccountingPeriodCommandResponse`
+
+| property | type | required |
+|---|---|---|
+| `period` | `AccountingPeriodResponse` | yes |
+| `replacementPreview` | `AccountingPeriodReplacementPreviewResponse` | yes |
+
+### `AccountingPeriodCorrectionLineageResponse`
+
+| property | type | required |
+|---|---|---|
+| `transactionId` | `string (uuid)` | yes |
+| `correctionKind` | `string` | yes |
+| `accountingPeriodId` | `string (uuid)` | yes |
+| `correctsTransactionId` | `string (uuid)` | yes |
+| `originalAccountingPeriodId` | `string (uuid)` | yes |
+
+### `AccountingPeriodFinancialReportResponse`
+
+| property | type | required |
+|---|---|---|
+| `generatedAt` | `string (date-time)` | yes |
+| `dataAsOf` | `string (date-time)` | yes |
+| `projectionLagMs` | `number` | yes |
+| `completeness` | `string` | yes |
+| `reportingTimezone` | `string` | yes |
+| `range` | `AccountingPeriodReportRangeResponse` | yes |
+| `coverage` | `AccountingPeriodReportCoverageResponse` | yes |
+| `periods` | array<`AccountingPeriodReportGroupResponse`> | yes |
+| `corrections` | array<`AccountingPeriodCorrectionLineageResponse`> | yes |
+
+### `AccountingPeriodListResponse`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`AccountingPeriodResponse`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `AccountingPeriodPreviewPeriodResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `effectiveStart` | `string (date-time)` | yes |
+| `effectiveEnd` | `string (date-time)` | yes |
+| `generationKind` | `string` | yes |
+
+### `AccountingPeriodReplacementPreviewResponse`
+
+| property | type | required |
+|---|---|---|
+| `affectedAutomaticPeriods` | array<`AccountingPeriodPreviewPeriodResponse`> | yes |
+| `residualFragments` | array<`AccountingPeriodResidualFragmentResponse`> | yes |
+
+### `AccountingPeriodReportCoverageGapResponse`
+
+| property | type | required |
+|---|---|---|
+| `from` | `string (date-time)` | yes |
+| `to` | `string (date-time)` | yes |
+
+### `AccountingPeriodReportCoverageResponse`
+
+| property | type | required |
+|---|---|---|
+| `authoritativePeriodCount` | `number` | yes |
+| `uncoveredRanges` | array<`AccountingPeriodReportCoverageGapResponse`> | yes |
+| `unobservedRange` | `AccountingPeriodReportCoverageGapResponse` | yes |
+
+### `AccountingPeriodReportGroupResponse`
+
+| property | type | required |
+|---|---|---|
+| `accountingPeriodId` | `string (uuid)` | yes |
+| `mode` | `string` | yes |
+| `generationKind` | `string` | yes |
+| `effectiveStart` | `string (date-time)` | yes |
+| `effectiveEnd` | `string (date-time)` | yes |
+| `state` | `string` | yes |
+| `transactionCount` | `number` | yes |
+| `debitAmountMinor` | `string` | yes |
+| `creditAmountMinor` | `string` | yes |
+
+### `AccountingPeriodReportRangeResponse`
+
+| property | type | required |
+|---|---|---|
+| `from` | `string (date-time)` | yes |
+| `to` | `string (date-time)` | yes |
+| `boundary` | `string` | yes |
+| `source` | `string` | yes |
+| `accountingPeriodId` | `string (uuid)` | yes |
+
+### `AccountingPeriodResidualFragmentResponse`
+
+| property | type | required |
+|---|---|---|
+| `sourcePeriodId` | `string` | yes |
+| `effectiveStart` | `string (date-time)` | yes |
+| `effectiveEnd` | `string (date-time)` | yes |
+| `generationKind` | `string` | yes |
+
+### `AccountingPeriodResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `mode` | `string` | yes |
+| `generationKind` | `string` | yes |
+| `effectiveStart` | `string (date-time)` | yes |
+| `effectiveEnd` | `string (date-time)` | yes |
+| `accountingTimezone` | `string` | yes |
+| `state` | `string` | yes |
+| `version` | `number` | yes |
+| `reason` | `string` | yes |
+| `createdByAdminId` | `string` | yes |
+| `activationApprovalId` | `string` | yes |
+| `cancellationRequestedByAdminId` | `string` | yes |
+| `cancellationReason` | `string` | yes |
+| `cancellationRequestedAt` | `string (date-time)` | yes |
+| `closeRequestedByAdminId` | `string` | yes |
+| `closeReason` | `string` | yes |
+| `closeRequestedAt` | `string (date-time)` | yes |
+| `closeReconciliationReferences` | array<`string`> | yes |
+| `closeCheckpointReferences` | array<`string`> | yes |
+| `closeBlockingDiscrepancyReferences` | array<`string`> | yes |
+| `closeAcceptedExceptionReferences` | array<`object`> | yes |
+| `closeEvidence` | `AccountingPeriodCloseEvidenceResponse` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+| `allowedActions` | array<`string`> | yes |
+
+### `AddPayoutDestinationBody`
+
+| property | type | required |
+|---|---|---|
+| `type` | `string` | yes |
+| `bankCode` | `string` | yes |
+| `accountNumber` | `string` | yes |
+| `accountHolderName` | `string` | yes |
+
+### `AdminAccessTokenResponse`
+
+| property | type | required |
+|---|---|---|
+| `accessToken` | `string` | yes |
+
+### `AdminApprovalLinkedAuditResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `outcome` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+
+### `AdminApprovalListResponse`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`AdminApprovalResponse`> | yes |
+| `nextCursor` | `string` | yes |
+| `dataAsOf` | `string (date-time)` | yes |
+
+### `AdminApprovalPrincipalResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `email` | `string (email)` | yes |
+| `name` | `string` | yes |
+| `role` | `string` | yes |
+
+### `AdminApprovalReauthResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `actionClass` | `string` | yes |
+| `verifiedAt` | `string (date-time)` | yes |
+| `expiresAt` | `string (date-time)` | yes |
+
+### `AdminApprovalResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `action` | `string` | yes |
+| `resourceType` | `string` | yes |
+| `resourceId` | `string (uuid)` | yes |
+| `requesterAdminId` | `string (uuid)` | yes |
+| `approverAdminId` | `string (uuid)` | yes |
+| `requestedVersion` | `number` | yes |
+| `payloadHash` | `string` | yes |
+| `reason` | `string` | yes |
+| `policyVersion` | `string` | yes |
+| `reauthEvidenceId` | `string (uuid)` | yes |
+| `correlationId` | `string` | yes |
+| `approvedAt` | `string (date-time)` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `state` | `string` | yes |
+| `ageMs` | `number` | yes |
+| `requester` | `AdminApprovalPrincipalResponse` | yes |
+| `approver` | `AdminApprovalPrincipalResponse` | yes |
+| `reauthEvidence` | `AdminApprovalReauthResponse` | yes |
+| `auditRecords` | array<`AdminApprovalLinkedAuditResponse`> | yes |
+
+### `AdminMeResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `email` | `string (email)` | yes |
+| `name` | `string` | yes |
+| `role` | `string` | yes |
+| `capabilities` | array<`string`> | yes |
+
+### `AdminReauthBody`
+
+| property | type | required |
+|---|---|---|
+| `actionClass` | `string` | yes |
+| `code` | `string` | yes |
+
+### `AdminReauthResponse`
+
+| property | type | required |
+|---|---|---|
+| `actionClass` | `string` | yes |
+| `verifiedAt` | `string (date-time)` | yes |
+| `expiresAt` | `string (date-time)` | yes |
+
+### `AdminRevokedResponse`
+
+| property | type | required |
+|---|---|---|
+| `revoked` | `boolean` | yes |
+
+### `AdminWithdrawalBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `payoutDestinationId` | `string` | yes |
+| `amountMinor` | `string` | yes |
+| `feeMinor` | `string` | yes |
+| `currency` | `string` | yes |
+| `state` | `string` | yes |
+| `version` | `number` | yes |
+| `eligibilityOutcome` | `string` | yes |
+| `eligibilityReasonCodes` | array<`string`> | yes |
+| `eligibilityEvidenceRefs` | array<`string`> | yes |
+| `requiresApproval` | `boolean` | yes |
+| `severity` | `string` | yes |
+| `queue` | `string` | yes |
+| `allowedActions` | `object` | yes |
+| `reconciliationAttempts` | `number` | yes |
+| `providerTransactionId` | `string` | yes |
+| `payoutEvidenceRef` | `string` | yes |
+| `ledgerTransactionId` | `string` | yes |
+| `decidedByAdminId` | `string` | yes |
+| `decisionReason` | `string` | yes |
+| `failureReason` | `string` | yes |
+| `incomingProviderError` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `AdminWithdrawalDetailBody`
+
+| property | type | required |
+|---|---|---|
+| `withdrawal` | `AdminWithdrawalBody` | yes |
+| `timeline` | array<`AdminWithdrawalTimelineEntry`> | yes |
+
+### `AdminWithdrawalListBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`AdminWithdrawalBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `AdminWithdrawalTimelineEntry`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `fromState` | `string` | yes |
+| `toState` | `string` | yes |
+| `actorType` | `string` | yes |
+| `actorId` | `string` | yes |
+| `reason` | `string` | yes |
+| `evidenceRef` | `string` | yes |
+| `correlationId` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+
+### `ApiErrorResponse`
+
+| property | type | required |
+|---|---|---|
+| `code` | `string` | yes |
+| `message` | `string` | yes |
+| `details` | `object` | yes |
+| `correlationId` | `string` | yes |
+
+### `ApproveAccountingPeriodBody`
+
+| property | type | required |
+|---|---|---|
+| `expectedVersion` | `number` | yes |
+
+### `AuditActorReferenceResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `email` | `string (email)` | yes |
+| `name` | `string` | yes |
+| `role` | `string` | yes |
+
+### `AuditLinkedApprovalResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `action` | `string` | yes |
+| `resourceType` | `string` | yes |
+| `resourceId` | `string (uuid)` | yes |
+| `requesterAdminId` | `string (uuid)` | yes |
+| `approverAdminId` | `string (uuid)` | yes |
+| `approvedAt` | `string (date-time)` | yes |
+
+### `AuditLinkedReauthResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `actionClass` | `string` | yes |
+| `verifiedAt` | `string (date-time)` | yes |
+| `expiresAt` | `string (date-time)` | yes |
+
+### `AuditRecordListResponse`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`AuditRecordResponse`> | yes |
+| `nextCursor` | `string` | yes |
+| `dataAsOf` | `string (date-time)` | yes |
+
+### `AuditRecordResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `actorAdminId` | `string (uuid)` | yes |
+| `actorRole` | `string` | yes |
+| `sessionId` | `string (uuid)` | yes |
+| `action` | `string` | yes |
+| `resourceType` | `string` | yes |
+| `resourceId` | `string (uuid)` | yes |
+| `payloadHash` | `string` | yes |
+| `reason` | `string` | yes |
+| `reauthEvidenceId` | `string (uuid)` | yes |
+| `approvalId` | `string (uuid)` | yes |
+| `correlationId` | `string` | yes |
+| `outcome` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `actor` | `AuditActorReferenceResponse` | yes |
+| `reauthEvidence` | `AuditLinkedReauthResponse` | yes |
+| `approval` | `AuditLinkedApprovalResponse` | yes |
+
+### `BetOrderBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `quoteId` | `string` | yes |
+| `drawId` | `string` | yes |
+| `productId` | `string` | yes |
+| `productVersionId` | `string` | yes |
+| `currency` | `string` | yes |
+| `state` | `string` | yes |
+| `version` | `number` | yes |
+| `allowedActions` | array<`string`> | yes |
+| `totalStakeMinor` | `string` | yes |
+| `cutoffAt` | `string (date-time)` | yes |
+| `quoteExpiresAt` | `string (date-time)` | yes |
+| `reservationId` | `string` | yes |
+| `stakeTransactionId` | `string` | yes |
+| `refundTransactionId` | `string` | yes |
+| `rejectionReason` | `string` | yes |
+| `cancellationReason` | `string` | yes |
+| `confirmedAt` | `string (date-time)` | yes |
+| `cancelledAt` | `string (date-time)` | yes |
+| `rejectedAt` | `string (date-time)` | yes |
+| `receiptId` | `string` | yes |
+| `lines` | array<`BetOrderLineBody`> | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `BetOrderCommandBody`
+
+| property | type | required |
+|---|---|---|
+| `version` | `number` | yes |
+| `reason` | `string` | no |
+
+### `BetOrderLineBody`
+
+| property | type | required |
+|---|---|---|
+| `betTypeId` | `string` | yes |
+| `betTypeCode` | `string` | yes |
+| `betTypeVersionId` | `string` | yes |
+| `canonicalNumber` | `string` | yes |
+| `stakeMinor` | `string` | yes |
+| `resolvedPayout` | `object` | yes |
+| `payoutSource` | `string` | yes |
+| `restrictions` | array<`string`> | yes |
+
+### `BetOrderListBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`BetOrderBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `BetReceiptBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `orderId` | `string` | yes |
+| `memberId` | `string` | yes |
+| `orderVersion` | `number` | yes |
+| `contentDigest` | `string` | yes |
+| `terms` | `BetReceiptTermsBody` | yes |
+| `issuedAt` | `string (date-time)` | yes |
+
+### `BetReceiptLineBody`
+
+| property | type | required |
+|---|---|---|
+| `betTypeCode` | `string` | yes |
+| `betTypeVersionId` | `string` | yes |
+| `canonicalNumber` | `string` | yes |
+| `stakeMinor` | `string` | yes |
+| `resolvedPayout` | `object` | yes |
+
+### `BetReceiptTermsBody`
+
+| property | type | required |
+|---|---|---|
+| `productId` | `string` | yes |
+| `productVersionId` | `string` | yes |
+| `drawReference` | `string` | yes |
+| `drawCutoffAt` | `string (date-time)` | yes |
+| `currency` | `string` | yes |
+| `totalStakeMinor` | `string` | yes |
+| `acceptedAt` | `string (date-time)` | yes |
+| `lines` | array<`BetReceiptLineBody`> | yes |
+| `acceptedRestrictions` | array<`string`> | yes |
+
+### `BettingQuoteBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `drawId` | `string` | yes |
+| `productId` | `string` | yes |
+| `productVersionId` | `string` | yes |
+| `currency` | `string` | yes |
+| `totalStakeMinor` | `string` | yes |
+| `status` | `string` | yes |
+| `cutoffAt` | `string (date-time)` | yes |
+| `serverNow` | `string (date-time)` | yes |
+| `expiresAt` | `string (date-time)` | yes |
+| `lines` | array<`QuoteLineBody`> | yes |
+
+### `CancelAccountingPeriodBody`
+
+| property | type | required |
+|---|---|---|
+| `expectedVersion` | `number` | yes |
+| `reason` | `string` | yes |
+
+### `CapabilityReadinessBody`
+
+| property | type | required |
+|---|---|---|
+| `capability` | `string` | yes |
+| `outcome` | `string` | yes |
+| `reasonCodes` | array<`string`> | yes |
+| `evaluatedAt` | `string (date-time)` | yes |
+| `validUntil` | `string (date-time)` | yes |
+
+### `CapabilityRestrictionBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `type` | `string` | yes |
+| `source` | `string` | yes |
+| `reason` | `string` | yes |
+| `effectiveFrom` | `string (date-time)` | yes |
+| `effectiveUntil` | `string (date-time)` | yes |
+| `actorOrPolicyRef` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+
+### `CatalogEnabledBetTypeBody`
+
+| property | type | required |
+|---|---|---|
+| `betTypeId` | `string` | yes |
+| `betTypeCode` | `string` | yes |
+| `betTypeVersionId` | `string` | yes |
+| `betTypeVersion` | `number` | yes |
+| `betTypeVersionState` | `string` | yes |
+| `betTypeVersionRevision` | `number` | yes |
+
+### `CatalogVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `version` | `number` | yes |
+| `revision` | `number` | yes |
+| `state` | `string` | yes |
+| `effectiveFrom` | `string (date-time)` | yes |
+| `effectiveUntil` | `string (date-time)` | yes |
+
+### `ClaimPromotionBody`
+
+| property | type | required |
+|---|---|---|
+| `campaignVersionId` | `string (uuid)` | yes |
+
+### `ClearRestrictionBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `removed` | `boolean` | yes |
+
+### `CloseAccountingPeriodBody`
+
+| property | type | required |
+|---|---|---|
+| `expectedVersion` | `number` | yes |
+| `reason` | `string` | yes |
+| `reconciliationReferences` | array<`string`> | yes |
+| `checkpointReferences` | array<`string`> | yes |
+| `blockingDiscrepancyReferences` | array<`string`> | yes |
+| `acceptedExceptionReferences` | array<`AccountingPeriodAcceptedExceptionReferenceBody`> | yes |
+
+### `CreateBetTypeBody`
+
+| property | type | required |
+|---|---|---|
+| `code` | `string` | yes |
+
+### `CreateBetTypeVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `version` | `number` | yes |
+| `canonicalNumberFormat` | `string` | yes |
+| `validationPattern` | `string` | yes |
+| `defaultPayout` | `object` | yes |
+| `minStakeMinor` | `string` | yes |
+| `maxStakeMinor` | `string` | yes |
+| `limitPolicyRef` | `string` | yes |
+| `restrictionPolicyRef` | `string` | yes |
+| `settlementRuleVersionRef` | `string` | yes |
+| `effectiveFrom` | `string` | yes |
+| `effectiveUntil` | `string` | no |
+| `reason` | `string` | no |
+
+### `CreateCustomAccountingPeriodBody`
+
+| property | type | required |
+|---|---|---|
+| `startDate` | `string (date)` | yes |
+| `endDate` | `string (date)` | yes |
+| `reason` | `string` | yes |
+
+### `CreateProductVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `version` | `number` | yes |
+| `timezone` | `string` | yes |
+| `scheduleTemplateRef` | `string` | yes |
+| `resultSchemaVersionRef` | `string` | yes |
+| `settlementRuleVersionRef` | `string` | yes |
+| `defaultPayoutPolicyRef` | `string` | yes |
+| `defaultLimitPolicyRef` | `string` | yes |
+| `defaultRestrictionPolicyRef` | `string` | yes |
+| `effectiveFrom` | `string` | yes |
+| `effectiveUntil` | `string` | no |
+| `reason` | `string` | no |
+| `enabledBetTypes` | array<`EnabledBetTypeReferenceBody`> | yes |
+
+### `CreateTermsVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `code` | `string` | no |
+| `version` | `number` | yes |
+| `title` | `string` | yes |
+| `body` | `string` | yes |
+| `policyVersion` | `string` | yes |
+| `effectiveFrom` | `string` | yes |
+| `effectiveUntil` | `string` | no |
+| `reason` | `string` | no |
+
+### `CreateWithdrawalBody`
+
+| property | type | required |
+|---|---|---|
+| `payoutDestinationId` | `string` | yes |
+| `amountMinor` | `number` | yes |
+| `currency` | `string` | yes |
+
+### `DepositBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `providerCode` | `string` | yes |
+| `methodCode` | `string` | yes |
+| `amountMinor` | `string` | yes |
+| `currency` | `string` | yes |
+| `status` | `string` | yes |
+| `ledgerTransactionId` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `DepositInitiateBody`
+
+| property | type | required |
+|---|---|---|
+| `providerCode` | `string` | yes |
+| `methodCode` | `string` | yes |
+| `amountMinor` | `number` | yes |
+| `currency` | `string` | yes |
+
+### `DepositMethodDescriptionBody`
+
+| property | type | required |
+|---|---|---|
+| `methodCode` | `string` | yes |
+| `providerCode` | `string` | yes |
+| `currency` | `string` | yes |
+| `feeMinor` | `string` | yes |
+| `instructions` | array<`string`> | yes |
+
+### `DepositMethodSummaryBody`
+
+| property | type | required |
+|---|---|---|
+| `methodCode` | `string` | yes |
+| `providerCode` | `string` | yes |
+
+### `EnabledBetTypeReferenceBody`
+
+| property | type | required |
+|---|---|---|
+| `betTypeId` | `string (uuid)` | yes |
+| `betTypeVersionId` | `string (uuid)` | yes |
+
+### `ExpectedRevisionBody`
+
+| property | type | required |
+|---|---|---|
+| `expectedRevision` | `number` | yes |
+| `reason` | `string` | no |
+
+### `ExpectedVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `expectedVersion` | `number` | yes |
+
+### `GenerateDrawsBody`
+
+| property | type | required |
+|---|---|---|
+| `baseOccurrences` | array<`OccurrenceBody`> | yes |
+
+### `KycReadinessBody`
+
+| property | type | required |
+|---|---|---|
+| `required` | `boolean` | yes |
+| `status` | `string` | yes |
+| `verified` | `boolean` | yes |
+| `expired` | `boolean` | yes |
+
+### `MemberBetTypeDetailBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `code` | `string` | yes |
+| `versions` | array<`MemberBetTypeVersionBody`> | yes |
+
+### `MemberBetTypePageBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`MemberBetTypeSummaryBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `MemberBetTypeSummaryBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `code` | `string` | yes |
+| `versions` | array<`CatalogVersionBody`> | yes |
+
+### `MemberBetTypeVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `version` | `number` | yes |
+| `revision` | `number` | yes |
+| `state` | `string` | yes |
+| `effectiveFrom` | `string (date-time)` | yes |
+| `effectiveUntil` | `string (date-time)` | yes |
+| `canonicalNumberFormat` | `string` | yes |
+| `validationPattern` | `string` | yes |
+| `defaultPayout` | `object` | yes |
+| `minStakeMinor` | `string` | yes |
+| `maxStakeMinor` | `string` | yes |
+| `limitPolicyRef` | `string` | yes |
+| `restrictionPolicyRef` | `string` | yes |
+| `settlementRuleVersionRef` | `string` | yes |
+
+### `MemberDeviceViewBody`
+
+| property | type | required |
+|---|---|---|
+| `deviceId` | `string` | yes |
+| `name` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `lastUsedAt` | `string (date-time)` | yes |
+
+### `MemberDrawBetTypeBody`
+
+| property | type | required |
+|---|---|---|
+| `betTypeId` | `string` | yes |
+| `betTypeCode` | `string` | yes |
+| `betTypeVersionId` | `string` | yes |
+| `canonicalNumberFormat` | `string` | yes |
+| `validationPattern` | `string` | yes |
+| `payout` | `object` | yes |
+| `minStakeMinor` | `string` | yes |
+| `maxStakeMinor` | `string` | yes |
+| `limitPolicyRef` | `string` | yes |
+| `restrictionPolicyRef` | `string` | yes |
+| `settlementRuleVersionRef` | `string` | yes |
+
+### `MemberDrawCutoffBody`
+
+| property | type | required |
+|---|---|---|
+| `cutoffAt` | `string (date-time)` | yes |
+
+### `MemberDrawDetailBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `productId` | `string` | yes |
+| `productVersionId` | `string` | yes |
+| `occurrenceIdentity` | `string` | yes |
+| `localDate` | `string` | yes |
+| `state` | `string` | yes |
+| `version` | `number` | yes |
+| `openAt` | `string (date-time)` | yes |
+| `cutoffAt` | `string (date-time)` | yes |
+| `drawAt` | `string (date-time)` | yes |
+| `provenance` | `string` | yes |
+| `timezone` | `string` | yes |
+| `scheduleTemplateRef` | `string` | yes |
+| `resultSchemaVersionRef` | `string` | yes |
+| `settlementRuleVersionRef` | `string` | yes |
+| `defaultPayoutPolicyRef` | `string` | yes |
+| `defaultLimitPolicyRef` | `string` | yes |
+| `defaultRestrictionPolicyRef` | `string` | yes |
+| `resultSourceRef` | `string` | yes |
+| `overrideRevisionRef` | `string` | yes |
+| `cutoff` | `MemberDrawCutoffBody` | yes |
+| `serverNow` | `string (date-time)` | yes |
+| `allowedActions` | array<`string`> | yes |
+| `betTypes` | array<`MemberDrawBetTypeBody`> | yes |
+
+### `MemberDrawEligibilityBody`
+
+| property | type | required |
+|---|---|---|
+| `eligible` | `boolean` | yes |
+| `cutoffAt` | `string (date-time)` | yes |
+| `serverNow` | `string (date-time)` | yes |
+
+### `MemberDrawPageBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`MemberDrawDetailBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `MemberMeResponse`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `phone` | `string` | yes |
+| `status` | `string` | yes |
+
+### `MemberProductDetailBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `versions` | array<`MemberProductVersionBody`> | yes |
+
+### `MemberProductPageBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`MemberProductSummaryBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `MemberProductSummaryBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `versions` | array<`CatalogVersionBody`> | yes |
+
+### `MemberProductVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `version` | `number` | yes |
+| `revision` | `number` | yes |
+| `state` | `string` | yes |
+| `effectiveFrom` | `string (date-time)` | yes |
+| `effectiveUntil` | `string (date-time)` | yes |
+| `timezone` | `string` | yes |
+| `scheduleTemplateRef` | `string` | yes |
+| `resultSchemaVersionRef` | `string` | yes |
+| `settlementRuleVersionRef` | `string` | yes |
+| `defaultPayoutPolicyRef` | `string` | yes |
+| `defaultLimitPolicyRef` | `string` | yes |
+| `defaultRestrictionPolicyRef` | `string` | yes |
+| `enabledBetTypes` | array<`CatalogEnabledBetTypeBody`> | yes |
+
+### `MemberProfileBody`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `phone` | `string` | yes |
+| `fullName` | `string` | yes |
+| `dateOfBirth` | `string` | yes |
+| `province` | `string` | yes |
+| `profileUpdatedAt` | `string (date-time)` | yes |
+| `mandatoryFields` | array<`string`> | yes |
+| `missingMandatoryFields` | array<`string`> | yes |
+| `profileComplete` | `boolean` | yes |
+
+### `MemberReadinessBody`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `asOf` | `string (date-time)` | yes |
+| `policyVersion` | `string` | yes |
+| `capabilities` | array<`CapabilityReadinessBody`> | yes |
+| `requirements` | `ReadinessRequirementsBody` | yes |
+
+### `MemberRefreshResponse`
+
+| property | type | required |
+|---|---|---|
+| `accessToken` | `string` | yes |
+
+### `MemberRevokedResponse`
+
+| property | type | required |
+|---|---|---|
+| `revoked` | `boolean` | yes |
+
+### `MemberSessionResponse`
+
+| property | type | required |
+|---|---|---|
+| `accessToken` | `string` | yes |
+| `memberId` | `string` | yes |
+| `accountCreated` | `boolean` | yes |
+| `deviceId` | `string` | yes |
+
+### `MemberSessionViewBody`
+
+| property | type | required |
+|---|---|---|
+| `sessionId` | `string` | yes |
+| `deviceId` | `string` | yes |
+| `expiresAt` | `string (date-time)` | yes |
+
+### `MemberSettlementOutcomeBody`
+
+| property | type | required |
+|---|---|---|
+| `orderId` | `string` | yes |
+| `outcome` | `string` | yes |
+| `payoutMinor` | `string` | yes |
+| `batchState` | `string` | yes |
+| `authoritative` | `boolean` | yes |
+
+### `MemberTermsBody`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `asOf` | `string (date-time)` | yes |
+| `required` | array<`RequiredTermsBody`> | yes |
+| `acceptances` | array<`TermsAcceptanceBody`> | yes |
+| `satisfied` | `boolean` | yes |
+
+### `NotificationPreferenceBody`
+
+| property | type | required |
+|---|---|---|
+| `topic` | `string` | yes |
+| `channel` | `string` | yes |
+| `enabled` | `boolean` | yes |
+| `version` | `number` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `NotificationPreferencesBody`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `items` | array<`NotificationPreferenceBody`> | yes |
+
+### `Object`
+
+`object`
+
+### `OccurrenceBody`
+
+| property | type | required |
+|---|---|---|
+| `occurrenceIdentity` | `string` | yes |
+| `localDate` | `string` | yes |
+| `openAt` | `string (date-time)` | yes |
+| `cutoffAt` | `string (date-time)` | yes |
+| `drawAt` | `string (date-time)` | yes |
+| `provenance` | `string` | yes |
+
+### `OtpRequestBody`
+
+| property | type | required |
+|---|---|---|
+| `purpose` | `string` | yes |
+| `phone` | `string` | yes |
+
+### `OtpRequestResponse`
+
+| property | type | required |
+|---|---|---|
+| `purpose` | `string` | yes |
+| `deliveredTo` | `string` | yes |
+| `retryAfterSeconds` | `number` | yes |
+
+### `OtpVerifyBody`
+
+| property | type | required |
+|---|---|---|
+| `purpose` | `string` | yes |
+| `phone` | `string` | yes |
+| `code` | `string` | yes |
+| `deviceName` | `string` | no |
+
+### `OverrideBody`
+
+| property | type | required |
+|---|---|---|
+| `reason` | `string` | yes |
+| `effectiveAt` | `string (date-time)` | no |
+| `changes` | `object` | yes |
+| `approvalEvidenceRef` | `string` | yes |
+| `auditEvidenceRef` | `string` | yes |
+
+### `PayoutDestinationBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `type` | `string` | yes |
+| `bankCode` | `string` | yes |
+| `accountNumberMasked` | `string` | yes |
+| `accountHolderName` | `string` | yes |
+| `currency` | `string` | yes |
+| `status` | `string` | yes |
+| `verificationEvidenceRef` | `string` | yes |
+| `verifiedAt` | `string (date-time)` | yes |
+| `version` | `number` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `PayoutDestinationListBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`PayoutDestinationBody`> | yes |
+
+### `PromotionDiscoveryBody`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `asOf` | `string (date-time)` | yes |
+| `items` | array<`PromotionDiscoveryItemBody`> | yes |
+
+### `PromotionDiscoveryItemBody`
+
+| property | type | required |
+|---|---|---|
+| `campaignVersionId` | `string` | yes |
+| `campaignCode` | `string` | yes |
+| `campaignVersion` | `number` | yes |
+| `rewardAmountMinor` | `string` | yes |
+| `currency` | `string` | yes |
+| `turnoverTargetMinor` | `string` | yes |
+| `contributionBps` | `number` | yes |
+| `winningsDestination` | `string` | yes |
+| `stackingMode` | `string` | yes |
+| `effectiveFrom` | `string (date-time)` | yes |
+| `effectiveUntil` | `string (date-time)` | yes |
+| `expiresAt` | `string (date-time)` | yes |
+| `eligible` | `boolean` | yes |
+| `ineligibilityReasons` | array<`string`> | yes |
+
+### `PromotionEntitlementBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `campaignCode` | `string` | yes |
+| `campaignVersionId` | `string` | yes |
+| `campaignVersion` | `number` | yes |
+| `state` | `string` | yes |
+| `version` | `number` | yes |
+| `terms` | `object` | yes |
+| `rewardMinor` | `string` | yes |
+| `turnoverTargetMinor` | `string` | yes |
+| `releasedMinor` | `string` | yes |
+| `grantedAt` | `string (date-time)` | yes |
+| `expiresAt` | `string (date-time)` | yes |
+| `completedAt` | `string (date-time)` | yes |
+| `grantLedgerTransactionId` | `string` | yes |
+| `releaseLedgerTransactionId` | `string` | yes |
+| `turnover` | `TurnoverProgressBody` | yes |
+| `turnoverEntries` | array<`TurnoverEntryBody`> | yes |
+| `allowedActions` | array<`string`> | yes |
+
+### `PromotionEntitlementPageBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`PromotionEntitlementBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `QuoteCreateBody`
+
+| property | type | required |
+|---|---|---|
+| `betTypeCode` | `string` | yes |
+| `canonicalNumber` | `string` | yes |
+| `stakeMinor` | `string` | yes |
+
+### `QuoteLineBody`
+
+| property | type | required |
+|---|---|---|
+| `betTypeId` | `string` | yes |
+| `betTypeCode` | `string` | yes |
+| `betTypeVersionId` | `string` | yes |
+| `canonicalNumber` | `string` | yes |
+| `stakeMinor` | `string` | yes |
+| `resolvedPayout` | `object` | yes |
+| `payoutSource` | `string` | yes |
+| `restrictions` | array<`string`> | yes |
+
+### `ReadinessRequirementsBody`
+
+| property | type | required |
+|---|---|---|
+| `termsSatisfied` | `boolean` | yes |
+| `profileComplete` | `boolean` | yes |
+| `missingProfileFields` | array<`string`> | yes |
+| `kyc` | `KycReadinessBody` | yes |
+| `outstandingRequirements` | array<`string`> | yes |
+
+### `ReconciliationDiscrepancyFactsResponse`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string (uuid)` | yes |
+| `currency` | `string` | yes |
+| `bucket` | `string` | yes |
+| `metric` | `string` | yes |
+| `amountMinor` | `string` | yes |
+
+### `ReconciliationDiscrepancyListResponse`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`ReconciliationDiscrepancyResponse`> | yes |
+| `nextCursor` | `string` | yes |
+| `dataAsOf` | `string (date-time)` | yes |
+
+### `ReconciliationDiscrepancyResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `reconciliationRunId` | `string (uuid)` | yes |
+| `pair` | `string` | yes |
+| `identityKey` | `string` | yes |
+| `memberId` | `string (uuid)` | yes |
+| `currency` | `string` | yes |
+| `status` | `string` | yes |
+| `severity` | `string` | yes |
+| `expectedFacts` | `ReconciliationDiscrepancyFactsResponse` | yes |
+| `observedFacts` | `ReconciliationDiscrepancyFactsResponse` | yes |
+| `amountDifferenceMinor` | `string` | yes |
+| `sourceReferences` | `ReconciliationDiscrepancySourceReferencesResponse` | yes |
+| `detectedAt` | `string (date-time)` | yes |
+| `ageMs` | `number` | yes |
+| `ownerReference` | `string` | yes |
+| `resolutionTrail` | array<`object`> | yes |
+| `resolutionEvidence` | `object` | yes |
+| `outcome` | `string` | yes |
+| `resolvedAt` | `string (date-time)` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `ReconciliationDiscrepancySourceReferencesResponse`
+
+| property | type | required |
+|---|---|---|
+| `pair` | `string` | yes |
+| `checkpointKey` | `string` | yes |
+| `memberId` | `string (uuid)` | yes |
+| `ledgerAccountId` | `string` | yes |
+
+### `ReconciliationInspectedCountsResponse`
+
+| property | type | required |
+|---|---|---|
+| `ledgerAccounts` | `number` | yes |
+| `ledgerPostings` | `number` | yes |
+| `activeReservationAllocations` | `number` | yes |
+| `walletBuckets` | `number` | yes |
+| `discrepancies` | `number` | yes |
+
+### `ReconciliationResultSummaryResponse`
+
+| property | type | required |
+|---|---|---|
+| `matched` | `boolean` | yes |
+| `discrepancyCount` | `number` | yes |
+| `bucketCount` | `number` | yes |
+
+### `ReconciliationRunListResponse`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`ReconciliationRunResponse`> | yes |
+| `nextCursor` | `string` | yes |
+| `dataAsOf` | `string (date-time)` | yes |
+
+### `ReconciliationRunResponse`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string (uuid)` | yes |
+| `pair` | `string` | yes |
+| `checkpointKey` | `string` | yes |
+| `memberId` | `string (uuid)` | yes |
+| `currency` | `string` | yes |
+| `asOf` | `string (date-time)` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `sourceRange` | `ReconciliationSourceRangeResponse` | yes |
+| `sourceCheckpoint` | `ReconciliationSourceCheckpointResponse` | yes |
+| `inspectedCounts` | `ReconciliationInspectedCountsResponse` | yes |
+| `totals` | `ReconciliationTotalsResponse` | yes |
+| `result` | `string` | yes |
+| `resultSummary` | `ReconciliationResultSummaryResponse` | yes |
+| `discrepancyCount` | `number` | yes |
+
+### `ReconciliationSourceCheckpointResponse`
+
+| property | type | required |
+|---|---|---|
+| `checkpointKey` | `string` | yes |
+| `memberId` | `string (uuid)` | yes |
+| `currency` | `string` | yes |
+| `asOf` | `string (date-time)` | yes |
+| `latestLedgerPostingId` | `string` | yes |
+| `latestLedgerPostingAt` | `string (date-time)` | yes |
+| `latestReservationId` | `string` | yes |
+| `latestReservationCreatedAt` | `string (date-time)` | yes |
+
+### `ReconciliationSourceRangeResponse`
+
+| property | type | required |
+|---|---|---|
+| `ledgerPostedAt` | `object` | yes |
+| `reservationLifecycle` | `object` | yes |
+
+### `ReconciliationTotalsResponse`
+
+| property | type | required |
+|---|---|---|
+| `expected` | `object` | yes |
+| `observed` | `object` | yes |
+| `difference` | `object` | yes |
+
+### `RecoveryOtpRequestBody`
+
+| property | type | required |
+|---|---|---|
+| `phone` | `string` | yes |
+
+### `RecoveryOtpRequestResponse`
+
+| property | type | required |
+|---|---|---|
+| `purpose` | `string` | yes |
+| `deliveredTo` | `string` | yes |
+| `retryAfterSeconds` | `number` | yes |
+
+### `RecoveryOtpVerificationResponse`
+
+| property | type | required |
+|---|---|---|
+| `purpose` | `string` | yes |
+| `verified` | `boolean` | yes |
+| `evidenceRef` | `string` | yes |
+
+### `RecoveryOtpVerifyBody`
+
+| property | type | required |
+|---|---|---|
+| `phone` | `string` | yes |
+| `code` | `string` | yes |
+
+### `RequiredTermsBody`
+
+| property | type | required |
+|---|---|---|
+| `documentId` | `string` | yes |
+| `code` | `string` | yes |
+| `version` | `number` | yes |
+| `title` | `string` | yes |
+| `body` | `string` | yes |
+| `contentDigest` | `string` | yes |
+| `policyVersion` | `string` | yes |
+| `effectiveFrom` | `string (date-time)` | yes |
+| `effectiveUntil` | `string (date-time)` | yes |
+| `accepted` | `boolean` | yes |
+| `acceptedAt` | `string (date-time)` | yes |
+| `acceptanceId` | `string` | yes |
+
+### `SetRestrictionBody`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `capability` | `string` | yes |
+| `reason` | `string` | yes |
+| `effectiveFrom` | `string` | yes |
+| `effectiveUntil` | `string` | no |
+| `actorOrPolicyRef` | `string` | no |
+
+### `SubmitAccountingPeriodBody`
+
+| property | type | required |
+|---|---|---|
+| `expectedVersion` | `number` | yes |
+
+### `TermsAcceptanceBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `documentId` | `string` | yes |
+| `documentCode` | `string` | yes |
+| `documentVersion` | `number` | yes |
+| `contentDigest` | `string` | yes |
+| `source` | `string` | yes |
+| `acceptedAt` | `string (date-time)` | yes |
+
+### `TermsVersionBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `code` | `string` | yes |
+| `version` | `number` | yes |
+| `revision` | `number` | yes |
+| `state` | `string` | yes |
+| `title` | `string` | yes |
+| `body` | `string` | yes |
+| `contentDigest` | `string` | yes |
+| `policyVersion` | `string` | yes |
+| `effectiveFrom` | `string (date-time)` | yes |
+| `effectiveUntil` | `string (date-time)` | yes |
+| `reason` | `string` | yes |
+| `publishedAt` | `string (date-time)` | yes |
+| `approvalEvidenceRef` | `string` | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `TermsVersionListBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`TermsVersionBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `TransitionBody`
+
+| property | type | required |
+|---|---|---|
+| `command` | `string` | yes |
+| `expectedVersion` | `number` | yes |
+
+### `TurnoverEntryBody`
+
+| property | type | required |
+|---|---|---|
+| `betReference` | `string` | yes |
+| `entryKind` | `string` | yes |
+| `state` | `string` | yes |
+| `contributionMinor` | `string` | yes |
+| `occurredAt` | `string (date-time)` | yes |
+
+### `TurnoverProgressBody`
+
+| property | type | required |
+|---|---|---|
+| `provisionalMinor` | `string` | yes |
+| `finalizedMinor` | `string` | yes |
+| `progressMinor` | `string` | yes |
+| `targetMinor` | `string` | yes |
+| `remainingMinor` | `string` | yes |
+| `releaseReached` | `boolean` | yes |
+
+### `UpdateMemberProfileBody`
+
+| property | type | required |
+|---|---|---|
+| `fullName` | `string` | no |
+| `dateOfBirth` | `string` | no |
+| `province` | `string` | no |
+
+### `UpdateNotificationPreferencesBody`
+
+| property | type | required |
+|---|---|---|
+| `preferences` | array<`NotificationPreferenceBody`> | yes |
+
+### `WalletBalanceBody`
+
+| property | type | required |
+|---|---|---|
+| `memberId` | `string` | yes |
+| `currency` | `string` | yes |
+| `dataAsOf` | `string (date-time)` | yes |
+| `buckets` | array<`WalletBucketBody`> | yes |
+
+### `WalletBucketBody`
+
+| property | type | required |
+|---|---|---|
+| `bucket` | `string` | yes |
+| `postedMinor` | `string` | yes |
+| `reservedMinor` | `string` | yes |
+| `availableMinor` | `string` | yes |
+
+### `WalletTransactionBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `businessTransactionId` | `string` | yes |
+| `operationType` | `string` | yes |
+| `correlationId` | `string` | yes |
+| `postedAt` | `string (date-time)` | yes |
+| `effectiveAt` | `string (date-time)` | yes |
+| `netImpactMinor` | `string` | yes |
+
+### `WalletTransactionPageBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`WalletTransactionBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `WithdrawalBody`
+
+| property | type | required |
+|---|---|---|
+| `id` | `string` | yes |
+| `memberId` | `string` | yes |
+| `payoutDestinationId` | `string` | yes |
+| `amountMinor` | `string` | yes |
+| `feeMinor` | `string` | yes |
+| `currency` | `string` | yes |
+| `state` | `string` | yes |
+| `version` | `number` | yes |
+| `eligibilityOutcome` | `string` | yes |
+| `eligibilityReasonCodes` | array<`string`> | yes |
+| `requiresApproval` | `boolean` | yes |
+| `ledgerTransactionId` | `string` | yes |
+| `payoutEvidenceRef` | `string` | yes |
+| `failureReason` | `string` | yes |
+| `decisionReason` | `string` | yes |
+| `allowedActions` | `object` | yes |
+| `eligibilityEvidenceRefs` | array<`string`> | yes |
+| `createdAt` | `string (date-time)` | yes |
+| `updatedAt` | `string (date-time)` | yes |
+
+### `WithdrawalCommandBody`
+
+| property | type | required |
+|---|---|---|
+| `reason` | `string` | yes |
+
+### `WithdrawalListBody`
+
+| property | type | required |
+|---|---|---|
+| `items` | array<`WithdrawalBody`> | yes |
+| `nextCursor` | `string` | yes |
+
+### `WithdrawalPreflightBody`
+
+| property | type | required |
+|---|---|---|
+| `balanceReady` | `boolean` | yes |
+| `availableMinor` | `string` | yes |
+| `minValid` | `boolean` | yes |
+| `maxValid` | `boolean` | yes |
+| `outcome` | `string` | yes |
+| `reasonCodes` | array<`string`> | yes |
+| `policyVersion` | `string` | yes |
+| `evaluatedAt` | `string (date-time)` | yes |
+| `validUntil` | `string (date-time)` | yes |

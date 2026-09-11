@@ -2507,6 +2507,70 @@
         ]
       }
     },
+    "/api/v1/member/auth/recovery/otp/request": {
+      "post": {
+        "operationId": "MemberAuthController_requestRecoveryOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryOtpRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryOtpRequestResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Request a RECOVERY OTP possession challenge without establishing authentication",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/recovery/otp/verify": {
+      "post": {
+        "operationId": "MemberAuthController_verifyRecoveryOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryOtpVerifyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryOtpVerificationResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Verify RECOVERY OTP possession evidence without issuing a Member session",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
     "/api/v1/member/auth/refresh": {
       "post": {
         "operationId": "MemberAuthController_refresh",
@@ -3562,6 +3626,63 @@
         ]
       }
     },
+    "/api/v1/member/deposits/methods": {
+      "get": {
+        "operationId": "MemberDepositController_listMethods",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DepositMethodSummaryBody"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List deposit methods available to the Member",
+        "tags": [
+          "Member Deposits"
+        ]
+      }
+    },
+    "/api/v1/member/deposits/methods/{code}": {
+      "get": {
+        "operationId": "MemberDepositController_describeMethod",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositMethodDescriptionBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Describe one deposit method including fee and payment instructions",
+        "tags": [
+          "Member Deposits"
+        ]
+      }
+    },
     "/api/v1/member/deposits": {
       "post": {
         "operationId": "MemberDepositController_initiate",
@@ -3659,6 +3780,43 @@
         "summary": "Read a Member Deposit by id",
         "tags": [
           "Member Deposits"
+        ]
+      }
+    },
+    "/api/v1/member/withdrawals/preflight": {
+      "post": {
+        "operationId": "MemberWithdrawalController_preflight",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWithdrawalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalPreflightBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Evaluate withdrawal readiness without creating a Withdrawal or reserving funds",
+        "tags": [
+          "Member Withdrawals"
         ]
       }
     },
@@ -4896,6 +5054,34 @@
         ]
       }
     },
+    "/api/v1/member/readiness": {
+      "get": {
+        "description": "Reports, per capability, whether the Member is currently allowed, denied, or requires review, with coded reasons and the outstanding explicit requirements (Terms, profile, KYC). Decisions follow the locked deny-first layer precedence and are point-in-time; an ALLOW is never fabricated and evidence contents are never exposed.",
+        "operationId": "MemberReadinessController_getReadiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberReadinessBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the Member's capability readiness and KYC state",
+        "tags": [
+          "Member Readiness"
+        ]
+      }
+    },
     "/api/v1/admin/member-terms": {
       "post": {
         "operationId": "AdminMemberTermsController_createVersion",
@@ -5114,6 +5300,90 @@
         "summary": "Retire a published Member Terms version",
         "tags": [
           "admin-member-terms"
+        ]
+      }
+    },
+    "/api/v1/admin/member-capability-restrictions": {
+      "post": {
+        "description": "Sets one independent control (BET_BLOCKED etc.) with source, reason, effective period and an actor-or-policy reference. Governed by the member-readiness.manage capability and audited; never replaces the Member's account status.",
+        "operationId": "AdminMemberCapabilityRestrictionController_setRestriction",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRestrictionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityRestrictionBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Apply an independent per-capability restriction to a Member",
+        "tags": [
+          "admin-member-capability-restrictions"
+        ]
+      }
+    },
+    "/api/v1/admin/member-capability-restrictions/{id}": {
+      "delete": {
+        "description": "Clears a normal Admin-set restriction and audits the removal. A self-exclusion restriction cannot be removed through this normal Admin path.",
+        "operationId": "AdminMemberCapabilityRestrictionController_clearRestriction",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearRestrictionBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a capability restriction an Admin set",
+        "tags": [
+          "admin-member-capability-restrictions"
         ]
       }
     }
@@ -7192,6 +7462,8 @@
                 "member-terms.read",
                 "member-terms.manage",
                 "member-terms.approve",
+                "member-readiness.read",
+                "member-readiness.manage",
                 "reconciliation.read",
                 "report.read",
                 "audit.read",
@@ -7344,6 +7616,84 @@
           "memberId",
           "accountCreated",
           "deviceId"
+        ]
+      },
+      "RecoveryOtpRequestBody": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "+66812345678"
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "RecoveryOtpRequestResponse": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "RECOVERY"
+            ]
+          },
+          "deliveredTo": {
+            "type": "string",
+            "description": "Delivery target for the recovery possession challenge"
+          },
+          "retryAfterSeconds": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "purpose",
+          "deliveredTo",
+          "retryAfterSeconds"
+        ]
+      },
+      "RecoveryOtpVerifyBody": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "+66812345678"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{4,8}$",
+            "example": "123456"
+          }
+        },
+        "required": [
+          "phone",
+          "code"
+        ]
+      },
+      "RecoveryOtpVerificationResponse": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "RECOVERY"
+            ]
+          },
+          "verified": {
+            "type": "boolean",
+            "example": true
+          },
+          "evidenceRef": {
+            "type": "string",
+            "description": "Opaque possession-evidence reference for the later recovery workflow"
+          }
+        },
+        "required": [
+          "purpose",
+          "verified",
+          "evidenceRef"
         ]
       },
       "MemberRefreshResponse": {
@@ -8664,6 +9014,55 @@
           "nextCursor"
         ]
       },
+      "DepositMethodSummaryBody": {
+        "type": "object",
+        "properties": {
+          "methodCode": {
+            "type": "string"
+          },
+          "providerCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "methodCode",
+          "providerCode"
+        ]
+      },
+      "DepositMethodDescriptionBody": {
+        "type": "object",
+        "properties": {
+          "methodCode": {
+            "type": "string"
+          },
+          "providerCode": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "THB"
+            ]
+          },
+          "feeMinor": {
+            "type": "string",
+            "description": "Fee in integer minor units"
+          },
+          "instructions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "methodCode",
+          "providerCode",
+          "currency",
+          "feeMinor",
+          "instructions"
+        ]
+      },
       "DepositInitiateBody": {
         "type": "object",
         "properties": {
@@ -8776,6 +9175,60 @@
           "payoutDestinationId",
           "amountMinor",
           "currency"
+        ]
+      },
+      "WithdrawalPreflightBody": {
+        "type": "object",
+        "properties": {
+          "balanceReady": {
+            "type": "boolean"
+          },
+          "availableMinor": {
+            "type": "string",
+            "description": "Authoritative available CASH in integer minor units"
+          },
+          "minValid": {
+            "type": "boolean"
+          },
+          "maxValid": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ALLOW",
+              "REVIEW_REQUIRED",
+              "DENY"
+            ]
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "policyVersion": {
+            "type": "string"
+          },
+          "evaluatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "balanceReady",
+          "availableMinor",
+          "minValid",
+          "maxValid",
+          "outcome",
+          "reasonCodes",
+          "policyVersion",
+          "evaluatedAt",
+          "validUntil"
         ]
       },
       "WithdrawalBody": {
@@ -10006,6 +10459,159 @@
           }
         }
       },
+      "CapabilityReadinessBody": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "enum": [
+              "BET",
+              "WITHDRAWAL",
+              "DEPOSIT",
+              "PROMOTION"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ALLOW",
+              "DENY",
+              "REVIEW_REQUIRED",
+              "CHALLENGE/REAUTH_REQUIRED"
+            ]
+          },
+          "reasonCodes": {
+            "description": "Machine-readable reasons for a non-allow decision",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evaluatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Bounded decision freshness window"
+          }
+        },
+        "required": [
+          "capability",
+          "outcome",
+          "reasonCodes",
+          "evaluatedAt",
+          "validUntil"
+        ]
+      },
+      "KycReadinessBody": {
+        "type": "object",
+        "properties": {
+          "required": {
+            "type": "boolean",
+            "description": "Whether any evaluated capability requires KYC"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "VERIFIED",
+              "REJECTED",
+              "REVIEW_REQUIRED",
+              "MORE_INFO_REQUIRED"
+            ],
+            "nullable": true,
+            "description": "Canonical, provider-independent KYC outcome, or null when no KYC state exists"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "KYC is VERIFIED and the KYC verification is fresh"
+          },
+          "expired": {
+            "type": "boolean",
+            "description": "KYC was verified but the verification has expired"
+          }
+        },
+        "required": [
+          "required",
+          "status",
+          "verified",
+          "expired"
+        ]
+      },
+      "ReadinessRequirementsBody": {
+        "type": "object",
+        "properties": {
+          "termsSatisfied": {
+            "type": "boolean",
+            "description": "Every currently required Terms version is accepted"
+          },
+          "profileComplete": {
+            "type": "boolean",
+            "description": "Every mandatory profile field has a stored value"
+          },
+          "missingProfileFields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fullName",
+                "dateOfBirth",
+                "province"
+              ]
+            }
+          },
+          "kyc": {
+            "$ref": "#/components/schemas/KycReadinessBody"
+          },
+          "outstandingRequirements": {
+            "description": "Coded requirements that are not yet satisfied (renders onboarding/blocked state)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "termsSatisfied",
+          "profileComplete",
+          "missingProfileFields",
+          "kyc",
+          "outstandingRequirements"
+        ]
+      },
+      "MemberReadinessBody": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "policyVersion": {
+            "type": "string",
+            "description": "Effective readiness policy version"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityReadinessBody"
+            }
+          },
+          "requirements": {
+            "$ref": "#/components/schemas/ReadinessRequirementsBody"
+          }
+        },
+        "required": [
+          "memberId",
+          "asOf",
+          "policyVersion",
+          "capabilities",
+          "requirements"
+        ]
+      },
       "CreateTermsVersionBody": {
         "type": "object",
         "properties": {
@@ -10168,6 +10774,119 @@
         },
         "required": [
           "expectedRevision"
+        ]
+      },
+      "SetRestrictionBody": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string",
+            "enum": [
+              "BET",
+              "WITHDRAWAL",
+              "DEPOSIT",
+              "LOGIN",
+              "PROMOTION"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the capability is restricted"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2026-10-01T00:00:00.000Z"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "nullable": true
+          },
+          "actorOrPolicyRef": {
+            "type": "string",
+            "description": "Actor or governing-policy reference (defaults to the acting Admin id)"
+          }
+        },
+        "required": [
+          "memberId",
+          "capability",
+          "reason",
+          "effectiveFrom"
+        ]
+      },
+      "CapabilityRestrictionBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "BET_BLOCKED",
+              "WITHDRAWAL_BLOCKED",
+              "DEPOSIT_BLOCKED",
+              "LOGIN_BLOCKED",
+              "PROMOTION_BLOCKED"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "actorOrPolicyRef": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "type",
+          "source",
+          "reason",
+          "effectiveFrom",
+          "effectiveUntil",
+          "actorOrPolicyRef",
+          "createdAt"
+        ]
+      },
+      "ClearRestrictionBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "memberId",
+          "removed"
         ]
       }
     }
