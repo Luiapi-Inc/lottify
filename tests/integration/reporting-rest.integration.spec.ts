@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { Module, type INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
+import { Prisma } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { AdminReconciliationController } from "../../apps/api/src/admin-reconciliation.controller";
@@ -344,6 +345,19 @@ describe.runIf(runIntegration)("Reporting/Reconciliation REST boundary", () => {
     return fetch(`${baseUrl}${path}`, { headers });
   }
 
+  async function databaseEpochMs(): Promise<number> {
+    const rows = await prisma.$queryRaw<Array<{ epochMs: number }>>(
+      Prisma.sql`
+        SELECT (extract(epoch FROM transaction_timestamp()) * 1000)::double precision AS "epochMs"
+      `,
+    );
+    const epochMs = rows[0]?.epochMs;
+    if (typeof epochMs !== "number" || !Number.isFinite(epochMs)) {
+      throw new Error("Database clock epoch is unavailable");
+    }
+    return epochMs;
+  }
+
   it("denies unauthenticated Admin access to every new read surface", async () => {
     const runs = await get("/api/v1/admin/reconciliation/runs", {});
     expect(runs.status).toBe(401);
@@ -439,8 +453,17 @@ describe.runIf(runIntegration)("Reporting/Reconciliation REST boundary", () => {
     expect(second.nextCursor).toBeNull();
     expect(second.items[0].id).not.toBe(first.items[0].id);
 
+    // Use PostgreSQL epoch as an independent oracle so this assertion catches a
+    // timezone-shifted JS Date materialized from a server-authoritative timestamptz.
+    const dbNowEpochMs = await databaseEpochMs();
+    const persistedRun = await prisma.reconciliationRun.findUniqueOrThrow({
+      where: { id: mismatchRunId },
+      select: { asOf: true },
+    });
+    expect(persistedRun.asOf.getTime()).toBeLessThanOrEqual(dbNowEpochMs);
+
     const rangeFiltered = await get(
-      `/api/v1/admin/reconciliation/runs?memberId=${mismatchMemberId}&from=${new Date(Date.now() + 3_600_000).toISOString()}`,
+      `/api/v1/admin/reconciliation/runs?memberId=${mismatchMemberId}&from=${new Date(dbNowEpochMs + 1_000).toISOString()}`,
     );
     expect((await rangeFiltered.json()).items).toHaveLength(0);
 
