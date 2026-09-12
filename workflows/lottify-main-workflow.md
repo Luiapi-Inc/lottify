@@ -144,13 +144,14 @@ A change may enter `production-deploy-workflow.md` and become eligible for a pro
 - the intended release scope is approved and frozen for the candidate;
 - required merge review is complete;
 - no unresolved release blocker remains under Ticket 19 priority ordering: `Integrity/Security/Compliance -> Functional critical path -> Recovery/Operations -> Performance -> Non-critical UX`; issue workflow state is recorded with the canonical labels from `docs/agents/triage-labels.md` without inventing another severity taxonomy;
-- every applicable **pre-deploy** mandatory Ticket 16 evidence cell is present and passing, with stale evidence re-evaluated after traced changes;
+- every mandatory Ticket 16 Production GO/NO-GO evidence cell is present and passing, with stale evidence re-evaluated after traced changes;
 - Member/Admin functional and visual evidence is present when applicable;
-- applicable migration, backup/restore, security, performance, observability, provider, and pre-switch recovery-readiness evidence is present;
-- the rollback point and governed roll-forward path are ready for execution;
+- applicable migration, backup/restore, security, performance, observability, and provider evidence is present;
+- the `Deployment` cell contains verified deployment plan/readiness evidence;
+- the `Rollback/Roll-forward Recovery` cell contains verified compatibility-aware rollback/roll-forward procedures/readiness plus applicable controlled recovery test/drill evidence;
 - the release candidate is immutable and identifies the exact reviewed implementation.
 
-The Ticket 16 `Deployment` and `Rollback/Roll-forward Recovery` cells that require actual production execution remain pending until deployment. They are not waived: after the traffic switch, production Deployment, post-switch Actual Result, and any applicable rollback/roll-forward Recovery evidence must be attached before final release acceptance can close.
+No mandatory Ticket 16 cell is pending at the Production GO/NO-GO decision. After the traffic switch, append actual production Deployment evidence and post-switch smoke/functional/operational Actual Result to the existing trace. If rollback or roll-forward is actually exercised because of failure, append its production execution evidence as mandatory closeout evidence. A successful rollout does not intentionally execute recovery just to create evidence, and post-deploy evidence cannot retroactively excuse a missing pre-switch mandatory cell.
 
 ## Definition of done
 
