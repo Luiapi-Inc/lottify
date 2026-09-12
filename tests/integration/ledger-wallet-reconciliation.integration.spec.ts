@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LedgerWalletReconciliationService } from "../../src/contexts/reporting/ledger-wallet-reconciliation.service";
@@ -115,6 +116,7 @@ describe.runIf(runIntegration)("Ledger ↔ Wallet reconciliation integration", (
   }
 
   it("persists a reproducible matching run from authoritative Ledger and active Reservation facts", async () => {
+    const before = await databaseEpochMs();
     const fixture = await createFixture("matched");
     const checkpointKey = `ledger-wallet:${randomUUID()}`;
 
@@ -132,6 +134,28 @@ describe.runIf(runIntegration)("Ledger ↔ Wallet reconciliation integration", (
       include: { discrepancies: true },
     });
     expect(persisted.asOf).toEqual(result.asOf);
+    // Ticket 04/14: posting, database defaults and the reconciliation cutoff
+    // must represent real instants, even with non-UTC connection defaults.
+    const transaction = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: fixture.transactionId },
+      include: { postings: true, accountingPeriod: true },
+    });
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { id: fixture.reservationId },
+    });
+    const after = await databaseEpochMs();
+    for (const instant of [
+      transaction.postedAt, transaction.createdAt, reservation.createdAt,
+      ...transaction.postings.map((posting) => posting.createdAt), result.asOf,
+    ]) {
+      expect(instant.getTime()).toBeGreaterThanOrEqual(Math.floor(before));
+      expect(instant.getTime()).toBeLessThanOrEqual(Math.ceil(after));
+    }
+    expect(transaction.postedAt.getTime()).toBeLessThanOrEqual(result.asOf.getTime());
+    expect(reservation.createdAt.getTime()).toBeLessThanOrEqual(result.asOf.getTime());
+    // UTC storage must preserve the Bangkok Monday-midnight business boundary.
+    expect(transaction.accountingPeriod.effectiveStart.getUTCDay()).toBe(0);
+    expect(transaction.accountingPeriod.effectiveStart.getUTCHours()).toBe(17);
     expect(persisted.sourceRange).toMatchObject({
       ledgerPostedAt: { through: result.asOf.toISOString() },
       reservationLifecycle: { through: result.asOf.toISOString() },
@@ -304,6 +328,13 @@ describe.runIf(runIntegration)("Ledger ↔ Wallet reconciliation integration", (
       releasedAt.getTime(),
     );
   });
+
+  async function databaseEpochMs(): Promise<number> {
+    const [clock] = await prisma.$queryRaw<Array<{ epochMs: number }>>(Prisma.sql`
+      SELECT (extract(epoch FROM transaction_timestamp()) * 1000)::double precision AS "epochMs"
+    `);
+    return clock!.epochMs;
+  }
 
   async function authoritativeCounts(memberId: string): Promise<{
     financialTransactions: number;
