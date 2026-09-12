@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Route each engineering request into the smallest Lottify workflow that can prove the requested result against the approved source of truth. This workflow controls delegation and evidence; it does not redefine product requirements.
+Route each engineering request into the smallest Lottify workflow that can prove the requested result against the approved source of truth. This file is an operational entrypoint under `AGENTS.md` and the approved source documents; it controls routing, delegation, and evidence without creating a new source-of-truth layer or redefining product requirements.
 
 ## Trigger
 
@@ -33,7 +33,7 @@ and
 
 The Lead owns the second trace and the final acceptance wording. Passing tests, build, lint, typecheck, or CI are evidence only; none of them alone establishes requirement acceptance.
 
-The Lead is an orchestration/review role and does not write product code. Implementation changes are delegated to a Writer with an explicit scope, source references, evidence obligations, and stop conditions.
+The Lead chooses single-agent or multi-agent execution according to `docs/agents/multi-agent-workflow.md`, while retaining ownership of source alignment, integration review, and the final acceptance claim. When work is delegated, each Writer receives an explicit scope, source references, evidence obligations, and stop conditions.
 
 ## Task classifier
 
@@ -64,7 +64,7 @@ Do not invoke every skill on every task. Select only skills justified by the aff
 
 | Condition | Skill |
 | --- | --- |
-| Parallel work is proven safe under the repository rules | `lottify-multi-agent` |
+| Work is delegated across multiple agents, whether serialized or parallel | `lottify-multi-agent` |
 | Deterministic bug/repro investigation | `diagnosing-bugs` |
 | Behavior change needs test-first regression or acceptance coverage | `tdd` |
 | GitHub Actions / CI failure | `gh-fix-ci` |
@@ -94,7 +94,9 @@ Route to the critical workflow when the change can alter any of these approved b
 
 ## Multi-agent routing
 
-Use `lottify-multi-agent` only when all of the following are true:
+Use `lottify-multi-agent` whenever the Lead coordinates delegated work across multiple agents. Delegated work may be serialized or parallel.
+
+Parallel Writers are allowed only when all of the following are true:
 
 1. Source requirements and prerequisites are stable.
 2. Writer paths are disjoint.
@@ -102,14 +104,9 @@ Use `lottify-multi-agent` only when all of the following are true:
 4. Each candidate can be reviewed and reverted independently.
 5. Merge order is known or genuinely independent.
 
-Otherwise serialize the work. Architecture and Test/Evidence Guards remain read-only by default. One Writer owns each unstable shared critical boundary at a time.
+If any parallelism condition fails, keep the multi-agent coordination but serialize Writers. Architecture and Test/Evidence Guards remain read-only by default. One Writer owns each unstable shared critical boundary at a time.
 
-When the delegated-agent runner supports explicit model selection, use the user's configured subagent defaults:
-
-```toml
-model = "chatgpt-web/high"
-model_reasoning_effort = "high"
-```
+Subagent model and reasoning settings are runtime preferences, not Lottify source-of-truth policy. When the user or active session explicitly configures them and the delegated-agent runner supports selection, pass those settings through; otherwise use the runner's active defaults.
 
 ## Human checkpoint policy
 
@@ -142,15 +139,18 @@ Missing mandatory evidence is a NO-GO even when build, lint, tests, and CI are g
 
 ## Production eligibility
 
-A change may enter `production-deploy-workflow.md` only when:
+A change may enter `production-deploy-workflow.md` and become eligible for a production traffic switch only when:
 
 - the intended release scope is approved and frozen for the candidate;
 - required merge review is complete;
-- no release-scoped P0/P1 blocker remains open;
-- the Ticket 16 evidence matrix has no mandatory missing or failed cell;
+- no unresolved release blocker remains under Ticket 19 priority ordering: `Integrity/Security/Compliance -> Functional critical path -> Recovery/Operations -> Performance -> Non-critical UX`; issue workflow state is recorded with the canonical labels from `docs/agents/triage-labels.md` without inventing another severity taxonomy;
+- every applicable **pre-deploy** mandatory Ticket 16 evidence cell is present and passing, with stale evidence re-evaluated after traced changes;
 - Member/Admin functional and visual evidence is present when applicable;
-- migration, backup/restore, security, performance, observability, rollback/roll-forward evidence is present when applicable;
+- applicable migration, backup/restore, security, performance, observability, provider, and pre-switch recovery-readiness evidence is present;
+- the rollback point and governed roll-forward path are ready for execution;
 - the release candidate is immutable and identifies the exact reviewed implementation.
+
+The Ticket 16 `Deployment` and `Rollback/Roll-forward Recovery` cells that require actual production execution remain pending until deployment. They are not waived: after the traffic switch, production Deployment, post-switch Actual Result, and any applicable rollback/roll-forward Recovery evidence must be attached before final release acceptance can close.
 
 ## Definition of done
 

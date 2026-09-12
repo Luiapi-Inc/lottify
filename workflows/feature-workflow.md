@@ -15,6 +15,7 @@ If the requested behavior is not approved or conflicts with the active source of
 1. **Requirement**
    - Read the active implementation checkpoint, relevant Wayfinder ticket, Ticket 16, `CONTEXT.md`, applicable ADRs, API/event contracts, and approved UX/design source when Member/Admin is affected.
    - Record Requirement/Decision IDs, owning bounded context/surface, dependencies, contract/migration impact, and acceptance obligations.
+   - If the work changes a requirement, approved specification, API contract, lifecycle/state invariant, policy, or other traced decision, perform Ticket 16 change-impact analysis before relying on prior evidence. Mark affected Acceptance Criteria, scenarios, tests, and prior evidence invalidated or explicitly re-evaluated; historical passing evidence is not automatically valid for the changed contract.
 2. **Plan**
    - Establish `Plan -> Intended Result -> Current State -> Gap -> Implementation`.
    - Do not use current UI as the redesign baseline when an approved design specification exists.
@@ -25,8 +26,8 @@ If the requested behavior is not approved or conflicts with the active source of
    - Use `security-best-practices` when the implementation is security-sensitive.
    - Escalate to the critical-change workflow if the high-risk classifier matches.
 4. **Delegation**
-   - Use `lottify-multi-agent` only when prerequisites are stable and write scopes/boundaries are disjoint.
-   - Otherwise assign one Writer for the active boundary.
+   - Use `lottify-multi-agent` whenever multiple agents are delegated.
+   - Parallel Writers require stable prerequisites and proven-disjoint write/ownership boundaries. When an unstable shared boundary is involved, keep multi-agent coordination serialized with one Writer owning that boundary at a time.
 5. **Implementation**
    - Use `tdd` for behavior where a meaningful test-first seam exists.
    - Implement only the approved work package; generated clients, migrations, configuration, and Admin controls remain part of the owning vertical when the approved plan requires them.

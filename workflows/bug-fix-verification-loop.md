@@ -38,10 +38,12 @@ One run owns exactly one observable symptom and one root-cause class. If investi
 5. **Actual Result**.
    - Observe the repaired behavior at the authoritative seam and compare it directly with the intended result.
    - Treat green tests as supporting evidence, not as the actual-result claim.
-6. **Review** with `code-review`.
-   - Review Standards and Spec as separate axes from a pinned fixed point.
-   - Blocking findings return the run to Diagnose or Implement as appropriate.
-7. **Commit** the bounded change only after the implementation evidence and review are acceptable.
+6. **Commit candidate**.
+   - After implementation evidence is acceptable, the Writer commits only the bounded change and returns the exact candidate commit SHA.
+7. **Review** with `code-review`.
+   - Review Standards and Spec as separate axes against the exact committed candidate from the Writer and its pinned base.
+   - If any review occurred before commit, repeat the final review/evidence check against the exact commit before integration.
+   - Blocking findings return the run to Diagnose or Implement as appropriate; any follow-up change produces a new candidate commit that must receive the same exact-commit review.
 
 ## Checkpoints
 
@@ -69,7 +71,7 @@ A run is complete only when all applicable conditions hold:
 8. Required Member/Admin browser evidence exists when UX changed.
 9. Standards review has no blocking finding.
 10. Spec review has no blocking finding against the approved source of truth.
-11. The bounded change is committed with a message that states the proved root cause/fix intent.
+11. The bounded change is committed with a message that states the proved root cause/fix intent, and the exact returned candidate commit has passed the final Standards/Spec review and evidence check.
 
 An unrelated pre-existing full-suite failure does not fail this run only when evidence demonstrates that it is outside the active diff/root-cause class. Record the failing command, symptom, and independence evidence explicitly; do not convert an unexplained failure into a pass by rerunning it.
 

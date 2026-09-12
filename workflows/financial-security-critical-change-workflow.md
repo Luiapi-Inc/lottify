@@ -20,7 +20,7 @@ Run when the main router classifies the change as high risk, including changes t
 3. **Plan and ownership**
    - Establish `Plan -> Intended Result -> Current State -> Gap -> Implementation`.
    - Keep WIP=1 on each unstable shared financial/schema/migration/API/event/transaction boundary.
-   - Use `lottify-multi-agent` only for proven disjoint work such as read-only Architecture/Test-Evidence Guards or presentation work against a settled contract.
+   - Use `lottify-multi-agent` whenever multiple agents are delegated. Parallel Writers are limited to proven-disjoint work with stable prerequisites; unstable shared critical boundaries remain serialized under one Writer while read-only Architecture/Test-Evidence Guards may still participate.
 4. **Implementation**
    - Use `tdd` for deterministic invariant/regression seams.
    - Preserve authoritative once-only effects, durable orchestration state, compensation/reconciliation paths, and approved transaction ordering.
@@ -28,7 +28,8 @@ Run when the main router classifies the change as high risk, including changes t
 5. **Mandatory evidence**
    - Deterministic integration tests anchor the applicable Ledger balance/integrity, reservation concurrency, Bet Confirm, refund, settlement/correction, Withdrawal finalization, idempotency/replay, and illegal-transition invariants.
    - Cover applicable happy, denial/rejection, duplicate/retry, race/concurrency, timeout/ambiguous outcome, partial failure, recovery/compensation, and replay cases.
-   - Provider/async changes require authenticity/signature, duplicate delivery, timeout/ambiguity, retry/DLQ/replay, and once-only business-effect evidence where applicable.
+   - Provider/async changes require authenticity/signature, duplicate delivery, timeout/ambiguity, retry/DLQ/replay, and once-only business-effect evidence where applicable. When Transactional Outbox or async delivery/once-only effects are affected, include crash/redelivery proof showing that replay/redelivery can occur while the authoritative business or financial effect remains once-only.
+   - Security-sensitive authentication/session/OTP/MFA/re-authentication, RBAC/contextual denial, maker-checker/separation-of-duties, webhook, secrets/PII, and abuse/rate-limit surfaces require applicable positive and negative acceptance scenarios. Threat-model or code-review output may inform these scenarios but cannot substitute for Ticket 16 acceptance evidence.
    - Schema/data changes require migration compatibility, backfill/data-integrity verification, and rollback or governed roll-forward evidence.
 6. **Actual Result**
    - Verify the authoritative financial/security state directly after the scenario, including absence of duplicate or orphaned effects.
