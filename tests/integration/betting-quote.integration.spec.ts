@@ -9,6 +9,10 @@ import {
 } from "../../src/contexts/betting/application/betting-quote.service";
 import { BettingQuoteDrawAdapter } from "../../src/platform/integration/quote-draw.adapter";
 import { QuoteRuleError } from "../../src/contexts/betting/domain/quote";
+import {
+  allowBetEligibility,
+  denyBetEligibility,
+} from "../support/betting-eligibility.fake";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 
@@ -34,7 +38,11 @@ describe.runIf(runIntegration)("Betting Quote resolver + persistence", () => {
     prisma = new PrismaService();
     await prisma.$connect();
     draws = new LotteryDrawService(prisma);
-    quotes = new BettingQuoteService(prisma, new BettingQuoteDrawAdapter(prisma));
+    quotes = new BettingQuoteService(
+      prisma,
+      new BettingQuoteDrawAdapter(prisma),
+      allowBetEligibility,
+    );
 
     adminId = randomUUID();
     sessionId = randomUUID();
@@ -369,6 +377,37 @@ describe.runIf(runIntegration)("Betting Quote resolver + persistence", () => {
       where: { idempotencyScope: `BET_QUOTE:${memberId}`, idempotencyKey: key },
     });
     expect(count).toBe(1);
+  });
+
+  it("denies Quote creation on current BET eligibility before Draw resolution", async () => {
+    const memberId = await newMember();
+    const serverNow = new Date("2099-12-05T08:00:00.000Z");
+    const deniedQuotes = new BettingQuoteService(
+      prisma,
+      new BettingQuoteDrawAdapter(prisma),
+      denyBetEligibility,
+    );
+
+    await expect(
+      deniedQuotes.createQuote({
+        memberId,
+        drawId: randomUUID(),
+        currency: "THB",
+        idempotencyKey: `eligibility-deny-${randomUUID()}`,
+        lines: [{ betTypeCode: "TWO_DIGIT", canonicalNumber: "42", stakeMinor: 100n }],
+        now: serverNow,
+      }),
+    ).rejects.toMatchObject({
+      code: "MEMBER_NOT_ELIGIBLE",
+      status: 403,
+      details: {
+        outcome: "DENY",
+        reasonCodes: ["KYC_REQUIRED"],
+        policyVersion: "capability-readiness-policy-v1",
+      },
+    });
+
+    expect(await prisma.bettingQuote.count({ where: { memberId } })).toBe(0);
   });
 
   it("denies access to another member's quote and missing draws", async () => {

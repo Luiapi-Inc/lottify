@@ -33,6 +33,7 @@ import { LocalResultProviderAdapter } from "../../src/contexts/result-settlement
 import { SettlementWalletAdapter } from "../../src/platform/integration/settlement-wallet.adapter";
 import { SettlementDrawAdapter } from "../../src/platform/integration/settlement-draw.adapter";
 import { SettlementOrdersAdapter } from "../../src/platform/integration/settlement-orders.adapter";
+import { allowBetEligibility } from "../support/betting-eligibility.fake";
 import { settlementFingerprint } from "../../src/contexts/result-settlement/application/settlement.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
@@ -69,11 +70,12 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
     );
     draws = new LotteryDrawService(prisma);
     const drawAdapter = new BettingQuoteDrawAdapter(prisma);
-    quotes = new BettingQuoteService(prisma, drawAdapter);
+    quotes = new BettingQuoteService(prisma, drawAdapter, allowBetEligibility);
     orders = new BettingOrderService(
       prisma,
       drawAdapter,
       new BetOrderWalletAdapter(ledger, prisma),
+      allowBetEligibility,
     );
     const resultProvider = new LocalResultProviderAdapter();
     settlement = new SettlementService(

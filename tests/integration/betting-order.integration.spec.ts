@@ -29,6 +29,10 @@ import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/applica
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
 import { calculateAvailableMinorUnits } from "../../src/contexts/wallet-ledger/domain/financial-invariants";
+import {
+  allowBetEligibility,
+  denyBetEligibility,
+} from "../support/betting-eligibility.fake";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 
@@ -62,11 +66,12 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
     );
     draws = new LotteryDrawService(prisma);
     const drawAdapter = new BettingQuoteDrawAdapter(prisma);
-    quotes = new BettingQuoteService(prisma, drawAdapter);
+    quotes = new BettingQuoteService(prisma, drawAdapter, allowBetEligibility);
     orders = new BettingOrderService(
       prisma,
       drawAdapter,
       new BetOrderWalletAdapter(ledger, prisma),
+      allowBetEligibility,
     );
 
     adminId = randomUUID();
@@ -576,6 +581,39 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
     await expect(orders.getReceipt(memberId, order.id)).rejects.toMatchObject({
       code: "RECEIPT_NOT_FOUND",
     });
+  });
+
+  it("rechecks current BET eligibility at Confirm and rejects before any Wallet effect", async () => {
+    const { drawId, betTypeCode } = await openDraw("O_ELIGIBILITY", "2100-01-04");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const quoteAt = new Date("2100-01-04T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const order = await createOrderForQuote(memberId, quote.id);
+
+    const deniedOrders = new BettingOrderService(
+      prisma,
+      new BettingQuoteDrawAdapter(prisma),
+      new BetOrderWalletAdapter(ledger, prisma),
+      denyBetEligibility,
+    );
+    const rejected = await deniedOrders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: new Date("2100-01-04T08:00:30.000Z"),
+    });
+
+    expect(rejected.state).toBe("REJECTED");
+    expect(rejected.version).toBe(3);
+    expect(rejected.rejectionReason).toBe("MEMBER_NOT_ELIGIBLE");
+    expect(rejected.receiptId).toBeNull();
+
+    const { reservation, transactions } = await stakeEffectRows(order.id);
+    expect(reservation).toBeNull();
+    expect(transactions).toEqual([]);
+    expect(await cashAvailable(memberId)).toBe(1_000n);
   });
 
   it("revalidates the effective Draw cutoff at Confirm: an Override that moved the cutoff earlier denies with no debit", async () => {
