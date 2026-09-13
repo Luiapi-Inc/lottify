@@ -65,3 +65,21 @@ objects applied from unmerged branches. The `_prisma_migrations` ledger is there
 sufficient-but-not-necessary record of what should exist, never a guarantee of what does
 exist. The drift check exists to close this gap; keep it green as the standing proof that
 `lottify_dev` matches the committed migrations.
+
+## Drift repair record — 2026-09-13
+
+The shared `lottify_dev` database was checked from `main` after PR #96. The
+read-only drift guard failed because `enforce_financial_transaction_accounting_period_membership`
+had drifted from committed migration `20260905140000_accounting_period_close`; no orphan
+functions from unmerged migrations were reported.
+
+Because the mismatch was a single function body and a full shared database recreate was
+unnecessary for this repair, the committed `CREATE OR REPLACE FUNCTION` body from
+`prisma/migrations/20260905140000_accounting_period_close/migration.sql` was re-applied
+in place. No data was changed.
+
+Post-repair evidence:
+
+- `RUN_INTEGRATION_TESTS=1 pnpm vitest run tests/integration/migration-database-drift.integration.spec.ts tests/integration/accounting-period-database-guards.integration.spec.ts` — 5 passed.
+- `migration-database-drift.integration.spec.ts` proved every committed migration function body matched `pg_proc` and no uncommitted orphan functions were present.
+- `accounting-period-database-guards.integration.spec.ts` proved CLOSED Accounting Period posting rejection, OPEN posting acceptance, and CLOSED terminal-state enforcement against the repaired shared database.
