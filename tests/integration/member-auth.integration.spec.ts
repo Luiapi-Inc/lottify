@@ -145,6 +145,60 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     });
   });
 
+  it("enforces the rolling OTP request window in persisted state", async () => {
+    const phone = freshPhone();
+
+    for (let issued = 0; issued < getEnvironment().MEMBER_OTP_REQUEST_MAX_PER_WINDOW; issued += 1) {
+      await expect(auth.requestOtp("REGISTER", phone)).resolves.toMatchObject({
+        purpose: "REGISTER",
+        retryAfterSeconds: null,
+      });
+
+      // Keep the test deterministic without sleeping: the request-window count
+      // remains authoritative in the database, while the most recent cooldown is
+      // moved into the past so the next request can exercise the rolling-window
+      // limiter rather than the resend-cooldown limiter.
+      await prisma.memberOtpChallenge.updateMany({
+        where: { phone, purpose: "REGISTER", consumedAt: null },
+        data: { cooldownUntil: new Date(Date.now() - 1_000) },
+      });
+    }
+
+    await expect(auth.requestOtp("REGISTER", phone)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "OTP_RATE_LIMITED" }),
+    });
+
+    const persisted = await prisma.memberOtpChallenge.count({
+      where: { phone, purpose: "REGISTER" },
+    });
+    expect(persisted).toBe(getEnvironment().MEMBER_OTP_REQUEST_MAX_PER_WINDOW);
+  });
+
+  it("exhausts OTP verify attempts before a later correct code can authenticate", async () => {
+    const phone = freshPhone();
+    await auth.requestOtp("REGISTER", phone);
+    const code = delivery.lastCode(phone, "REGISTER")!;
+    const wrong = code === "000000" ? "111111" : "000000";
+
+    for (let attempt = 0; attempt < getEnvironment().MEMBER_OTP_MAX_ATTEMPTS; attempt += 1) {
+      await expect(auth.verifyOtp("REGISTER", phone, wrong, "Phone")).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "OTP_INVALID" }),
+      });
+    }
+
+    await expect(auth.verifyOtp("REGISTER", phone, code, "Phone")).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "OTP_ATTEMPTS_EXHAUSTED" }),
+    });
+
+    const challenge = await prisma.memberOtpChallenge.findFirstOrThrow({
+      where: { phone, purpose: "REGISTER" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(challenge.attemptsUsed).toBe(getEnvironment().MEMBER_OTP_MAX_ATTEMPTS);
+    expect(challenge.consumedAt).toBeNull();
+    expect(await prisma.member.findUnique({ where: { phone } })).toBeNull();
+  });
+
   it("scopes device revocation to the owning Member's sessions", async () => {
     const phone = freshPhone();
     await auth.requestOtp("REGISTER", phone);

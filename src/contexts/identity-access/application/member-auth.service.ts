@@ -277,7 +277,7 @@ export class MemberAuthService {
     });
 
     if (decision.outcome !== "success") {
-      if (challenge && decision.outcome !== "expired") {
+      if (challenge && decision.outcome === "invalid_code") {
         await this.members.recordChallengeAttempt(
           challenge.id,
           challenge.attemptsUsed + 1,
