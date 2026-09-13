@@ -1,8 +1,25 @@
-# Lottify Supermemory RAG tooling
+# Lottify Supermemory integration tooling
 
-This is development/agent tooling for indexing approved Lottify reference material in Supermemory. It does not participate in Member/Admin runtime flows or authoritative business state.
+This package contains the approved Supermemory integration primitives for Lottify. It has two separate scopes:
 
-## Scope
+1. developer/agent document RAG over approved repository sources; and
+2. reusable member-scoped memory/profile primitives for a future member-facing AI flow.
+
+It does **not** replace authoritative Lottify business state. Member profile, phone, account status, KYC, Terms, financial state, eligibility, and other domain facts remain owned by the existing Lottify contexts and database.
+
+## Setup
+
+```bash
+cd tools/supermemory-rag
+npm install
+export SUPERMEMORY_API_KEY="..."
+```
+
+The API key must come from the environment. Do not commit or print it.
+
+All tags must use the singular `containerTag` field, match `^[a-zA-Z0-9_:-]+$`, be at most 100 characters, and never be cross-queried.
+
+## Developer / agent document RAG
 
 The ingest command indexes Markdown from:
 
@@ -14,36 +31,50 @@ The ingest command indexes Markdown from:
 
 Documents are submitted with `taskType: "superrag"`. Searches use `searchMode: "documents"`.
 
-## Setup
-
-```bash
-cd tools/supermemory-rag
-npm install
-export SUPERMEMORY_API_KEY="..."
-```
-
-The API key must come from the environment. Do not commit it.
-
-The default project isolation tag is `lottify_v1_docs`. Override it only with a project-specific tag that matches `^[a-zA-Z0-9_:-]+$`:
+The default project isolation tag is `lottify_v1_docs`. Override it only with another project-specific valid tag:
 
 ```bash
 export SUPERMEMORY_CONTAINER_TAG="lottify_v1_docs"
 ```
 
-Never reuse this tag for another user or project, and never perform cross-tag queries.
+Never reuse this tag for a different user or project.
 
-## Ingest
+### Ingest
 
 ```bash
 npm run ingest
 ```
 
-Each repository path gets a deterministic `customId`, so rerunning the command updates the same logical document instead of creating a second identity.
+Each repository path gets a deterministic `customId`, so rerunning the command targets the same logical document identity.
 
-## Search
+### Search
 
 ```bash
 npm run search -- "withdrawal ambiguous provider outcome"
 ```
 
-Use retrieved chunks as grounding for implementation work. Supermemory results are an index over the repository sources; the repository files remain the source of truth and must still be checked before changing product behavior.
+Use retrieved chunks as grounding only. The repository remains the source of truth and must still be checked before changing product behavior.
+
+## Member-scoped memory primitives
+
+`member-context.mjs` prepares the integration seam for a future authenticated member AI flow without adding a new product endpoint or changing existing Member behavior.
+
+It exposes:
+
+- `memberContainerTag(memberId)` → `member:<memberId>`; no phone number or other PII is used in the namespace.
+- `searchMemberMemory(...)` → memory search with `searchMode: "memories"` before an AI model answers.
+- `addMemberExchange(...)` → stores an exchange with `taskType: "memory"` after the model response.
+- `getMemberMemoryProfile(...)` → reads Supermemory profile context for personalization.
+- `createMemberMemoryClient()` → official `supermemory` SDK client using `SUPERMEMORY_API_KEY` from the environment.
+
+A caller must always pass the authenticated Lottify `memberId`; the helper derives the tag internally and does not accept an arbitrary container tag. This prevents accidental cross-member queries.
+
+Supermemory profile output is contextual AI personalization only. It must never be written back as authoritative Member profile, KYC, Terms, eligibility, account-status, or financial data without going through the owning Lottify domain workflow.
+
+## Tests
+
+```bash
+npm test
+```
+
+The tests verify deterministic member tag derivation and that search, exchange ingestion, and profile lookup all stay inside the same member container.
