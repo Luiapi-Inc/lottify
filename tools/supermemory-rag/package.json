@@ -7,7 +7,8 @@
   },
   "scripts": {
     "ingest": "node ./ingest.mjs",
-    "search": "node ./search.mjs"
+    "search": "node ./search.mjs",
+    "test": "node --test ./member-context.test.mjs"
   },
   "dependencies": {
     "supermemory": "4.25.4"
