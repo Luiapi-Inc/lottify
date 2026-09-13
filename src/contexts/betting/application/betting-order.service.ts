@@ -399,6 +399,7 @@ export class BettingOrderService {
         amountMinor: current.totalStakeMinor,
         currency: "THB",
         correlationId: current.id,
+        acceptedAt: serverNow,
       });
     } catch (error) {
       if (error instanceof BetOrderWalletError) {

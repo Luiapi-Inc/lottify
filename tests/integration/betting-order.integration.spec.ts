@@ -14,6 +14,7 @@
 // a balance, not just a status code.
 
 import { createHash, randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 import { resetEnvironmentForTests } from "../../src/platform/config/env";
@@ -29,6 +30,8 @@ import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/applica
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
 import { calculateAvailableMinorUnits } from "../../src/contexts/wallet-ledger/domain/financial-invariants";
+import { promotionTermsDigest } from "../../src/contexts/promotion/domain/campaign-terms";
+import { validTerms } from "../support/promotion-fixtures";
 import {
   allowBetEligibility,
   denyBetEligibility,
@@ -51,6 +54,9 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
   const productVersionIds: string[] = [];
   const betTypeVersionIds: string[] = [];
   const drawIds: string[] = [];
+  const promotionCampaignIds: string[] = [];
+  const promotionCampaignVersionIds: string[] = [];
+  const promotionEntitlementIds: string[] = [];
 
   const actor = () => ({ adminId, sessionId, role: "ADMIN" as const });
 
@@ -121,6 +127,11 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
         await tx.$executeRawUnsafe('ALTER TABLE "lottery_product_versions" DISABLE TRIGGER "lottery_product_versions_published_immutable"');
         await tx.$executeRawUnsafe('ALTER TABLE "lottery_bet_type_versions" DISABLE TRIGGER "lottery_bet_type_versions_published_immutable"');
 
+        await tx.promotionTurnoverEntry.deleteMany({ where: { memberId: { in: memberIds } } });
+        await tx.promotionEntitlement.deleteMany({ where: { id: { in: promotionEntitlementIds } } });
+        await tx.promotionCampaignVersion.deleteMany({ where: { id: { in: promotionCampaignVersionIds } } });
+        await tx.promotionCampaign.deleteMany({ where: { id: { in: promotionCampaignIds } } });
+
         await tx.betReceipt.deleteMany({ where: { memberId: { in: memberIds } } });
         await tx.betOrderLine.deleteMany({ where: { order: { memberId: { in: memberIds } } } });
         await tx.betOrder.deleteMany({ where: { memberId: { in: memberIds } } });
@@ -138,6 +149,7 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
             OR: [
               { id: { in: accountIds } },
               { systemCode: "betting-settlement" },
+              { systemCode: { startsWith: "promotion-funding:" } },
             ],
           },
         });
@@ -232,7 +244,7 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
   async function openDraw(
     prefix: string,
     day: string,
-  ): Promise<{ drawId: string; betTypeId: string; betTypeCode: string; cutoffAt: Date }> {
+  ): Promise<{ drawId: string; productId: string; betTypeId: string; betTypeCode: string; cutoffAt: Date }> {
     const { productId, betTypeId } = await publishedProductFixture(prefix);
     const occurrence = {
       occurrenceIdentity: `${productId}-${day}`,
@@ -252,7 +264,7 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
     const betType = await prisma.lotteryDrawBetType.findFirstOrThrow({
       where: { drawId: summary.id },
     });
-    return { drawId: summary.id, betTypeId, betTypeCode: betType.betTypeCode, cutoffAt: draw.cutoffAt };
+    return { drawId: summary.id, productId, betTypeId, betTypeCode: betType.betTypeCode, cutoffAt: draw.cutoffAt };
   }
 
   async function newMember(): Promise<string> {
@@ -262,6 +274,95 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
       data: { id, phone: `+66${id.replaceAll("-", "").slice(0, 10)}` },
     });
     return id;
+  }
+
+  async function grantPromotionBonus(input: {
+    memberId: string;
+    productId: string;
+    betTypeCode: string;
+    amountMinor: bigint;
+    expiresAt?: Date;
+    priority?: number;
+  }): Promise<string> {
+    const campaignId = randomUUID();
+    const campaignVersionId = randomUUID();
+    const entitlementId = randomUUID();
+    promotionCampaignIds.push(campaignId);
+    promotionCampaignVersionIds.push(campaignVersionId);
+    promotionEntitlementIds.push(entitlementId);
+
+    const terms = validTerms({
+      rewardAmountMinor: input.amountMinor.toString(),
+      scope: {
+        eligibleProductIds: [input.productId],
+        eligibleBetTypeCodes: [input.betTypeCode],
+        contributionBps: 10_000,
+        minPayoutRef: null,
+      },
+      winningsDestination: "BONUS",
+      proportionalWinningsBps: null,
+      stacking: { mode: "EXCLUSIVE", priority: input.priority ?? 10, compatibilityGroup: null },
+    });
+    await prisma.promotionCampaign.create({ data: { id: campaignId, code: `bet-funding-${campaignId}` } });
+    await prisma.promotionCampaignVersion.create({
+      data: {
+        id: campaignVersionId,
+        campaignId,
+        version: 1,
+        state: "PUBLISHED",
+        terms: terms as unknown as Prisma.InputJsonValue,
+        termsDigest: promotionTermsDigest(terms),
+        effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+        publishedAt: new Date("2020-01-01T00:00:00.000Z"),
+      },
+    });
+
+    const bonusAccountId = await ledger.ensureMemberAccount(input.memberId, "BONUS", "THB");
+    const fundingAccountId = await ledger.ensureSystemAccount(
+      `promotion-funding:${terms.fundingSource}`,
+      "THB",
+    );
+    const grantLedgerTransactionId = await ledger.post({
+      businessTransactionId: `promotion-grant:${entitlementId}`,
+      operationType: "PROMOTION_BONUS_GRANT",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: `PROMOTION_BONUS_GRANT:${entitlementId}`,
+        key: entitlementId,
+        fingerprint: entitlementId,
+      },
+      domainReferences: { promotionEntitlementId: entitlementId },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: bonusAccountId, side: "CREDIT", amountMinor: input.amountMinor },
+        { accountId: fundingAccountId, side: "DEBIT", amountMinor: input.amountMinor },
+      ],
+    });
+
+    await prisma.promotionEntitlement.create({
+      data: {
+        id: entitlementId,
+        memberId: input.memberId,
+        campaignId,
+        campaignVersionId,
+        campaignVersion: 1,
+        state: "ACTIVE",
+        termsSnapshot: terms as unknown as Prisma.InputJsonValue,
+        stackingDecision: { granted: [{ campaignVersionId, priority: terms.stacking.priority }] } as Prisma.InputJsonValue,
+        currency: "THB",
+        rewardMinor: input.amountMinor,
+        turnoverTargetMinor: input.amountMinor,
+        grantedAt: new Date(),
+        expiresAt: input.expiresAt ?? new Date("2200-01-01T00:00:00.000Z"),
+        grantLedgerTransactionId,
+        idempotencyScope: `PROMOTION_CLAIM:${input.memberId}`,
+        idempotencyKey: campaignVersionId,
+        fingerprint: randomUUID(),
+        correlationId: randomUUID(),
+      },
+    });
+    return entitlementId;
   }
 
   /** Credits the Member's CASH account from a test counterparty. */
@@ -893,6 +994,164 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
     ).toBe(1);
     // The Member is debited exactly once across the crash and the resume.
     expect(await cashAvailable(memberId)).toBe(700n);
+  });
+
+  it("allocates eligible Promotion BONUS before CASH and snapshots Entitlement provenance", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO", "2100-08-05");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const entitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 500n,
+    });
+
+    const quoteAt = new Date("2100-08-05T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const order = await createOrderForQuote(memberId, quote.id);
+
+    const confirmed = await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: order.id } },
+      include: { allocations: { include: { account: true } } },
+    });
+    expect(reservation.allocations).toHaveLength(1);
+    expect(reservation.allocations[0]!.account.bucket).toBe("BONUS");
+    expect(reservation.allocations[0]!.amountMinor).toBe(300n);
+
+    const reservationSnapshot = reservation.sourceAllocationSnapshot as {
+      policy?: string;
+      allocations?: Array<Record<string, unknown>>;
+    };
+    expect(reservationSnapshot.policy).toBe("ELIGIBLE_PROMOTION_BONUS_BEFORE_CASH");
+    expect(reservationSnapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "300",
+        promotionEntitlementId: entitlementId,
+        winningsDestination: "BONUS",
+      }),
+    ]);
+
+    const stake = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: confirmed.stakeTransactionId! },
+      include: { postings: { include: { account: true } } },
+    });
+    const memberPosting = stake.postings.find((posting) => posting.account.memberId === memberId);
+    expect(memberPosting).toMatchObject({ side: "DEBIT", amountMinor: 300n });
+    expect(memberPosting!.account.bucket).toBe("BONUS");
+    const domainReferences = stake.domainReferences as { sourceAllocationSnapshot?: unknown };
+    expect(domainReferences.sourceAllocationSnapshot).toEqual(reservation.sourceAllocationSnapshot);
+
+    const projection = await ledger.getWalletProjection(memberId, "THB");
+    expect(projection.buckets.find((bucket) => bucket.bucket === "BONUS")?.postedMinor).toBe(200n);
+    expect(projection.buckets.find((bucket) => bucket.bucket === "CASH")?.postedMinor).toBe(1_000n);
+  });
+
+  it("does not use Promotion BONUS outside the accepted Product or Bet Type scope", async () => {
+    const { drawId, betTypeCode } = await openDraw("O_PROMO_SCOPE", "2100-09-05");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const outOfScopeEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId: randomUUID(),
+      betTypeCode,
+      amountMinor: 500n,
+    });
+
+    const quoteAt = new Date("2100-09-05T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const order = await createOrderForQuote(memberId, quote.id);
+
+    const confirmed = await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: order.id } },
+      include: { allocations: { include: { account: true } } },
+    });
+    expect(reservation.allocations).toHaveLength(1);
+    expect(reservation.allocations[0]!.account.bucket).toBe("CASH");
+    const snapshot = reservation.sourceAllocationSnapshot as { allocations?: Array<Record<string, unknown>> };
+    expect(snapshot.allocations).toEqual([{ bucket: "CASH", amountMinor: "300" }]);
+
+    const stake = await prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: confirmed.stakeTransactionId! },
+      include: { postings: { include: { account: true } } },
+    });
+    const memberPosting = stake.postings.find((posting) => posting.account.memberId === memberId);
+    expect(memberPosting!.account.bucket).toBe("CASH");
+    expect(JSON.stringify(stake.domainReferences)).not.toContain(outOfScopeEntitlementId);
+  });
+
+  it("selects multiple eligible Promotion Entitlements deterministically by priority", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO_ORDER", "2100-10-05");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const sameExpiry = new Date("2100-12-01T00:00:00.000Z");
+    const lowerPriorityEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 500n,
+      expiresAt: sameExpiry,
+      priority: 1,
+    });
+    const higherPriorityEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 100n,
+      expiresAt: sameExpiry,
+      priority: 99,
+    });
+
+    const quoteAt = new Date("2100-10-05T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const order = await createOrderForQuote(memberId, quote.id);
+
+    await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: order.id } },
+      include: { allocations: { include: { account: true } } },
+    });
+    expect(reservation.allocations).toHaveLength(1);
+    expect(reservation.allocations[0]!.account.bucket).toBe("BONUS");
+    expect(reservation.allocations[0]!.amountMinor).toBe(300n);
+
+    const snapshot = reservation.sourceAllocationSnapshot as { allocations?: Array<Record<string, unknown>> };
+    expect(snapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "100",
+        promotionEntitlementId: higherPriorityEntitlementId,
+      }),
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "200",
+        promotionEntitlementId: lowerPriorityEntitlementId,
+      }),
+    ]);
   });
 
   it("keeps the wallet projection reconciled with the posted stake and refund", async () => {

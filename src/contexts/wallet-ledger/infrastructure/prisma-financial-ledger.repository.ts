@@ -398,6 +398,10 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             idempotencyScope: input.idempotency.scope,
             idempotencyKey: input.idempotency.key,
             fingerprint: input.idempotency.fingerprint,
+            sourceAllocationSnapshot:
+              input.sourceAllocationSnapshot === undefined
+                ? Prisma.JsonNull
+                : (input.sourceAllocationSnapshot as Prisma.InputJsonValue),
             allocations: {
               create: input.allocations.map((allocation) => ({
                 accountId: allocation.accountId,
@@ -454,6 +458,7 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             releasedAt: true,
             consumedAt: true,
             consumingTransactionId: true,
+            sourceAllocationSnapshot: true,
             allocations: {
               select: {
                 accountId: true,
@@ -574,7 +579,13 @@ export class PrismaFinancialLedgerRepository implements FinancialLedgerRepositor
             idempotencyScope: input.idempotency.scope,
             idempotencyKey: input.idempotency.key,
             fingerprint: input.idempotency.fingerprint,
-            domainReferences: { ...input.domainReferences, reservationId: input.reservationId },
+            domainReferences: {
+              ...input.domainReferences,
+              reservationId: input.reservationId,
+              ...(reservation.sourceAllocationSnapshot !== null
+                ? { sourceAllocationSnapshot: reservation.sourceAllocationSnapshot }
+                : {}),
+            },
             currency: input.currency,
             effectiveAt: input.effectiveAt,
             postedAt: accountingPeriod.postedAt,

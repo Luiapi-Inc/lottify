@@ -14,6 +14,7 @@
 // allocation from the current Wallet.
 
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { FinancialLedgerService } from "../../contexts/wallet-ledger/application/financial-ledger.service";
 import { PrismaService } from "../persistence/prisma.service";
@@ -22,6 +23,8 @@ import {
   type BetOrderWalletPort,
   type BetStakeEffect,
 } from "../../contexts/betting/application/betting-order-wallet.port";
+import { toTerms } from "../../contexts/promotion/application/promotion-campaign.service";
+import type { PromotionCampaignTerms } from "../../contexts/promotion/domain/campaign-terms";
 
 /** System/counterparty account that holds committed stakes for settlement. */
 const BETTING_SETTLEMENT_SYSTEM_CODE = "betting-settlement";
@@ -40,6 +43,7 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
     amountMinor: bigint;
     currency: "THB";
     correlationId: string;
+    acceptedAt: Date;
   }): Promise<BetStakeEffect> {
     const currency = "THB" as const;
     const settlementAccountId = await this.ledger.ensureSystemAccount(
@@ -61,7 +65,13 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
     if (existing) {
       reservationId = existing.id;
     } else {
-      const allocations = await this.allocateStake(input.memberId, input.amountMinor, currency);
+      const stakeAllocation = await this.allocateStake({
+        orderId: input.orderId,
+        memberId: input.memberId,
+        amountMinor: input.amountMinor,
+        currency,
+        acceptedAt: input.acceptedAt,
+      });
       try {
         reservationId = await this.ledger.reserve({
           purpose: "BET",
@@ -75,7 +85,8 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
             key: input.orderId,
             fingerprint: stakeFingerprint(input),
           },
-          allocations,
+          allocations: stakeAllocation.allocations,
+          sourceAllocationSnapshot: stakeAllocation.snapshot as unknown as Prisma.InputJsonValue,
         });
       } catch (error) {
         throw mapWalletDenial(error);
@@ -133,37 +144,147 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
   }
 
   /**
-   * Funds the stake from the Member's spendable buckets in the accepted order
-   * (CASH first, then BONUS). Returns the exact composition to snapshot on the
-   * Reservation so refund and settlement reuse it. A stake the Member cannot
-   * cover is a clean denial, never a partial reservation.
+   * Funds the stake from the Member's spendable buckets in the accepted v1
+   * promotion order: eligible BONUS first, then CASH. The returned snapshot is
+   * persisted on the Reservation at reserve time so a crash/replay path never
+   * re-computes Entitlement scope or ordering from mutable current state.
    */
-  private async allocateStake(
-    memberId: string,
-    amountMinor: bigint,
-    currency: "THB",
-  ): Promise<Array<{ accountId: string; amountMinor: bigint }>> {
-    const allocations: Array<{ accountId: string; amountMinor: bigint }> = [];
-    let remainingMinor = amountMinor;
+  private async allocateStake(input: {
+    orderId: string;
+    memberId: string;
+    amountMinor: bigint;
+    currency: "THB";
+    acceptedAt: Date;
+  }): Promise<StakeAllocationDecision> {
+    const order = await this.prisma.betOrder.findUnique({
+      where: { id: input.orderId },
+      select: {
+        productId: true,
+        lines: { select: { betTypeCode: true }, orderBy: { id: "asc" } },
+      },
+    });
+    if (!order) {
+      throw new BetOrderWalletError("INSUFFICIENT_FUNDS", "Bet Order funding scope is unavailable", {
+        orderId: input.orderId,
+      });
+    }
 
-    for (const bucket of ["CASH", "BONUS"] as const) {
-      if (remainingMinor <= 0n) break;
-      const accountId = await this.ledger.ensureMemberAccount(memberId, bucket, currency);
-      const availableMinor = await this.ledger.getAvailableMinorUnits(accountId);
-      if (availableMinor <= 0n) continue;
-      const takeMinor = availableMinor < remainingMinor ? availableMinor : remainingMinor;
-      allocations.push({ accountId, amountMinor: takeMinor });
+    const allocations: Array<{ accountId: string; amountMinor: bigint }> = [];
+    const snapshotAllocations: StakeAllocationSnapshotAllocation[] = [];
+    let remainingMinor = input.amountMinor;
+
+    const bonusAccountId = await this.ledger.ensureMemberAccount(input.memberId, "BONUS", input.currency);
+    let remainingBonusAvailable = await this.ledger.getAvailableMinorUnits(bonusAccountId);
+    const eligibleEntitlements = await this.eligibleFundingEntitlements({
+      memberId: input.memberId,
+      productId: order.productId,
+      betTypeCodes: [...new Set(order.lines.map((line) => line.betTypeCode))],
+      at: input.acceptedAt,
+    });
+
+    let bonusAllocatedMinor = 0n;
+    for (const entitlement of eligibleEntitlements) {
+      if (remainingMinor <= 0n || remainingBonusAvailable <= 0n) break;
+      const entitlementAvailableMinor = entitlement.availableMinor < remainingBonusAvailable
+        ? entitlement.availableMinor
+        : remainingBonusAvailable;
+      if (entitlementAvailableMinor <= 0n) continue;
+      const takeMinor = entitlementAvailableMinor < remainingMinor ? entitlementAvailableMinor : remainingMinor;
+      snapshotAllocations.push({
+        bucket: "BONUS",
+        amountMinor: takeMinor.toString(),
+        promotionEntitlementId: entitlement.id,
+        campaignVersionId: entitlement.campaignVersionId,
+        campaignVersion: entitlement.campaignVersion,
+        winningsDestination: entitlement.terms.winningsDestination,
+        proportionalWinningsBps: entitlement.terms.proportionalWinningsBps,
+      });
+      bonusAllocatedMinor += takeMinor;
+      remainingBonusAvailable -= takeMinor;
       remainingMinor -= takeMinor;
+    }
+    if (bonusAllocatedMinor > 0n) {
+      allocations.push({ accountId: bonusAccountId, amountMinor: bonusAllocatedMinor });
+    }
+
+    if (remainingMinor > 0n) {
+      const cashAccountId = await this.ledger.ensureMemberAccount(input.memberId, "CASH", input.currency);
+      const availableCashMinor = await this.ledger.getAvailableMinorUnits(cashAccountId);
+      const takeMinor = availableCashMinor < remainingMinor ? availableCashMinor : remainingMinor;
+      if (takeMinor > 0n) {
+        allocations.push({ accountId: cashAccountId, amountMinor: takeMinor });
+        snapshotAllocations.push({ bucket: "CASH", amountMinor: takeMinor.toString() });
+        remainingMinor -= takeMinor;
+      }
     }
 
     if (remainingMinor > 0n) {
       throw new BetOrderWalletError(
         "INSUFFICIENT_FUNDS",
         "Member spendable balance does not cover the stake",
-        { amountMinor: amountMinor.toString(), shortfallMinor: remainingMinor.toString() },
+        { amountMinor: input.amountMinor.toString(), shortfallMinor: remainingMinor.toString() },
       );
     }
-    return allocations;
+
+    return {
+      allocations,
+      snapshot: {
+        schemaVersion: "bet-stake-source-allocation-v1",
+        orderId: input.orderId,
+        policy: "ELIGIBLE_PROMOTION_BONUS_BEFORE_CASH",
+        productId: order.productId,
+        betTypeCodes: [...new Set(order.lines.map((line) => line.betTypeCode))].sort(),
+        totalStakeMinor: input.amountMinor.toString(),
+        acceptedAt: input.acceptedAt.toISOString(),
+        allocations: snapshotAllocations,
+      },
+    };
+  }
+
+  private async eligibleFundingEntitlements(input: {
+    memberId: string;
+    productId: string;
+    betTypeCodes: readonly string[];
+    at: Date;
+  }): Promise<EligibleFundingEntitlement[]> {
+    const rows = await this.prisma.promotionEntitlement.findMany({
+      where: {
+        memberId: input.memberId,
+        state: "ACTIVE",
+        expiresAt: { gt: input.at },
+      },
+      select: {
+        id: true,
+        campaignVersionId: true,
+        campaignVersion: true,
+        termsSnapshot: true,
+        rewardMinor: true,
+        releasedMinor: true,
+        expiredMinor: true,
+        expiresAt: true,
+      },
+    });
+
+    return rows
+      .map((row) => {
+        const terms = toTerms(row.termsSnapshot);
+        return {
+          id: row.id,
+          campaignVersionId: row.campaignVersionId,
+          campaignVersion: row.campaignVersion,
+          terms,
+          expiresAt: row.expiresAt,
+          availableMinor: row.rewardMinor - row.releasedMinor - row.expiredMinor,
+        };
+      })
+      .filter((row) => row.availableMinor > 0n && entitlementCoversOrderScope(row.terms, input))
+      .sort((left, right) => {
+        const expiry = left.expiresAt.getTime() - right.expiresAt.getTime();
+        if (expiry !== 0) return expiry;
+        const priority = right.terms.stacking.priority - left.terms.stacking.priority;
+        if (priority !== 0) return priority;
+        return left.id.localeCompare(right.id);
+      });
   }
 }
 
@@ -220,4 +341,57 @@ function refundFingerprint(input: {
       }),
     )
     .digest("hex");
+}
+
+interface StakeAllocationDecision {
+  readonly allocations: Array<{ accountId: string; amountMinor: bigint }>;
+  readonly snapshot: StakeAllocationSnapshot;
+}
+
+interface StakeAllocationSnapshot {
+  readonly schemaVersion: "bet-stake-source-allocation-v1";
+  readonly orderId: string;
+  readonly policy: "ELIGIBLE_PROMOTION_BONUS_BEFORE_CASH";
+  readonly productId: string;
+  readonly betTypeCodes: readonly string[];
+  readonly totalStakeMinor: string;
+  readonly acceptedAt: string;
+  readonly allocations: readonly StakeAllocationSnapshotAllocation[];
+}
+
+type StakeAllocationSnapshotAllocation =
+  | {
+      readonly bucket: "BONUS";
+      readonly amountMinor: string;
+      readonly promotionEntitlementId: string;
+      readonly campaignVersionId: string;
+      readonly campaignVersion: number;
+      readonly winningsDestination: PromotionCampaignTerms["winningsDestination"];
+      readonly proportionalWinningsBps: number | null;
+    }
+  | { readonly bucket: "CASH"; readonly amountMinor: string };
+
+interface EligibleFundingEntitlement {
+  readonly id: string;
+  readonly campaignVersionId: string;
+  readonly campaignVersion: number;
+  readonly terms: PromotionCampaignTerms;
+  readonly expiresAt: Date;
+  readonly availableMinor: bigint;
+}
+
+function entitlementCoversOrderScope(
+  terms: PromotionCampaignTerms,
+  order: { readonly productId: string; readonly betTypeCodes: readonly string[] },
+): boolean {
+  const productEligible =
+    terms.scope.eligibleProductIds.length === 0 ||
+    terms.scope.eligibleProductIds.includes(order.productId);
+  if (!productEligible) return false;
+
+  return order.betTypeCodes.every(
+    (betTypeCode) =>
+      terms.scope.eligibleBetTypeCodes.length === 0 ||
+      terms.scope.eligibleBetTypeCodes.includes(betTypeCode),
+  );
 }

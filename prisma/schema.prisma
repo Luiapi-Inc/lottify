@@ -906,6 +906,7 @@ model Reservation {
   idempotencyScope       String                  @map("idempotency_scope")
   idempotencyKey         String                  @map("idempotency_key")
   fingerprint            String
+  sourceAllocationSnapshot Json?                  @map("source_allocation_snapshot")
   releasedAt             DateTime?               @map("released_at")
   consumedAt             DateTime?               @map("consumed_at")
   consumingTransactionId String?                 @map("consuming_transaction_id") @db.Uuid

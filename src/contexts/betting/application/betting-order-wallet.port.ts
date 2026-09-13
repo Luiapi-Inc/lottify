@@ -48,6 +48,7 @@ export interface BetOrderWalletPort {
     readonly amountMinor: bigint;
     readonly currency: "THB";
     readonly correlationId: string;
+    readonly acceptedAt: Date;
   }): Promise<BetStakeEffect>;
 
   /**

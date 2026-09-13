@@ -61,6 +61,7 @@ export interface ReserveFundsInput {
   correlationId: string;
   idempotency: FinancialIdempotencyIdentity;
   allocations: readonly ReservationAllocationRequest[];
+  sourceAllocationSnapshot?: unknown;
 }
 
 export interface ReservationConsumptionDestinationRequest {
