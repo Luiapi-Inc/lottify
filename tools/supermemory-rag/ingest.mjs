@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { resolve, relative, sep } from "node:path";
 import Supermemory from "supermemory";
+import { assertContainerTag } from "./container-tag.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const containerTag = process.env.SUPERMEMORY_CONTAINER_TAG ?? "lottify_v1_docs";
@@ -13,7 +14,7 @@ const includeRoots = [
 ];
 const includeFiles = ["AGENTS.md", "CONTEXT.md", "README.md"];
 
-assertContainerTag(containerTag);
+assertContainerTag(containerTag, "SUPERMEMORY_CONTAINER_TAG");
 if (!process.env.SUPERMEMORY_API_KEY) {
   throw new Error("SUPERMEMORY_API_KEY is required");
 }
@@ -62,10 +63,4 @@ async function collectMarkdown(root) {
     return entry.isFile() && entry.name.endsWith(".md") ? [fullPath] : [];
   }));
   return nested.flat();
-}
-
-function assertContainerTag(value) {
-  if (!/^[a-zA-Z0-9_:-]+$/.test(value)) {
-    throw new Error("SUPERMEMORY_CONTAINER_TAG must match ^[a-zA-Z0-9_:-]+$");
-  }
 }

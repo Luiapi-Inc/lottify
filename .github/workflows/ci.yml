@@ -57,6 +57,10 @@ jobs:
           version: v0.70.0
           timeout: 5m0s
       - run: pnpm install --frozen-lockfile
+      - name: Verify Supermemory tooling
+        run: |
+          npm --prefix tools/supermemory-rag ci --ignore-scripts
+          npm --prefix tools/supermemory-rag test
       - run: pnpm prisma:generate
       - run: pnpm prisma:migrate:deploy
       - run: pnpm openapi:generate

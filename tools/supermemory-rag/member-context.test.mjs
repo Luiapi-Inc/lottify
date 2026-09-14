@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { assertContainerTag } from "./container-tag.mjs";
 import {
   addMemberExchange,
   getMemberMemoryProfile,
@@ -13,6 +14,11 @@ test("memberContainerTag derives an isolated non-PII namespace", () => {
     "member:550e8400-e29b-41d4-a716-446655440000",
   );
   assert.throws(() => memberContainerTag("member with spaces"));
+});
+
+test("container tags enforce the Supermemory length boundary", () => {
+  assert.equal(assertContainerTag("a".repeat(100)), "a".repeat(100));
+  assert.throws(() => assertContainerTag("a".repeat(101)));
 });
 
 test("member memory operations never cross the derived member tag", async () => {
