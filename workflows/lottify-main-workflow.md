@@ -21,6 +21,18 @@ Before planning or delegating implementation, the Lead must read the active impl
 
 If the request conflicts with an approved requirement, API/event contract, financial invariant, ADR, migration order, or ownership decision, stop the conflicting implementation path and report the conflict. A new direction requires a Change Request; the workflow must not silently replace the approved plan.
 
+### Optional repository context assist
+
+After reading the source-of-truth files, the Lead may use the Supermemory document index to find related repository context:
+
+```bash
+npm --prefix tools/supermemory-rag run search -- "<short task-specific query>"
+```
+
+This is a context lookup only. Retrieved results must be checked against the current repository and the source-of-truth files before they influence a plan, implementation, or acceptance claim. The Lead must use the project document tag configured by `SUPERMEMORY_CONTAINER_TAG` and must not query another project tag.
+
+The ingest command is an explicit maintenance action, not an automatic step in a product workflow. Member-scoped memory helpers are reserved for a future authenticated Member AI flow; they must receive the authenticated `memberId`, must not use phone or other PII as a namespace, and must never write Supermemory profile output into authoritative Member, eligibility, KYC, or financial state.
+
 ## Shared control trace
 
 Every routed run preserves both traces:
