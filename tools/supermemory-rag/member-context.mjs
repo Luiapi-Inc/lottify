@@ -1,7 +1,5 @@
 import Supermemory from "supermemory";
-
-const CONTAINER_TAG_PATTERN = /^[a-zA-Z0-9_:-]+$/;
-const MAX_CONTAINER_TAG_LENGTH = 100;
+import { assertContainerTag } from "./container-tag.mjs";
 
 export function memberContainerTag(memberId) {
   const id = String(memberId ?? "").trim();
@@ -10,16 +8,13 @@ export function memberContainerTag(memberId) {
   }
 
   const containerTag = `member:${id}`;
-  if (
-    containerTag.length > MAX_CONTAINER_TAG_LENGTH ||
-    !CONTAINER_TAG_PATTERN.test(containerTag)
-  ) {
+  try {
+    return assertContainerTag(containerTag, "memberId");
+  } catch {
     throw new Error(
       "memberId cannot be represented as a valid Supermemory containerTag",
     );
   }
-
-  return containerTag;
 }
 
 export function createMemberMemoryClient() {
