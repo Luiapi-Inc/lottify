@@ -55,6 +55,16 @@ npm run search -- "withdrawal ambiguous provider outcome"
 
 Use retrieved chunks as grounding only. The repository remains the source of truth and must still be checked before changing product behavior.
 
+### Agent workflow use
+
+The Lottify Lead may use document search after reading the required source-of-truth files and before planning implementation:
+
+```bash
+npm --prefix tools/supermemory-rag run search -- "<short task-specific query>"
+```
+
+This lookup helps locate related repository material. It does not approve requirements, change ownership, or replace direct repository review. Ingest remains an explicit maintenance command and is never run automatically as part of a product workflow. Use only the project document tag in `SUPERMEMORY_CONTAINER_TAG`; never cross-query another project tag.
+
 ## Member-scoped memory primitives
 
 `member-context.mjs` prepares the integration seam for a future authenticated member AI flow without adding a new product endpoint or changing existing Member behavior.
