@@ -18,7 +18,7 @@ action_packs:
   testing: [tdd, diagnosing-bugs, code-review]
   review: [code-review]
   handoff: [create-handoff, session-compression, writing-for-agents]
-  advice: [ask-matt, codebase-design]
+  advice: [codebase-design]
   specification: [to-spec, to-tickets, writing-for-agents]
 action_signals:
   implementation: [implement, implementation, build, add, create, change]

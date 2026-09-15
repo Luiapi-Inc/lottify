@@ -31,6 +31,8 @@ Install the canonical core/profile into local agent runtimes with `scripts/insta
 
 The installer also bridges shared engineering/Matt skills from `~/.agents/skills` only when the target runtime does not already provide that identifier. It writes `$HOME/.local/share/project-agent/<runtime>-inventory.json`; use that inventory when routing next actions so unavailable host skills are reported instead of selected.
 
+`ask-matt` may remain installed for explicit use, but next-action decisions must not auto-route through it; the project Lead derives the recommendation from project source/state directly.
+
 ## Runtime skills
 
 Project review subskills define **what must be proved**. Runtime skills define **how an agent performs the work**. Runtime skills never override the project profile, requirements, ownership, or acceptance gates.

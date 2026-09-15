@@ -34,7 +34,7 @@ class ProjectAgentTest(unittest.TestCase):
     def test_thai_next_action_intent_routes_advisory_skill(self):
         result = route_skills('ควรทำอะไรต่อ', ['lead-agent'], self.skills)
         self.assertIn('advice', result['action_types'])
-        self.assertIn('ask-matt', result['skills'])
+        self.assertNotIn('ask-matt', result['skills'])
         self.assertIn('codebase-design', result['skills'])
 
     def test_specification_skills_require_change_request(self):
