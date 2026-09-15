@@ -4,7 +4,12 @@
 // end-to-end. It does not perform a hidden cross-context transaction; it drives
 // a durable sequence whose state is recorded at every step (ADR 0001):
 //
-//   1. trigger the betting bulk refund of committed stakes through the
+//   0. read the Draw's current state and version and validate that the Draw
+//      authorises the cancellation BEFORE any money moves — COMPLETE_CANCELLATION
+//      is only legal from state CANCELLING at the expected version, or CANCELLED
+//      for the idempotent replay; every other state and every stale version is a
+//      409 with zero money moved (fail closed);
+//   1. only then trigger the betting bulk refund of committed stakes through the
 //      cross-context refund port (idempotent per Draw / per Order);
 //   2. re-check, from the same durable predicate, that no confirmed Order with
 //      an unrefunded committed stake remains — fail closed if any obligation is
@@ -65,9 +70,11 @@ export class DrawCancellationOrchestrator {
   ) {}
 
   /**
-   * Runs the bulk refund, re-checks the refund-obligation gate, then completes
-   * the Draw cancellation through the gated transition. Fails closed if any
-   * refund obligation remains outstanding.
+   * Validates that the Draw authorises the cancellation, runs the bulk refund,
+   * re-checks the refund-obligation gate, then completes the Draw cancellation
+   * through the gated transition. Fails closed if the Draw is not in a state
+   * where COMPLETE_CANCELLATION is legal (no money moves), or if any refund
+   * obligation remains outstanding.
    */
   async completeDrawCancellation(
     input: CompleteDrawCancellationInput,
@@ -82,6 +89,38 @@ export class DrawCancellationOrchestrator {
       );
     }
 
+    // Read the Draw's current state and version FIRST and fail closed before
+    // any money moves. COMPLETE_CANCELLATION is only legal from state CANCELLING
+    // at the expected version; an already-CANCELLED Draw is the idempotent
+    // replay convergence (safe no-op on the lifecycle). Every other state and
+    // every stale version must return 409 with zero money moved — the bulk
+    // refund is an irreversible cross-context movement and must never run for a
+    // Draw that does not authorise the cancellation.
+    const current = await this.draws.getDraw(drawId);
+
+    if (current.state !== "CANCELLING" && current.state !== "CANCELLED") {
+      throw new DrawRuleError(
+        "ILLEGAL_DRAW_TRANSITION",
+        `Draw cancellation is not legal from state ${current.state}`,
+        409,
+        { state: current.state, command: "COMPLETE_CANCELLATION" },
+      );
+    }
+
+    if (
+      current.state === "CANCELLING" &&
+      current.version !== input.expectedVersion
+    ) {
+      throw new DrawRuleError(
+        "DRAW_VERSION_CONFLICT",
+        `Lottery Draw version is stale (expected ${input.expectedVersion}, current ${current.version})`,
+        409,
+        { expectedVersion: input.expectedVersion, currentVersion: current.version },
+      );
+    }
+
+    // The Draw authorises the cancellation: only now touch the cross-context
+    // refund port.
     const refund = await this.refunds.refundCommittedStakesForDraw({
       drawId,
       reason: input.reason ?? null,
@@ -104,12 +143,8 @@ export class DrawCancellationOrchestrator {
       );
     }
 
-    // Read the Draw's current state so a replay converges instead of re-throwing:
-    // once a cancellation has already completed (state CANCELLED) the gated
-    // transition is terminal and must not be re-attempted. The refund run above
-    // is idempotent and already reported ALREADY_REFUNDED for every Order, so the
-    // Draw is refund-clean and the replay is a safe no-op on the Draw lifecycle.
-    const current = await this.draws.getDraw(drawId);
+    // Complete the cancellation unless it has already completed (idempotent
+    // replay on a CANCELLED Draw): the terminal transition is not re-attempted.
     const detail =
       current.state === "CANCELLED"
         ? current

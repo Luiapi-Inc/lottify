@@ -68,8 +68,9 @@ class FakeDrawService {
   // The Draw's persisted state as getDraw would report it (default: still
   // CANCELLING, so the orchestrator performs the completion transition).
   state: string = "CANCELLING";
+  version: number = 1;
   async getDraw(id: string) {
-    return { id, state: this.state, version: 1 };
+    return { id, state: this.state, version: this.version };
   }
   async transition(input: {
     id: string;
@@ -83,10 +84,11 @@ class FakeDrawService {
       expectedVersion: input.expectedVersion,
       context: input.context ?? {},
     });
+    this.version = input.expectedVersion + 1;
     return {
       id: input.id,
       state: "CANCELLED",
-      version: input.expectedVersion + 1,
+      version: this.version,
     };
   }
 }
@@ -127,6 +129,7 @@ function harness() {
 describe("Draw-cancellation refund orchestration", () => {
   it("runs the refund, re-checks the gate, then completes cancellation with refundObligationsSatisfied true", async () => {
     const { refunds, draws, orchestrator } = harness();
+    draws.version = 7;
 
     const result = await orchestrator.completeDrawCancellation({
       drawId: DRAW,
@@ -152,6 +155,7 @@ describe("Draw-cancellation refund orchestration", () => {
 
   it("fails closed and never transitions when a refund obligation remains outstanding", async () => {
     const { refunds, draws, orchestrator } = harness();
+    draws.version = 3;
     refunds.outstanding = [{ orderId: "order-b", memberId: "member-order-b" }];
     refunds.refundResult = refundResult({ outstanding: [entry("order-b", "FAILED")] });
 
@@ -174,6 +178,7 @@ describe("Draw-cancellation refund orchestration", () => {
 
   it("replaying an already-refunded Draw converges to one transition, not a second refund", async () => {
     const { refunds, draws, orchestrator } = harness();
+    draws.version = 8;
     // Second run sees every Order already refunded; still refund-clean.
     refunds.refundResult = refundResult({
       considered: 1,
