@@ -8,11 +8,11 @@ export default function Login({ client, onLogin }: { client: AdminClient; onLogi
   async function submit(event:FormEvent<HTMLFormElement>) {
     event.preventDefault();const data=new FormData(event.currentTarget);setBusy(true);setError('');
     try {
-      if(setup) { await client.publicRequest('mfa/confirm',{setupToken:setup.token,secret:setup.secret,code:data.get('code')});setSetup(null);setError('เปิด MFA แล้ว กรุณาเข้าสู่ระบบอีกครั้ง'); }
-      else if(challenge) { const r=await client.publicRequest<{accessToken:string}>('mfa/verify',{challengeToken:challenge,code:data.get('code')});await client.accept(r.accessToken);await onLogin(); }
-      else { const r=await client.publicRequest<{status:string;challengeToken?:string;setupToken?:string}>('login',{email:data.get('email'),password:data.get('password')});
+      if(setup) { await client.publicRequest('auth/mfa/confirm',{setupToken:setup.token,secret:setup.secret,code:data.get('code')});setSetup(null);setError('เปิด MFA แล้ว กรุณาเข้าสู่ระบบอีกครั้ง'); }
+      else if(challenge) { const r=await client.publicRequest<{accessToken:string}>('auth/mfa/verify',{challengeToken:challenge,code:data.get('code')});await client.accept(r.accessToken);await onLogin(); }
+      else { const r=await client.publicRequest<{status:string;challengeToken?:string;setupToken?:string}>('auth/login',{email:data.get('email'),password:data.get('password')});
         if(r.challengeToken) setChallenge(r.challengeToken);
-        else if(r.setupToken) { const m=await client.publicRequest<{secret:string}>('mfa/setup',{setupToken:r.setupToken});setSetup({token:r.setupToken,secret:m.secret}); }
+        else if(r.setupToken) { const m=await client.publicRequest<{secret:string}>('auth/mfa/setup',{setupToken:r.setupToken});setSetup({token:r.setupToken,secret:m.secret}); }
         else throw new Error('ไม่สามารถเริ่ม session ได้'); }
     } catch(e) {setError(e instanceof Error?e.message:'เข้าสู่ระบบไม่สำเร็จ');} finally {setBusy(false);}
   }

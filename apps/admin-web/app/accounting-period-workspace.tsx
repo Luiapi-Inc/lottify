@@ -3,6 +3,7 @@
 import type { components } from "@lottify/contracts";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { accountingPeriodCancellationUi } from "./accounting-period-cancellation-ui";
+import { AdminApi, ApiFailure } from "./control-plane/admin-api";
 
 type AccountingPeriod = components["schemas"]["AccountingPeriodResponse"];
 type AccountingPeriodCommand = components["schemas"]["AccountingPeriodCommandResponse"];
@@ -41,8 +42,7 @@ const navigation = [
 ] as const;
 
 export default function AccountingPeriodWorkspace() {
-  const accessToken = useRef<string | null>(null);
-  const commandKeys = useRef(new Map<string, string>());
+  const [api] = useState(() => new AdminApi());
   const [admin, setAdmin] = useState<AdminMe | null>(null);
   const [periods, setPeriods] = useState<AccountingPeriod[]>([]);
   const [draft, setDraft] = useState<AccountingPeriodCommand | null>(null);
@@ -58,77 +58,37 @@ export default function AccountingPeriodWorkspace() {
   const [error, setError] = useState<ApiError | null>(null);
   const [sessionUnavailable, setSessionUnavailable] = useState(false);
 
-  const refreshAccessToken = useCallback(async (): Promise<string> => {
-    const response = await fetch("/api/v1/admin/auth/refresh", {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!response.ok) throw new Error("ADMIN_SESSION_REQUIRED");
-    const body = (await response.json()) as components["schemas"]["AdminAccessTokenResponse"];
-    accessToken.current = body.accessToken;
-    return body.accessToken;
-  }, []);
-
-  const authorizedFetch = useCallback(
-    async (path: string, init: RequestInit = {}): Promise<Response> => {
-      let token = accessToken.current;
-      if (!token) token = await refreshAccessToken();
-      const send = (currentToken: string) =>
-        fetch(path, {
-          ...init,
-          credentials: "include",
-          headers: {
-            ...headersObject(init.headers),
-            Authorization: `Bearer ${currentToken}`,
-          },
-        });
-      let response = await send(token);
-      if (response.status === 401) {
-        token = await refreshAccessToken();
-        response = await send(token);
-      }
-      return response;
-    },
-    [refreshAccessToken],
-  );
-
   const loadPeriods = useCallback(async () => {
     const loaded: AccountingPeriod[] = [];
     let cursor: string | null = null;
     do {
       const params = new URLSearchParams({ limit: "100" });
       if (cursor) params.set("cursor", cursor);
-      const response = await authorizedFetch(`/api/v1/admin/accounting-periods?${params}`);
-      if (!response.ok) throw await readApiError(response);
-      const page = (await response.json()) as components["schemas"]["AccountingPeriodListResponse"];
+      const page = await api.request<components["schemas"]["AccountingPeriodListResponse"]>(
+        `accounting-periods?${params}`,
+      );
       loaded.push(...page.items);
       cursor = page.nextCursor ?? null;
     } while (cursor);
     setPeriods(loaded);
-  }, [authorizedFetch]);
+  }, [api]);
 
   const initializeSession = useCallback(async () => {
     setBusy("session");
     setError(null);
     setSessionUnavailable(false);
     try {
-      const token = await refreshAccessToken();
-      const meResponse = await fetch("/api/v1/admin/auth/me", {
-        method: "POST",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!meResponse.ok) throw new Error("ADMIN_SESSION_REQUIRED");
-      setAdmin((await meResponse.json()) as AdminMe);
+      const me = await api.request<AdminMe>("auth/me", {});
+      setAdmin(me);
       await loadPeriods();
     } catch {
-      accessToken.current = null;
+      api.clear();
       setAdmin(null);
       setSessionUnavailable(true);
     } finally {
       setBusy(null);
     }
-  }, [loadPeriods, refreshAccessToken]);
+  }, [api, loadPeriods]);
 
   useEffect(() => {
     void initializeSession();
@@ -143,16 +103,11 @@ export default function AccountingPeriodWorkspace() {
     setBusy("create");
     setError(null);
     try {
-      const response = await authorizedFetch("/api/v1/admin/accounting-periods/create-custom", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "Idempotency-Key": idempotencyKey(commandKeys.current, "create-custom", payload),
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw await readApiError(response);
-      const result = (await response.json()) as AccountingPeriodCommand;
+      const result = await api.request<AccountingPeriodCommand>(
+        "accounting-periods/create-custom",
+        payload,
+        true,
+      );
       setDraft(result);
       await loadPeriods();
     } catch (caught) {
@@ -168,23 +123,12 @@ export default function AccountingPeriodWorkspace() {
     setBusy("submit");
     setError(null);
     try {
-      const response = await authorizedFetch(
-        `/api/v1/admin/accounting-periods/${encodeURIComponent(draft.period.id)}/submit`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "Idempotency-Key": idempotencyKey(
-              commandKeys.current,
-              `submit:${draft.period.id}`,
-              payload,
-            ),
-          },
-          body: JSON.stringify(payload),
-        },
+      const result = await api.request<AccountingPeriodCommand>(
+        `accounting-periods/${encodeURIComponent(draft.period.id)}/submit`,
+        payload,
+        true,
       );
-      if (!response.ok) throw await readApiError(response);
-      setDraft((await response.json()) as AccountingPeriodCommand);
+      setDraft(result);
       await loadPeriods();
     } catch (caught) {
       setError(normalizeError(caught));
@@ -207,33 +151,16 @@ export default function AccountingPeriodWorkspace() {
     setBusy("approve");
     setError(null);
     try {
-      const reauth = await authorizedFetch("/api/v1/admin/auth/reauth", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      await api.request("auth/reauth", {
           actionClass: ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS,
           code: approvalCode,
-        }),
-      });
-      if (!reauth.ok) throw await readApiError(reauth);
+        });
 
-      const response = await authorizedFetch(
-        `/api/v1/admin/accounting-periods/${encodeURIComponent(period.id)}/approve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "Idempotency-Key": idempotencyKey(
-              commandKeys.current,
-              `approve:${period.id}`,
-              payload,
-            ),
-          },
-          body: JSON.stringify(payload),
-        },
+      const result = await api.request<AccountingPeriodCommand>(
+        `accounting-periods/${encodeURIComponent(period.id)}/approve`,
+        payload,
+        true,
       );
-      if (!response.ok) throw await readApiError(response);
-      const result = (await response.json()) as AccountingPeriodCommand;
       if (draft?.period.id === period.id) setDraft(result);
       setApprovalPeriodId(null);
       setApprovalCode("");
@@ -273,34 +200,17 @@ export default function AccountingPeriodWorkspace() {
     setError(null);
     try {
       if (approvingCancellation) {
-        const reauth = await authorizedFetch("/api/v1/admin/auth/reauth", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+        await api.request("auth/reauth", {
             actionClass: ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS,
             code: cancellationCode,
-          }),
-        });
-        if (!reauth.ok) throw await readApiError(reauth);
+          });
       }
 
-      const response = await authorizedFetch(
-        `/api/v1/admin/accounting-periods/${encodeURIComponent(period.id)}/cancel`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "Idempotency-Key": idempotencyKey(
-              commandKeys.current,
-              `cancel:${period.id}`,
-              payload,
-            ),
-          },
-          body: JSON.stringify(payload),
-        },
+      const result = await api.request<CancellationResponse>(
+        `accounting-periods/${encodeURIComponent(period.id)}/cancel`,
+        payload,
+        true,
       );
-      if (!response.ok) throw await readApiError(response);
-      const result = (await response.json()) as CancellationResponse;
       if (draft?.period.id === period.id) setDraft(null);
       setPeriods((current) =>
         current.map((item) => (item.id === result.period.id ? result.period : item)),
@@ -322,7 +232,7 @@ export default function AccountingPeriodWorkspace() {
     setEndDate("");
     setReason("");
     setError(null);
-    commandKeys.current.clear();
+    api.clear();
   }
 
   if (busy === "session") {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { components } from "@lottify/contracts";
 import { AdminApi } from "./admin-api";
 
@@ -22,15 +22,19 @@ export function useAdminSession(api: AdminApi) {
   const [admin, setAdmin] = useState<AdminMe | null>(null);
   const [booting, setBooting] = useState(true);
 
-  async function loadMe(): Promise<void> {
+  const loadMe = useCallback(async (): Promise<void> => {
     setBooting(true);
     try {
-      const me = await api.request<AdminMe>("auth/me");
+      // The authoritative Admin contract declares POST /auth/me.
+      const me = await api.request<AdminMe>("auth/me", {});
       setAdmin(me);
+    } catch (error) {
+      setAdmin(null);
+      throw error;
     } finally {
       setBooting(false);
     }
-  }
+  }, [api]);
 
   return { admin, booting, loadMe };
 }
