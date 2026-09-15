@@ -1,0 +1,113 @@
+# Primary Lottify agent roster.
+# Role instructions are maintained by the repository-owned lottify skill.
+version: 1
+default_agent: lead-agent
+agents:
+  lead-agent:
+    role: lead-agent
+    hermes_profile: lead-agent
+    instruction_file: tools/lottify-skill/agents/roles/lead-agent.md
+    mode: coordinator
+    write_scope: [".hermes/**"]
+  backend-agent:
+    role: backend-agent
+    hermes_profile: backend-agent
+    instruction_file: tools/lottify-skill/agents/roles/backend-agent.md
+    mode: writer
+    write_scope: ["apps/api/**", "apps/workers/**", "src/**", "prisma/**", "tests/**"]
+  frontend-agent:
+    role: frontend-agent
+    hermes_profile: frontend-agent
+    instruction_file: tools/lottify-skill/agents/roles/frontend-agent.md
+    mode: writer
+    write_scope: ["apps/member-web/**", "apps/admin-web/**"]
+  qa-agent:
+    role: qa-agent
+    hermes_profile: qa-agent
+    instruction_file: tools/lottify-skill/agents/roles/qa-agent.md
+    mode: reviewer
+    write_scope: []
+  domain-agent:
+    role: domain-agent
+    hermes_profile: domain-agent
+    instruction_file: tools/lottify-skill/agents/roles/domain-agent.md
+    mode: reviewer
+    write_scope: []
+  financial-integrity-agent:
+    role: financial-integrity-agent
+    hermes_profile: financial-integrity-agent
+    instruction_file: tools/lottify-skill/agents/roles/financial-integrity-agent.md
+    mode: reviewer
+    write_scope: []
+  api-contract-agent:
+    role: api-contract-agent
+    hermes_profile: api-contract-agent
+    instruction_file: tools/lottify-skill/agents/roles/api-contract-agent.md
+    mode: reviewer
+    write_scope: []
+  security-agent:
+    role: security-agent
+    hermes_profile: security-agent
+    instruction_file: tools/lottify-skill/agents/roles/security-agent.md
+    mode: reviewer
+    write_scope: []
+  quality-gate-agent:
+    role: quality-gate-agent
+    hermes_profile: quality-gate-agent
+    instruction_file: tools/lottify-skill/agents/roles/quality-gate-agent.md
+    mode: reviewer
+    write_scope: []
+  release-gate-agent:
+    role: release-gate-agent
+    hermes_profile: release-gate-agent
+    instruction_file: tools/lottify-skill/agents/roles/release-gate-agent.md
+    mode: reviewer
+    write_scope: []
+  memory-context-agent:
+    role: memory-context-agent
+    hermes_profile: memory-context-agent
+    instruction_file: tools/lottify-skill/agents/roles/memory-context-agent.md
+    mode: reviewer
+    write_scope: []
+
+# Review routing follows the Lead Agent routing rules. These are required
+# reviewers for the relevant work shape; the Lead may add reviewers when the
+# manifest or source-of-truth impact requires it.
+reviewers_by_role:
+  backend-agent:
+    - quality-gate-agent
+  frontend-agent:
+    - qa-agent
+    - api-contract-agent
+  qa-agent:
+    - quality-gate-agent
+  domain-agent:
+    - quality-gate-agent
+  financial-integrity-agent:
+    - quality-gate-agent
+  api-contract-agent:
+    - quality-gate-agent
+  security-agent:
+    - quality-gate-agent
+  quality-gate-agent:
+    - lead-agent
+  release-gate-agent:
+    - lead-agent
+  memory-context-agent:
+    - lead-agent
+
+reviewers_by_change_area:
+  domain-rule:
+    - domain-agent
+  transaction-or-money-movement:
+    - financial-integrity-agent
+  public-api-or-generated-contract:
+    - api-contract-agent
+  auth-or-authorization:
+    - security-agent
+  browser-workflow-or-critical-journey:
+    - qa-agent
+  deployment-or-release:
+    - release-gate-agent
+  dependency-or-code-quality:
+    - quality-gate-agent
