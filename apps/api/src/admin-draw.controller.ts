@@ -26,6 +26,8 @@ import {
   DrawRuleError,
   LotteryDrawService,
 } from "../../../src/contexts/lottery/application/lottery-draw.service";
+import { DrawCancellationOrchestrator } from "../../../src/contexts/lottery/application/draw-cancellation-orchestrator";
+import { DrawRefundError } from "../../../src/contexts/lottery/application/draw-refund.port";
 import {
   type DrawLifecycleCommand,
   DRAW_LIFECYCLE_COMMANDS,
@@ -93,6 +95,8 @@ export class AdminDrawController {
   constructor(
     @Inject(LotteryDrawService)
     private readonly draws: LotteryDrawService,
+    @Inject(DrawCancellationOrchestrator)
+    private readonly cancellation: DrawCancellationOrchestrator,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
   ) {}
@@ -201,6 +205,17 @@ export class AdminDrawController {
     const command = parseCommand(body, request);
     const expectedVersion = parseExpectedVersion(body, request);
     try {
+      // COMPLETE_CANCELLATION is routed through the refund orchestrator so the
+      // gate (refund obligations satisfied) can never be bypassed via the
+      // generic transition path. All other commands stay on the plain path.
+      if (command === "COMPLETE_CANCELLATION") {
+        const result = await this.cancellation.completeDrawCancellation({
+          drawId: id.trim(),
+          expectedVersion,
+          actor: admin,
+        });
+        return result;
+      }
       return await this.draws.transition({
         id: id.trim(),
         command,
@@ -321,6 +336,12 @@ function apiError(request: AdminAuthenticatedRequest, status: number, code: stri
 function mapDrawError(error: unknown): HttpException {
   if (error instanceof HttpException) return error;
   if (error instanceof DrawRuleError) {
+    return new HttpException(
+      { code: error.code, message: error.message, details: error.details, correlationId: currentCorrelationId() ?? "unknown" },
+      error.status,
+    );
+  }
+  if (error instanceof DrawRefundError) {
     return new HttpException(
       { code: error.code, message: error.message, details: error.details, correlationId: currentCorrelationId() ?? "unknown" },
       error.status,

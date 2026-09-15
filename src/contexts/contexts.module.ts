@@ -45,6 +45,9 @@ import { BetOrderWalletAdapter } from "../platform/integration/betting-order-wal
 import { SettlementWalletAdapter } from "../platform/integration/settlement-wallet.adapter";
 import { SettlementDrawAdapter } from "../platform/integration/settlement-draw.adapter";
 import { SettlementOrdersAdapter } from "../platform/integration/settlement-orders.adapter";
+import { DrawRefundAdapter } from "../platform/integration/draw-refund.adapter";
+import { DrawCancellationOrchestrator } from "./lottery/application/draw-cancellation-orchestrator";
+import { DRAW_REFUND_PORT } from "./lottery/application/draw-refund.port";
 import { WithdrawalLedgerAdapter } from "../platform/integration/withdrawal-ledger.adapter";
 import { PromotionLedgerAdapter } from "../platform/integration/promotion-ledger.adapter";
 import { PromotionMemberFactsAdapter } from "../platform/integration/promotion-member-facts.adapter";
@@ -125,6 +128,17 @@ import { CapabilityRestrictionAdminService } from "./member/application/capabili
       useExisting: SettlementOrdersAdapter,
     },
     SettlementService,
+    // Draw-cancellation refund orchestration: the lottery context completes a
+    // cancelled Draw by triggering the betting bulk refund through this seam
+    // and re-checking the refund-obligation gate before the gated transition.
+    // The adapter lives here (not in LotteryModule) so the betting refund
+    // service is visible without the lottery context importing betting.
+    DrawRefundAdapter,
+    {
+      provide: DRAW_REFUND_PORT,
+      useExisting: DrawRefundAdapter,
+    },
+    DrawCancellationOrchestrator,
     WithdrawalLedgerAdapter,
     {
       provide: WITHDRAWAL_LEDGER_PORT,
@@ -199,6 +213,7 @@ import { CapabilityRestrictionAdminService } from "./member/application/capabili
     BettingOrderService,
     DrawStakeRefundService,
     SettlementService,
+    DrawCancellationOrchestrator,
   ],
 })
 export class ContextsModule {}
