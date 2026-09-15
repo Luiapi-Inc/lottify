@@ -1,0 +1,139 @@
+version: 1
+skills:
+  - canonical: lottify
+    version: 1.0.0
+    aliases:
+      - lottify
+      - lottify-multi-agent
+    status: installed
+    path: ../SKILL.md
+  - canonical: manifest-generator
+    version: 1.0.0
+    aliases:
+      - manifest-generator
+    status: installed
+    path: manifest-generator.md
+  - canonical: architecture
+    version: 0.0.0
+    aliases: [architecture]
+    status: advisory
+  - canonical: typescript
+    version: 0.0.0
+    aliases: [typescript]
+    status: advisory
+  - canonical: testing
+    version: 0.0.0
+    aliases: [testing]
+    status: advisory
+  - canonical: debugging
+    version: 0.0.0
+    aliases: [debugging]
+    status: advisory
+  - canonical: performance
+    version: 0.0.0
+    aliases: [performance]
+    status: advisory
+  - canonical: documentation
+    version: 0.0.0
+    aliases: [documentation]
+    status: advisory
+  - canonical: security
+    version: 0.0.0
+    aliases: [security]
+    status: advisory
+  - canonical: advanced-react-patterns
+    version: 0.0.0
+    aliases: [advanced-react-patterns]
+    status: advisory
+  # Host-provided skills referenced by the role registry.  Their paths are
+  # runtime identifiers; the host availability check remains authoritative.
+  - canonical: codebase-design
+    version: 1.0.0
+    aliases: [codebase-design]
+    status: installed
+    path: runtime:codebase-design
+  - canonical: code-review
+    version: 1.0.0
+    aliases: [code-review]
+    status: installed
+    path: runtime:code-review
+  - canonical: domain-modeling
+    version: 1.0.0
+    aliases: [domain-modeling]
+    status: installed
+    path: runtime:domain-modeling
+  - canonical: writing-for-agents
+    version: 1.0.0
+    aliases: [writing-for-agents]
+    status: installed
+    path: runtime:writing-for-agents
+  - canonical: diagnosing-bugs
+    version: 1.0.0
+    aliases: [diagnosing-bugs]
+    status: installed
+    path: runtime:diagnosing-bugs
+  - canonical: build-web-apps:supabase-postgres-best-practices
+    version: 1.0.0
+    aliases: [build-web-apps:supabase-postgres-best-practices]
+    status: installed
+    path: runtime:build-web-apps:supabase-postgres-best-practices
+  - canonical: redis-development:redis-core
+    version: 1.0.0
+    aliases: [redis-development:redis-core]
+    status: installed
+    path: runtime:redis-development:redis-core
+  - canonical: redis-development:redis-connections
+    version: 1.0.0
+    aliases: [redis-development:redis-connections]
+    status: installed
+    path: runtime:redis-development:redis-connections
+  - canonical: vercel-react-best-practices
+    version: 1.0.0
+    aliases: [vercel-react-best-practices]
+    status: installed
+    path: runtime:vercel-react-best-practices
+  - canonical: build-web-apps:frontend-testing-debugging
+    version: 1.0.0
+    aliases: [build-web-apps:frontend-testing-debugging]
+    status: installed
+    path: runtime:build-web-apps:frontend-testing-debugging
+  - canonical: playwright
+    version: 1.0.0
+    aliases: [playwright]
+    status: installed
+    path: runtime:playwright
+  - canonical: security-best-practices
+    version: 1.0.0
+    aliases: [security-best-practices]
+    status: installed
+    path: runtime:security-best-practices
+  - canonical: security-threat-model
+    version: 1.0.0
+    aliases: [security-threat-model]
+    status: installed
+    path: runtime:security-threat-model
+  - canonical: create-handoff
+    version: 1.0.0
+    aliases: [create-handoff]
+    status: installed
+    path: runtime:create-handoff
+  - canonical: session-compression
+    version: 1.0.0
+    aliases: [session-compression]
+    status: installed
+    path: runtime:session-compression
+  - canonical: honcho-memory
+    version: 1.0.0
+    aliases: [honcho-memory]
+    status: installed
+    path: runtime:honcho-memory
+  - canonical: supermemory-status
+    version: 1.0.0
+    aliases: [supermemory-status]
+    status: installed
+    path: runtime:supermemory-status
+  - canonical: tdd
+    version: 1.0.0
+    aliases: [tdd]
+    status: installed
+    path: runtime:tdd

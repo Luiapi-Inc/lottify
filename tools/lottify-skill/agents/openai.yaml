@@ -1,0 +1,4 @@
+interface:
+  display_name: Lottify
+  short_description: Coordinate Lottify multi-agent development workflow
+  default_prompt: Use $lottify to coordinate delegated Lottify work with source alignment and evidence checks.

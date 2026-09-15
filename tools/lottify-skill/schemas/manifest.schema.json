@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lottify.local/schemas/agent-execution-manifest-v2.json",
+  "title": "Lottify Agent Execution Manifest",
+  "type": "object",
+  "required": ["contract", "task", "source_alignment", "routing", "skills", "ownership", "dependencies", "evidence", "reviews", "acceptance", "execution"],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "lottify-agent-execution-manifest"},
+        "version": {"const": 2}
+      },
+      "additionalProperties": false
+    },
+    "skills": {
+      "type": "object",
+      "required": ["required", "resolved"],
+      "properties": {
+        "required": {"type": "array", "items": {"type": "string"}},
+        "resolved": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "dependencies": {"type": "array"},
+    "execution": {
+      "type": "object",
+      "required": ["checkpoint_version", "state", "objective_id"],
+      "properties": {
+        "checkpoint_version": {"const": 2},
+        "state": {"type": "string"},
+        "objective_id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "acceptance": {
+      "type": "object",
+      "required": ["status", "candidate_sha", "gaps"],
+      "properties": {
+        "status": {"enum": ["pending", "verified", "blocked"]},
+        "candidate_sha": {"type": ["string", "null"], "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$"},
+        "gaps": {"type": "array", "items": {"type": "string"}},
+        "level": {"enum": ["local-checkpoint", "milestone-acceptance", "production-go"]}
+      },
+      "additionalProperties": true
+    },
+    "evidence": {"type": "object"},
+    "reviews": {"type": "object"}
+  },
+  "additionalProperties": true
+}

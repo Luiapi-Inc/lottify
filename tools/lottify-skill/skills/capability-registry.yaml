@@ -1,0 +1,38 @@
+version: 1
+capabilities:
+  - id: financial
+    owner: financial-integrity-agent
+    reviewers: [domain-agent, security-agent, quality-gate-agent]
+    exclusive_boundary: true
+    signals: [wallet, ledger, payment, deposit, withdrawal, payout, settlement, refund]
+    evidence: [ledger invariant verification, idempotency evidence, transaction/isolation evidence]
+  - id: schema
+    owner: backend-agent
+    reviewers: [domain-agent, quality-gate-agent, release-gate-agent]
+    exclusive_boundary: true
+    signals: [prisma, schema]
+    evidence: [schema review, generated-client validation]
+  - id: migration
+    owner: backend-agent
+    reviewers: [domain-agent, quality-gate-agent, release-gate-agent]
+    exclusive_boundary: true
+    signals: [migration, backfill]
+    evidence: [old/new application compatibility result, backfill integrity result]
+  - id: api
+    owner: backend-agent
+    reviewers: [api-contract-agent, quality-gate-agent]
+    exclusive_boundary: true
+    signals: [api, openapi, dto, controller]
+    evidence: [OpenAPI diff, consumer compatibility result]
+  - id: event
+    owner: backend-agent
+    reviewers: [domain-agent, api-contract-agent, quality-gate-agent]
+    exclusive_boundary: true
+    signals: [event, webhook]
+    evidence: [event contract evidence, consumer compatibility result]
+  - id: transaction
+    owner: backend-agent
+    reviewers: [financial-integrity-agent, quality-gate-agent]
+    exclusive_boundary: true
+    signals: [transaction, lock, isolation, concurrency]
+    evidence: [transaction/isolation evidence, concurrency evidence]
