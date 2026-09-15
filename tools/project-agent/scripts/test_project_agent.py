@@ -23,6 +23,14 @@ class ProjectAgentTest(unittest.TestCase):
         )
         self.assertEqual(result['skills'], ['tdd', 'code-review', 'implement-spec'])
 
+    def test_runtime_inventory_filters_unavailable_skills(self):
+        result = route_skills(
+            'implement withdrawal fix', ['backend-agent'], self.skills,
+            explicit_actions=['implementation'], available_skills=['tdd'],
+        )
+        self.assertEqual(result['skills'], ['tdd'])
+        self.assertEqual(result['unavailable_skills'], ['code-review', 'implement-spec'])
+
     def test_thai_next_action_intent_routes_advisory_skill(self):
         result = route_skills('ควรทำอะไรต่อ', ['lead-agent'], self.skills)
         self.assertIn('advice', result['action_types'])
@@ -75,6 +83,31 @@ class ProjectAgentTest(unittest.TestCase):
         self.assertEqual(result['recommended_action']['owner'], 'qa-agent')
         self.assertIn('playwright', result['recommended_action']['runtime_skills'])
         self.assertIn('tdd', result['recommended_action']['runtime_skills'])
+
+    def test_next_action_reports_runtime_skill_gaps(self):
+        state = {
+            'version': 1,
+            'objective': 'collect test evidence',
+            'current_state': 'QA is ready',
+            'actions': [
+                {
+                    'id': 'qa', 'title': 'test browser workflow', 'status': 'pending',
+                    'priority': 'functional-critical-path', 'owner': 'qa-agent',
+                    'depends_on': [], 'blockers': [], 'gaps': ['E2E evidence missing'],
+                    'project_subskills': ['e2e-playwright-review'],
+                    'evidence_required': ['E2E result'], 'action_types': ['testing'],
+                    'expected_result': 'candidate-bound E2E result',
+                },
+            ],
+        }
+        result = resolve_next_action(
+            state, self.profile, self.skills,
+            available_skills=['diagnosing-bugs', 'code-review', 'tdd'],
+        )
+        action = result['recommended_action']
+        self.assertNotIn('playwright', action['runtime_skills'])
+        self.assertIn('playwright', action['unavailable_runtime_skills'])
+        self.assertIn('tdd', action['runtime_skills'])
 
     def test_next_action_continues_active_work(self):
         state = {

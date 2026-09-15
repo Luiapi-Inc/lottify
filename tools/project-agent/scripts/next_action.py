@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 from project_profile import load_profile
-from runtime_skill_router import load_config, route_skills
+from runtime_skill_router import load_config, load_inventory, route_skills
 
 STATE_VERSION = 1
 STATUSES = {"pending", "running", "done", "blocked", "waiting", "cancelled"}
@@ -64,13 +64,14 @@ def _rank(action, priority_order, index):
     return (priority_order.index(action["priority"]), index)
 
 
-def _result(action, state, skill_config, status, reason, change_request):
+def _result(action, state, skill_config, status, reason, change_request, available_skills=None):
     runtime = route_skills(
         state["objective"] + " " + action["title"],
         [action["owner"]],
         skill_config,
         explicit_actions=action.get("action_types", []),
         change_request=change_request,
+        available_skills=available_skills,
     )
     return {
         "status": status,
@@ -84,6 +85,7 @@ def _result(action, state, skill_config, status, reason, change_request):
             "priority": action["priority"],
             "project_subskills": action.get("project_subskills", []),
             "runtime_skills": runtime["skills"],
+            "unavailable_runtime_skills": runtime["unavailable_skills"],
             "expected_result": action.get("expected_result"),
             "evidence_required": action.get("evidence_required", []),
             "blockers": action.get("blockers", []),
@@ -91,7 +93,7 @@ def _result(action, state, skill_config, status, reason, change_request):
     }
 
 
-def resolve_next_action(state, profile, skill_config, *, change_request=False):
+def resolve_next_action(state, profile, skill_config, *, change_request=False, available_skills=None):
     validate_state(state, profile)
     actions = state["actions"]
     priority_order = profile["priorities"]
@@ -106,6 +108,7 @@ def resolve_next_action(state, profile, skill_config, *, change_request=False):
             "in-progress",
             "continue the highest-priority active action",
             change_request,
+            available_skills,
         )
 
     done = {action["id"] for action in actions if action["status"] == "done"}
@@ -125,6 +128,7 @@ def resolve_next_action(state, profile, skill_config, *, change_request=False):
             "ready",
             "highest-priority executable action with satisfied dependencies",
             change_request,
+            available_skills,
         )
 
     unfinished = [action for action in actions if action["status"] not in {"done", "cancelled"}]
@@ -161,16 +165,19 @@ def main():
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--change-request", action="store_true")
+    parser.add_argument("--inventory", type=Path)
     parser.add_argument("--format", choices=("yaml", "json"), default="yaml")
     args = parser.parse_args()
     try:
         profile = load_profile(args.profile)
         config_path = args.repo / profile["runtime_skills"]["config"]
+        inventory = load_inventory(args.inventory) if args.inventory else None
         result = resolve_next_action(
             load_state(args.state),
             profile,
             load_config(config_path),
             change_request=args.change_request,
+            available_skills=inventory["available_skills"] if inventory else None,
         )
     except ValueError as error:
         parser.error(str(error))

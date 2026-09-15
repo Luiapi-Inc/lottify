@@ -45,6 +45,19 @@ def load_config(path):
     return validate_config(value)
 
 
+def load_inventory(path):
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot load runtime inventory: {error}") from error
+    if not isinstance(value, dict) or value.get("version") != 1:
+        raise ValueError("runtime inventory.version must be 1")
+    available = value.get("available_skills")
+    if not isinstance(available, list) or any(not isinstance(item, str) or not item for item in available):
+        raise ValueError("runtime inventory.available_skills must be a list of non-empty strings")
+    return value
+
+
 def _signal_match(signal, text):
     if any(ord(char) > 127 for char in signal):
         return signal.lower() in text.lower()
@@ -61,7 +74,7 @@ def classify_actions(text, config):
     ]
 
 
-def route_skills(text, agents, config, *, explicit_actions=(), change_request=False):
+def route_skills(text, agents, config, *, explicit_actions=(), change_request=False, available_skills=None):
     validate_config(config)
     if not isinstance(text, str):
         raise ValueError("text must be a string")
@@ -89,7 +102,18 @@ def route_skills(text, agents, config, *, explicit_actions=(), change_request=Fa
     for action in actions:
         for skill in config["action_packs"].get(action, []):
             add(skill)
-    return {"action_types": actions, "skills": selected, "guarded_skills_skipped": skipped}
+
+    unavailable = []
+    if available_skills is not None:
+        available = set(available_skills)
+        unavailable = [skill for skill in selected if skill not in available]
+        selected = [skill for skill in selected if skill in available]
+    return {
+        "action_types": actions,
+        "skills": selected,
+        "guarded_skills_skipped": skipped,
+        "unavailable_skills": unavailable,
+    }
 
 
 def main():
@@ -99,14 +123,17 @@ def main():
     parser.add_argument("--agent", action="append", default=[])
     parser.add_argument("--action", action="append", default=[])
     parser.add_argument("--change-request", action="store_true")
+    parser.add_argument("--inventory", type=Path)
     args = parser.parse_args()
     try:
+        inventory = load_inventory(args.inventory) if args.inventory else None
         result = route_skills(
             args.text,
             args.agent,
             load_config(args.config),
             explicit_actions=args.action,
             change_request=args.change_request,
+            available_skills=inventory["available_skills"] if inventory else None,
         )
     except ValueError as error:
         parser.error(str(error))

@@ -25,6 +25,12 @@ Return at least: current state, gap, recommended action, owner, project review c
 
 Do not invent work when no executable action exists. Return the actual wait/block state and the concrete resume condition.
 
+## Runtime installation
+
+Install the canonical core/profile into local agent runtimes with `scripts/install_runtime.py`. Supported targets are `hermes`, `codex`, and `all`. Run `--dry-run` first when an existing runtime already has a project skill; use `--migrate-existing` only when replacing that existing copy is intended. Migrated copies are backed up outside the runtime skill root.
+
+The installer also bridges shared engineering/Matt skills from `~/.agents/skills` only when the target runtime does not already provide that identifier. It writes `$HOME/.local/share/project-agent/<runtime>-inventory.json`; use that inventory when routing next actions so unavailable host skills are reported instead of selected.
+
 ## Runtime skills
 
 Project review subskills define **what must be proved**. Runtime skills define **how an agent performs the work**. Runtime skills never override the project profile, requirements, ownership, or acceptance gates.

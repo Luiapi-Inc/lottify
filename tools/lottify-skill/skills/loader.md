@@ -67,3 +67,5 @@ Use the reusable router in `../../project-agent/scripts/runtime_skill_router.py`
 Role defaults and action packs may select installed engineering skills such as `tdd`, `diagnosing-bugs`, `code-review`, `domain-modeling`, `codebase-design`, `implement-spec`, `improve-codebase-architecture`, `vercel-react-best-practices`, `playwright`, or `ask-matt`. These skills do not become project source of truth.
 
 `to-spec` and `to-tickets` are guarded: they are not selected unless the task is an explicit Change Request. This prevents runtime tooling from silently redefining an existing plan or requirement.
+
+For Hermes/Codex execution, install/sync the project stack with `../../project-agent/scripts/install_runtime.py` and pass the generated runtime inventory to `runtime_skill_router.py` or `next_action.py`. A configured skill that is absent from the host inventory is an unavailable capability, not permission to impersonate that skill.
