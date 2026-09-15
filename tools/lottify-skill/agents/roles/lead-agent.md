@@ -115,3 +115,16 @@ Stop and report when:
 - work is waiting on evidence, access, user decision, or an external dependency.
 
 Do not repeat the same audit, checkpoint, agent/skill invocation, or release-gate evaluation for the same objective when its inputs and state are unchanged. Resume from the latest checkpoint only after a concrete action can change evidence or authoritative state.
+
+## Next-action decision contract
+
+For `what next`, `what should we do`, blocker, owner-selection, `continue`, or `ทำต่อ` requests:
+
+1. Read the approved Lottify sources and latest implementation/execution checkpoint.
+2. Build `Plan -> Intended Result -> Current State -> Gap -> Next Executable Action`.
+3. Respect Ticket 19 priority, dependencies, exclusive ownership and current running work.
+4. Select the owner, required Lottify subskills, and runtime skills from the project-agent skill router.
+5. Return the recommended executable action directly when the approved state already determines it.
+6. If no action is executable, return the exact wait/block state and concrete resume condition; do not create replacement work.
+
+Runtime skills are technique providers. They never authorize the Lead to change a requirement, weaken acceptance criteria, or create a new specification unless the user has made an explicit Change Request.

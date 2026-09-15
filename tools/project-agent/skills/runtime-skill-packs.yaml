@@ -1,0 +1,34 @@
+version: 1
+role_defaults:
+  lead-agent: [codebase-design, domain-modeling, code-review, writing-for-agents]
+  backend-agent: [tdd, code-review]
+  frontend-agent: [vercel-react-best-practices, tdd, code-review]
+  qa-agent: [playwright, diagnosing-bugs, code-review]
+  domain-agent: [domain-modeling, codebase-design, code-review]
+  financial-integrity-agent: [codebase-design, security-best-practices, build-web-apps:supabase-postgres-best-practices]
+  api-contract-agent: [writing-for-agents, code-review]
+  security-agent: [security-best-practices, security-threat-model, code-review]
+  quality-gate-agent: [code-review, diagnosing-bugs]
+  release-gate-agent: [code-review, writing-for-agents, security-best-practices]
+  memory-context-agent: [writing-for-agents, create-handoff, session-compression]
+action_packs:
+  implementation: [implement-spec, tdd, code-review]
+  debugging: [diagnosing-bugs, tdd, code-review]
+  architecture: [codebase-design, improve-codebase-architecture, code-review]
+  testing: [tdd, diagnosing-bugs, code-review]
+  review: [code-review]
+  handoff: [create-handoff, session-compression, writing-for-agents]
+  advice: [ask-matt, codebase-design]
+  specification: [to-spec, to-tickets, writing-for-agents]
+action_signals:
+  implementation: [implement, implementation, build, add, create, change]
+  debugging: [bug, debug, failure, failing, error, fix]
+  architecture: [architecture, refactor, redesign]
+  testing: [test, regression, tdd]
+  review: [review, audit, inspect]
+  handoff: [handoff, context transfer, session compression]
+  advice: [what next, next action, recommend, advice, should do, ต้องทำอะไรต่อ, ควรทำ]
+  specification: [new specification, create specification, new requirement, create ticket, replan]
+guarded_skills:
+  to-spec: change-request
+  to-tickets: change-request

@@ -1,0 +1,16 @@
+version: 1
+project:
+  id: replace-me
+  name: Replace Me
+  entry_skill: project-agent
+sources:
+  required: {}
+  status_globs: []
+priorities:
+  - critical
+  - high
+  - normal
+roles:
+  lead: lead-agent
+runtime_skills:
+  config: tools/project-agent/skills/runtime-skill-packs.yaml

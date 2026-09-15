@@ -59,3 +59,11 @@ Before adding an external skill:
 - compare with installed skills;
 - keep one canonical capability owner;
 - document why it improves Lottify workflow.
+
+## Automatic runtime-skill routing
+
+Use the reusable router in `../../project-agent/scripts/runtime_skill_router.py` with `../../project-agent/skills/runtime-skill-packs.yaml`. The Lottify manifest generator records the resolved runtime skills together with the canonical `lottify` and `project-agent` skills.
+
+Role defaults and action packs may select installed engineering skills such as `tdd`, `diagnosing-bugs`, `code-review`, `domain-modeling`, `codebase-design`, `implement-spec`, `improve-codebase-architecture`, `vercel-react-best-practices`, `playwright`, or `ask-matt`. These skills do not become project source of truth.
+
+`to-spec` and `to-tickets` are guarded: they are not selected unless the task is an explicit Change Request. This prevents runtime tooling from silently redefining an existing plan or requirement.

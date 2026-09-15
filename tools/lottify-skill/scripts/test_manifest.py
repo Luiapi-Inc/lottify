@@ -62,6 +62,9 @@ class ManifestTest(unittest.TestCase):
             'version': 2,
         })
         self.assertEqual(manifest['skills']['resolved'][0]['canonical'], 'lottify')
+        self.assertIn('project-agent', manifest['skills']['required'])
+        self.assertIn('tdd', manifest['skills']['required'])
+        self.assertIn('code-review', manifest['skills']['required'])
         self.assertEqual(manifest['execution']['state'], 'SOURCE_ALIGNMENT')
         self.assertIn('records', manifest)
         self.assertIn('capabilities', manifest)
@@ -119,6 +122,42 @@ class ManifestTest(unittest.TestCase):
             'skill resolution missing or stale' in problem
             for problem in check(manifest, self.repo, 'delegation')
         ))
+
+    def test_legacy_manifest_v2_without_project_agent_remains_readable(self):
+        manifest = self.manifest()
+        manifest['skills'] = {
+            'required': ['lottify'],
+            'resolved': [manifest['skills']['resolved'][0]],
+        }
+        manifest['source_alignment'] = {
+            'confirmed_by_lead': True,
+            'decision_ids': ['Ticket 04'],
+            'adr_disposition': 'not-applicable',
+        }
+        manifest['ownership']['writer'] = 'backend-agent'
+        problems = check(manifest, self.repo, 'delegation')
+        self.assertFalse(any('runtime skill routing' in problem for problem in problems))
+        self.assertFalse(any('skill resolution missing or stale' in problem for problem in problems))
+
+    def test_checker_rejects_removed_runtime_skill(self):
+        manifest = self.manifest()
+        manifest['skills']['required'].remove('tdd')
+        manifest['skills']['resolved'] = [
+            item for item in manifest['skills']['resolved'] if item['requested'] != 'tdd'
+        ]
+        self.assertTrue(any(
+            'runtime skill routing is missing, stale, or out of order' in problem
+            for problem in check(manifest, self.repo, 'delegation')
+        ))
+
+    def test_change_request_can_route_guarded_specification_skills(self):
+        manifest = generate(
+            'Change Request create specification for withdrawal API', [], self.repo,
+            [f'domain-ticket={self.domain}'], self.checkpoint,
+            ['docs/**'],
+        )
+        self.assertIn('to-spec', manifest['skills']['required'])
+        self.assertIn('to-tickets', manifest['skills']['required'])
 
     def test_source_drift_and_scope_block_delegation(self):
         manifest = self.manifest(['apps/api/src/withdrawal/handler.ts', 'apps/admin-web/page.tsx'])

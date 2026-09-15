@@ -24,6 +24,7 @@ from manifest_generator import (
     PRODUCTION_RELEASE_SUBSKILLS,
     RELEASE_GATE_SOURCE,
     is_production_release,
+    required_skill_names,
 )
 from skill_resolver import load_registry, resolve
 
@@ -103,6 +104,15 @@ def check(manifest, repo, stage):
                 problems.append(f'production release missing required reviewer: {reviewer}')
     skills = manifest.get('skills', {})
     required_skills = skills.get('required', [])
+    expected_skills = required_skill_names(
+        task.get('objective', ''),
+        task.get('changed_files', []),
+        manifest.get('routing', {}).get('agents', []),
+    )
+    # Legacy manifest-v2 records created before project-agent integration remain readable.
+    # New manifests opt into deterministic runtime-skill validation by requiring project-agent.
+    if 'project-agent' in required_skills and required_skills != expected_skills:
+        problems.append('runtime skill routing is missing, stale, or out of order')
     try:
         registry = load_registry(Path(__file__).resolve().parent.parent / 'skills' / 'registry.yaml')
         resolved = {entry.get('requested'): entry for entry in skills.get('resolved', [])}

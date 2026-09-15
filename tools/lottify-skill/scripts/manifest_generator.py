@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 import yaml
 
@@ -14,9 +15,16 @@ from capability_registry import load_registry as load_capability_registry
 from capability_registry import routes as route_capabilities
 from skill_resolver import load_registry, resolve
 
+PROJECT_AGENT_SCRIPTS = Path(__file__).resolve().parents[2] / 'project-agent' / 'scripts'
+if str(PROJECT_AGENT_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(PROJECT_AGENT_SCRIPTS))
+from runtime_skill_router import load_config as load_runtime_skill_config
+from runtime_skill_router import route_skills as route_runtime_skills
+
 
 CONTRACT_VERSION = 2
 SKILL_REGISTRY = Path(__file__).resolve().parent.parent / 'skills' / 'registry.yaml'
+RUNTIME_SKILL_CONFIG = Path(__file__).resolve().parents[2] / 'project-agent' / 'skills' / 'runtime-skill-packs.yaml'
 
 RULES = [
     (['prisma/schema'], ['backend-agent', 'quality-gate-agent'], ['prisma-schema-review']),
@@ -106,6 +114,27 @@ def source_record(repo, kind, path):
     return {'kind': kind, 'path': resolved.relative_to(repo.resolve()).as_posix(), 'sha256': hashlib.sha256(resolved.read_bytes()).hexdigest()}
 
 
+def is_change_request(task):
+    return bool(re.search(r'(?<![a-z0-9])change[ -]request(?![a-z0-9])', task.lower()))
+
+
+def runtime_skill_route(task, files, agents):
+    return route_runtime_skills(
+        task + ' ' + ' '.join(files),
+        agents,
+        load_runtime_skill_config(RUNTIME_SKILL_CONFIG),
+        change_request=is_change_request(task),
+    )
+
+
+def required_skill_names(task, files, agents):
+    names = ['lottify', 'project-agent']
+    for skill in runtime_skill_route(task, files, agents)['skills']:
+        if skill not in names:
+            names.append(skill)
+    return names
+
+
 def generate(task, files, repo=None, sources=(), checkpoint=None, allowed_scope=(), dependencies=()):
     repo = Path.cwd() if repo is None else Path(repo)
     agents = ['lead-agent']
@@ -193,11 +222,14 @@ def generate(task, files, repo=None, sources=(), checkpoint=None, allowed_scope=
         for reviewer in PRODUCTION_RELEASE_REQUIRED_REVIEWERS:
             if reviewer not in reviewers:
                 reviewers.append(reviewer)
+    skill_registry = load_registry(SKILL_REGISTRY)
+    required_skills = required_skill_names(task, files, agents)
     resolved_skills = [
         {
-            'requested': 'lottify',
-            **resolve('lottify', load_registry(SKILL_REGISTRY)),
+            'requested': requested,
+            **resolve(requested, skill_registry),
         }
+        for requested in required_skills
     ]
     capabilities = route_capabilities(
         task + ' ' + ' '.join(files),
@@ -215,7 +247,7 @@ def generate(task, files, repo=None, sources=(), checkpoint=None, allowed_scope=
             'subskills': subskills,
             'matched_signals': matched_signals,
         },
-        'skills': {'required': ['lottify'], 'resolved': resolved_skills},
+        'skills': {'required': required_skills, 'resolved': resolved_skills},
         'capabilities': capabilities,
         'records': {'decisions': [], 'handoffs': [], 'checkpoints': [], 'evidence_refs': []},
         'ownership': {'writer_candidates': writer_candidates, 'writer': None, 'allowed_scope': list(allowed_scope), 'forbidden_scope': []},
