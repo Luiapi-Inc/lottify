@@ -786,6 +786,7 @@ function allowedDrawActions(state: DrawState): DrawLifecycleCommand[] {
       transitionDraw(state, command, {
         privilegedReopen: true,
         resultExists: false,
+        refundObligationsSatisfied: true,
       });
       allowed.push(command);
     } catch (error) {
