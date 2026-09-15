@@ -47,6 +47,7 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
   const betTypeVersionIds: string[] = [];
   const drawIds: string[] = [];
   const orderIds: string[] = [];
+  const fundingAccountIds: string[] = [];
 
   const actor = () => ({ adminId, sessionId, role: "ADMIN" as const });
 
@@ -110,24 +111,73 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
   });
 
   afterAll(async () => {
-    // Betting orders reference members and draws; delete orders first, then the
-    // draws/product/member/admin rows this suite created (by exact id).
-    await prisma.betOrder.deleteMany({ where: { id: { in: orderIds } } });
-    await prisma.lotteryDraw.deleteMany({ where: { id: { in: drawIds } } });
-    await prisma.lotteryProductVersionBetType.deleteMany({
-      where: { productVersionId: { in: productVersionIds } },
+    // Betting orders reference receipts/lines/reservations and the ledger posts
+    // against member + funding accounts, so cleanup must run in dependency order
+    // and disable the immutability triggers, mirroring betting-order.integration.spec.
+    const accounts = await prisma.ledgerAccount.findMany({
+      where: { memberId: { in: memberIds } },
+      select: { id: true },
     });
-    await prisma.lotteryProductVersion.deleteMany({
-      where: { id: { in: productVersionIds } },
+    const memberAccountIds = accounts.map((account) => account.id);
+    const postings = await prisma.ledgerPosting.findMany({
+      where: { accountId: { in: memberAccountIds } },
+      select: { transactionId: true },
+      distinct: ["transactionId"],
     });
-    await prisma.lotteryBetTypeVersion.deleteMany({
-      where: { id: { in: betTypeVersionIds } },
+    const transactionIds = postings.map((posting) => posting.transactionId);
+    const periods = await prisma.financialTransaction.findMany({
+      where: { id: { in: transactionIds } },
+      select: { accountingPeriodId: true },
+      distinct: ["accountingPeriodId"],
     });
-    await prisma.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
-    await prisma.lotteryProduct.deleteMany({ where: { id: { in: productIds } } });
-    await prisma.member.deleteMany({ where: { id: { in: memberIds } } });
-    await prisma.adminAuthSession.deleteMany({ where: { id: sessionId } });
-    await prisma.adminUser.deleteMany({ where: { id: adminId } });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('ALTER TABLE "bet_receipts" DISABLE TRIGGER "bet_receipts_immutable"');
+      await tx.$executeRawUnsafe('ALTER TABLE "lottery_product_version_bet_types" DISABLE TRIGGER "lottery_product_version_links_immutable"');
+      await tx.$executeRawUnsafe('ALTER TABLE "lottery_product_versions" DISABLE TRIGGER "lottery_product_versions_published_immutable"');
+      await tx.$executeRawUnsafe('ALTER TABLE "lottery_bet_type_versions" DISABLE TRIGGER "lottery_bet_type_versions_published_immutable"');
+
+      await tx.betReceipt.deleteMany({ where: { memberId: { in: memberIds } } });
+      await tx.betOrderLine.deleteMany({ where: { order: { memberId: { in: memberIds } } } });
+      await tx.betOrder.deleteMany({ where: { memberId: { in: memberIds } } });
+      await tx.bettingQuoteLine.deleteMany({ where: { quote: { memberId: { in: memberIds } } } });
+      await tx.bettingQuote.deleteMany({ where: { memberId: { in: memberIds } } });
+
+      await tx.reservationAllocation.deleteMany({
+        where: { reservation: { memberId: { in: memberIds } } },
+      });
+      await tx.reservation.deleteMany({ where: { memberId: { in: memberIds } } });
+      await tx.ledgerPosting.deleteMany({ where: { transactionId: { in: transactionIds } } });
+      await tx.financialTransaction.deleteMany({ where: { id: { in: transactionIds } } });
+      await tx.ledgerAccount.deleteMany({
+        where: { id: { in: [...memberAccountIds, ...fundingAccountIds] } },
+      });
+      await tx.accountingPeriod.deleteMany({
+        where: { id: { in: periods.map((period) => period.accountingPeriodId) } },
+      });
+
+      await tx.lotteryDrawBetType.deleteMany({ where: { drawId: { in: drawIds } } });
+      await tx.lotteryDraw.deleteMany({ where: { id: { in: drawIds } } });
+      await tx.lotteryProductVersionBetType.deleteMany({
+        where: { productVersionId: { in: productVersionIds } },
+      });
+      await tx.lotteryProductVersion.deleteMany({
+        where: { id: { in: productVersionIds } },
+      });
+      await tx.lotteryBetTypeVersion.deleteMany({
+        where: { id: { in: betTypeVersionIds } },
+      });
+      await tx.lotteryBetType.deleteMany({ where: { id: { in: betTypeIds } } });
+      await tx.lotteryProduct.deleteMany({ where: { id: { in: productIds } } });
+      await tx.member.deleteMany({ where: { id: { in: memberIds } } });
+      await tx.adminAuthSession.deleteMany({ where: { id: sessionId } });
+      await tx.adminUser.deleteMany({ where: { id: adminId } });
+
+      await tx.$executeRawUnsafe('ALTER TABLE "lottery_bet_type_versions" ENABLE TRIGGER "lottery_bet_type_versions_published_immutable"');
+      await tx.$executeRawUnsafe('ALTER TABLE "lottery_product_versions" ENABLE TRIGGER "lottery_product_versions_published_immutable"');
+      await tx.$executeRawUnsafe('ALTER TABLE "lottery_product_version_bet_types" ENABLE TRIGGER "lottery_product_version_links_immutable"');
+      await tx.$executeRawUnsafe('ALTER TABLE "bet_receipts" ENABLE TRIGGER "bet_receipts_immutable"');
+    });
     await prisma.$disconnect();
   });
 
@@ -231,6 +281,7 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
       `orch-test-funding:${randomUUID()}`,
       "THB",
     );
+    fundingAccountIds.push(counterpartyId);
     const identity = randomUUID();
     await ledger.post({
       businessTransactionId: `funding-${identity}`,
