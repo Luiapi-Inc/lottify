@@ -2,7 +2,7 @@
 
 ตรวจเมื่อ 2026-09-15 จาก workspace `/home/ubuntu/lottify` โดยเป็นการตรวจแบบ read-only
 
-อัปเดตล่าสุด: GitHub CLI ใช้บัญชี `luiapidev` เป็น active account และโหลด credentials จาก keyring; ยังไม่มีการ rerun CI หลังการสลับบัญชี และไม่ถือว่าเป็น CI evidence ใหม่
+อัปเดตล่าสุด: GitHub CLI ใช้บัญชี `luiapidev` เป็น active account และโหลด credentials จาก keyring. Workflow `ci` ถูกเปิดกลับเป็น active แล้ว และ candidate run `35002766554` บน `e5c8b322` ยังล้มก่อนเริ่ม steps.
 
 Hermes board evidence (verified via CLI): `hermes kanban boards list` reports board `lottify` (**Lottify v1 Implementation**) with `archived=2, done=23`; `hermes kanban stats` reports `done=23` and zero tasks in every active status. Board `default` is empty. ตัวเลขนี้เป็นสถานะ task board และไม่ใช่หลักฐานว่า release gate ผ่าน.
 
@@ -25,7 +25,7 @@ Hermes board evidence (verified via CLI): `hermes kanban boards list` reports bo
 | TypeScript ต้อง typecheck ผ่าน | `pnpm typecheck` | ผ่าน, exit code 0 | รักษาเป็น local evidence; ยังต้องพิจารณา CI evidence ของ commit ล่าสุด |
 | Automated tests ต้องผ่านพร้อมระบุ coverage ที่แท้จริง | `pnpm test` | 70 test files / 427 tests ผ่าน; 28 files / 235 tests ถูก skip โดยเฉพาะ integration suites | เปิด `RUN_INTEGRATION_TESTS=1` พร้อม PostgreSQL/Redis แล้วรัน integration evidence ที่ CI กำหนด |
 | Production builds ต้องผ่าน | `pnpm build` | backend, Member Next.js และ Admin Next.js build ผ่าน, exit code 0 | ตรวจซ้ำใน successful CI run ที่ตรงกับ candidate commit |
-| CI ต้องยืนยัน migration, integration, security scan, build และ container smoke | `.github/workflows/ci.yml`; `gh run list`; `gh run view 34796007999` | ล่าสุดที่พบ (run `34796007999`, head `544882e8...`) ล้มเหลวทั้ง `verify` และ `container-smoke`; jobs fail ก่อนมี step output | ตรวจ root cause ของ CI run ล่าสุด/สร้าง candidate และ rerun หลังสาเหตุได้รับการแก้ไข; ห้ามถือ local green เป็น CI acceptance |
+| CI ต้องยืนยัน migration, integration, security scan, build และ container smoke | `.github/workflows/ci.yml`; `gh run view 35002766554`; jobs API | candidate run `35002766554` บน head `e5c8b322...` ล้มทั้ง `verify` และ `container-smoke` ก่อนมี steps/logs | L-02 เป็น BLOCKED จาก external runner/infrastructure; ต้องมี successful candidate CI ใหม่ก่อนรับรอง และห้ามถือ local green เป็น CI acceptance |
 | Implementation checkpoint ต้องเทียบกับ source of truth | `docs/implementation/*.md`, roadmap `issue 19`, workflows `issue 02`, traceability `issue 16` | checkpoints หลายส่วนระบุว่ายังไม่ complete หรือ evidence ยังขาด เช่น Financial Core, Identity/Eligibility และ Lottery Configuration | สร้าง requirement matrix ราย domain ต่อไป โดยผูกกับ issue/ADR/test/CI run ที่ตรงกัน |
 | Release readiness ต้องมีหลักฐานบังคับครบ | `AGENTS.md`, `README.md`, Ticket 16 traceability และ checkpoint status files | ยังไม่ผ่าน: integration evidence local ขาด, CI ล่าสุด fail, และเอกสารระบุ production GO/acceptance gates ที่ยังเปิด | คงสถานะ “ไม่พร้อม release” จนกว่าจะมี successful immutable candidate CI และ evidence ตาม Ticket 16 |
 
@@ -33,7 +33,7 @@ Hermes board evidence (verified via CLI): `hermes kanban boards list` reports bo
 
 - **Green:** local typecheck และ production build; local unit/contract/architecture subset ที่ไม่ต้องใช้ external services.
 - **Yellow:** local test command เขียวแต่ skip integration 235 tests; checkpoint evidence หลายชุดเป็น scoped/local ไม่ใช่ milestone acceptance.
-- **Red:** latest observed GitHub Actions CI run `34796007999` ล้มเหลวทั้งสอง jobs; ยังไม่มีหลักฐาน successful CI สำหรับ current HEAD.
+- **Red:** candidate GitHub Actions CI run `35002766554` ล้มเหลวทั้งสอง jobs ก่อนมี steps/logs; ยังไม่มีหลักฐาน successful CI สำหรับ current HEAD.
 - **Release gate:** **ไม่ผ่าน / ห้ามอ้าง Production GO หรือ release readiness**.
 
 ## Scope and limitations
@@ -44,7 +44,7 @@ Hermes board evidence (verified via CLI): `hermes kanban boards list` reports bo
 
 ## Recommended next actions
 
-1. ตรวจสาเหตุที่ทำให้ CI jobs fail ก่อนเริ่ม steps ของ run `34796007999` และยืนยัน workflow/action availability.
+1. รอ external runner/infrastructure ให้กลับมาพร้อม แล้วสร้าง successful candidate CI run; ห้าม retry ซ้ำโดยไม่มี state change.
 2. เปิด PostgreSQL/Redis ตาม CI environment แล้วรัน integration suites ที่ปัจจุบัน skip พร้อมเก็บ machine-readable evidence.
 3. ทำ requirement matrix จาก Ticket 16 ให้ครบทุก active domain และ map ไปยัง checkpoint/CI run.
 4. แยกหรือยืนยันไฟล์ untracked ทั้งสองกลุ่มก่อนสร้าง candidate acceptance claim.
