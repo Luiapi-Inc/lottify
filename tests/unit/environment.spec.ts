@@ -33,4 +33,26 @@ describe("environment validation", () => {
       }).APP_ENV,
     ).toBe("staging");
   });
+
+  it("defaults the withdrawal dual-control threshold to the G2 cutover value", () => {
+    // G2 `system_settings.withdrawal.dual_control_threshold` = 50,000.00 THB, in
+    // minor units (D11). Defaulting to it preserves pre-cutover behaviour.
+    expect(parseEnvironment(valid).WITHDRAWAL_APPROVAL_THRESHOLD_MINOR).toBe(5_000_000);
+  });
+
+  it("accepts a configured withdrawal dual-control threshold", () => {
+    expect(
+      parseEnvironment({ ...valid, WITHDRAWAL_APPROVAL_THRESHOLD_MINOR: "10000" })
+        .WITHDRAWAL_APPROVAL_THRESHOLD_MINOR,
+    ).toBe(10_000);
+  });
+
+  it("rejects a negative or fractional withdrawal dual-control threshold", () => {
+    expect(() =>
+      parseEnvironment({ ...valid, WITHDRAWAL_APPROVAL_THRESHOLD_MINOR: "-1" }),
+    ).toThrow();
+    expect(() =>
+      parseEnvironment({ ...valid, WITHDRAWAL_APPROVAL_THRESHOLD_MINOR: "1.5" }),
+    ).toThrow();
+  });
 });

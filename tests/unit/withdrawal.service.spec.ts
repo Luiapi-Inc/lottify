@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WithdrawalService } from "../../src/contexts/payments/application/withdrawal.service";
+import { requiresDualControlApproval } from "../../src/contexts/payments/domain/dual-control-approval";
+import {
+  getWithdrawalApprovalThresholdMinor,
+  resetEnvironmentForTests,
+} from "../../src/platform/config/env";
 import type {
   CreateWithdrawalInput,
   WithdrawalListPage,
@@ -626,5 +631,114 @@ describe("WithdrawalService", () => {
     // A still-pending reconciliation never re-initiates the external payout.
     expect(provider.initiateCallCount).toBe(1);
     expect(ledger.releases).toEqual([]);
+  });
+
+  /**
+   * G2→G3 cutover decision D11: the G2 `system_settings.
+   * withdrawal.dual_control_threshold` (50,000.00 THB) has no G3 settings table, so
+   * the value travels as configuration and gates the withdrawal at creation.
+   */
+  describe("dual-control approval threshold (D11)", () => {
+    const THRESHOLD_VAR = "WITHDRAWAL_APPROVAL_THRESHOLD_MINOR";
+    const G2_CUTOVER_THRESHOLD_MINOR = "5000000";
+    const REQUIRED_ENVIRONMENT: Record<string, string> = {
+      APP_ENV: "test",
+      DATABASE_URL: "postgresql://user:***@localhost:5432/lottify",
+      REDIS_URL: "redis://localhost:6379",
+      JWT_ACCESS_SECRET: "01234567890123456789012345678901",
+    };
+    const originalThreshold = process.env[THRESHOLD_VAR];
+
+    beforeEach(() => {
+      // The threshold is read from configuration, so the environment is part of
+      // the fixture: an unset value must fall back to the G2 cutover value.
+      delete process.env[THRESHOLD_VAR];
+      for (const [key, value] of Object.entries(REQUIRED_ENVIRONMENT)) {
+        process.env[key] = value;
+      }
+      resetEnvironmentForTests();
+      ledger.availableMinor = 500_000_00n;
+    });
+
+    afterEach(() => {
+      if (originalThreshold === undefined) delete process.env[THRESHOLD_VAR];
+      else process.env[THRESHOLD_VAR] = originalThreshold;
+      resetEnvironmentForTests();
+    });
+
+    it("reads the threshold from configuration and never invents it in the domain", () => {
+      expect(requiresDualControlApproval(5_000_000n, 5_000_000n)).toBe(true);
+      expect(requiresDualControlApproval(4_999_999n, 5_000_000n)).toBe(false);
+    });
+
+    it("falls back to the G2 cutover value when the environment leaves it unset", () => {
+      expect(getWithdrawalApprovalThresholdMinor()).toBe(
+        BigInt(G2_CUTOVER_THRESHOLD_MINOR),
+      );
+      expect(getWithdrawalApprovalThresholdMinor()).toBe(50_000_00n);
+    });
+
+    it("honours an explicit configured threshold", () => {
+      process.env[THRESHOLD_VAR] = "10000";
+      resetEnvironmentForTests();
+
+      expect(getWithdrawalApprovalThresholdMinor()).toBe(10_000n);
+    });
+
+    it("routes a withdrawal at or above the threshold to the APPROVAL queue", async () => {
+      const withdrawal = await create(50_000_00n);
+
+      expect(withdrawal.state).toBe("REVIEWING");
+      expect(withdrawal.requiresApproval).toBe(true);
+      expect(withdrawal.eligibilityOutcome).toBe("REVIEW_REQUIRED");
+      expect(withdrawal.eligibilityReasonCodes).toContain("APPROVAL_THRESHOLD");
+      expect(withdrawal.eligibilityEvidenceRefs).toContain(
+        "policy:withdrawal.dual-control-threshold",
+      );
+      // The funds are still held authoritatively while the approval is pending.
+      expect(withdrawal.reservationId).not.toBeNull();
+    });
+
+    it("fast-paths a withdrawal below the threshold", async () => {
+      const withdrawal = await create(49_999_00n);
+
+      expect(withdrawal.state).toBe("APPROVED");
+      expect(withdrawal.requiresApproval).toBe(false);
+      expect(withdrawal.eligibilityOutcome).toBe("ALLOW");
+      expect(withdrawal.eligibilityReasonCodes).not.toContain("APPROVAL_THRESHOLD");
+    });
+
+    it("applies a configured threshold instead of the default", async () => {
+      process.env[THRESHOLD_VAR] = "100000";
+      resetEnvironmentForTests();
+
+      const withdrawal = await create(1_000_00n);
+
+      expect(withdrawal.state).toBe("REVIEWING");
+      expect(withdrawal.requiresApproval).toBe(true);
+    });
+
+    it("clears the creation gate once an Admin approves, so payout is not rejected", async () => {
+      const created = await create(60_000_00n);
+      expect(created.state).toBe("REVIEWING");
+
+      const approved = await service.approveWithdrawal(
+        created.id,
+        { adminId: "admin-1", reason: "dual-control review" },
+        "corr-19",
+      );
+      expect(approved.state).toBe("APPROVED");
+
+      // The pre-payout recheck must not re-apply the creation-time gate: a
+      // REVIEW_REQUIRED verdict there is terminal (APPROVED -> REJECTED).
+      const processing = await service.requestPayout(
+        approved.id,
+        { adminId: "admin-2" },
+        "corr-20",
+      );
+      expect(processing.state).not.toBe("REJECTED");
+      expect(["PAYOUT_PROCESSING", "PAYOUT_CONFIRMED"]).toContain(processing.state);
+      expect(ledger.releases).toEqual([]);
+    });
   });
 });

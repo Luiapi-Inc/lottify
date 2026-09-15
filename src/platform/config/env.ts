@@ -14,6 +14,19 @@ const environmentSchema = z
     JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
     REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
     QUOTE_TTL_SECONDS: z.coerce.number().int().positive().default(120),
+    /**
+     * Withdrawal dual-control threshold, in minor units (satang), carried from the
+     * G2 `system_settings.withdrawal.dual_control_threshold` value (50,000.00 THB,
+     * i.e. 5,000,000 minor) at the G2→G3 cutover decision D11. A withdrawal at or
+     * above this amount requires an Admin approval decision before payout instead
+     * of being fast-pathed to APPROVED. Default = the G2 operational value, so an
+     * unset environment preserves the pre-cutover production behaviour.
+     */
+    WITHDRAWAL_APPROVAL_THRESHOLD_MINOR: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(5_000_000),
     ADMIN_MFA_ENCRYPTION_KEY: z.string().min(32).optional(),
     ADMIN_MFA_SETUP_TTL_SECONDS: z.coerce.number().int().positive().default(600),
     ADMIN_MFA_CHALLENGE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
@@ -57,6 +70,16 @@ export function parseEnvironment(input: Record<string, string | undefined>): Env
 export function getEnvironment(): Environment {
   cached ??= parseEnvironment(process.env);
   return cached;
+}
+
+/**
+ * Withdrawal dual-control threshold in minor units, read from configuration
+ * (G2 `system_settings.withdrawal.dual_control_threshold`, D11). The parsed
+ * environment is cached by `getEnvironment()`, so a change takes effect on the next
+ * process start (or after `resetEnvironmentForTests()`).
+ */
+export function getWithdrawalApprovalThresholdMinor(): bigint {
+  return BigInt(getEnvironment().WITHDRAWAL_APPROVAL_THRESHOLD_MINOR);
 }
 
 export function getAdminMfaEncryptionKey(): string {
