@@ -23,6 +23,8 @@ export interface NavigationArea {
    * exposed" rather than silently dropped or fabricated.
    */
   serviceExposed: boolean;
+  /** True only when this checkpoint has a dedicated operator screen. */
+  uiExposed: boolean;
   /** One-line plain description for the sidebar tooltip / empty states. */
   description: string;
   /** Read capability used to decide whether the area may be opened at all. */
@@ -30,11 +32,9 @@ export interface NavigationArea {
 }
 
 /**
- * Issue 12 orders navigation by operational responsibility. Only two areas
- * currently have an authoritative Admin REST contract on this checkpoint:
- * lottery configuration (/lottery) and accounting period / finance
- * (/accounting-periods). Every remaining operational area is declared
- * explicitly as not-yet-exposed so the operator is never shown invented data.
+ * Issue 12 orders navigation by operational responsibility. API exposure and
+ * UI exposure are tracked separately so an existing contract is not reported
+ * as missing merely because its dedicated screen has not shipped yet.
  */
 export const NAVIGATION_AREAS: readonly NavigationArea[] = [
   {
@@ -43,6 +43,7 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
     href: "/",
     capabilities: [],
     serviceExposed: true,
+    uiExposed: true,
     description: "งานปฏิบัติการที่รอการดำเนินการ และจุดเข้าคิวของแต่ละพื้นที่",
   },
   {
@@ -52,6 +53,7 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
     capabilities: ["lottery-configuration.read"],
     readCapability: "lottery-configuration.read",
     serviceExposed: true,
+    uiExposed: true,
     description: "ตั้งค่าผลิตภัณฑ์หวยและประเภทเดิมพัน (เวอร์ชันแบบกำกับ)",
   },
   {
@@ -59,6 +61,7 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
     label: "การเดิมพันและความเสี่ยง",
     capabilities: [],
     serviceExposed: false,
+    uiExposed: false,
     description: "Exposure / liability ของงวด — ยังไม่มี REST contract ใน checkpoint นี้",
   },
   {
@@ -68,35 +71,44 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
     capabilities: ["accounting-period.read"],
     readCapability: "accounting-period.read",
     serviceExposed: true,
+    uiExposed: true,
     description: "Accounting Period, การอนุมัติและปิดรอบอย่างเป็นทางการ",
   },
   {
     key: "results-settlement",
     label: "ผลรางวัลและ Settlement",
-    capabilities: [],
-    serviceExposed: false,
-    description: "Result intake / settlement exceptions — ยังไม่มี REST contract",
+    serviceExposed: true,
+    uiExposed: false,
+    capabilities: ["result.read", "settlement.read"],
+    readCapability: "result.read",
+    description: "มี Result และ Settlement REST contract แล้ว แต่ยังไม่มีหน้าจอปฏิบัติการเฉพาะ",
   },
   {
     key: "members-kyc",
     label: "สมาชิกและ KYC",
-    capabilities: [],
-    serviceExposed: false,
-    description: "KYC / member support — ยังไม่มี REST contract",
+    serviceExposed: true,
+    uiExposed: false,
+    capabilities: ["member-terms.read", "member-readiness.read"],
+    readCapability: "member-terms.read",
+    description: "มี Member Terms และ Readiness REST contract แล้ว แต่ยังไม่มีหน้าจอเฉพาะ",
   },
   {
     key: "promotions",
     label: "โปรโมชั่น",
-    capabilities: [],
-    serviceExposed: false,
-    description: "Campaign / entitlement — ยังไม่มี REST contract",
+    serviceExposed: true,
+    uiExposed: false,
+    capabilities: ["promotion.read"],
+    readCapability: "promotion.read",
+    description: "มี Promotion REST contract แล้ว แต่ยังไม่มีหน้าจอปฏิบัติการเฉพาะ",
   },
   {
     key: "reconciliation",
     label: "Reconciliation",
-    capabilities: [],
-    serviceExposed: false,
-    description: "Discrepancy-first reconciliation — ยังไม่มี REST contract",
+    serviceExposed: true,
+    uiExposed: false,
+    capabilities: ["reconciliation.read"],
+    readCapability: "reconciliation.read",
+    description: "มี Reconciliation REST contract แล้ว แต่ยังไม่มีหน้าจอ discrepancy เฉพาะ",
   },
   {
     key: "approvals",
@@ -108,6 +120,7 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
       "lottery-configuration.submit",
     ],
     serviceExposed: true,
+    uiExposed: true,
     description: "รายการที่รอการอนุมัติข้ามพื้นที่ที่ระบบรองรับ",
   },
   {
@@ -117,14 +130,17 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
     capabilities: ["lottery-configuration.read", "accounting-period.read"],
     readCapability: "lottery-configuration.read",
     serviceExposed: true,
+    uiExposed: true,
     description: "การตั้งค่าสำคัญแบบ DRAFT → REVIEW → PUBLISHED",
   },
   {
     key: "audit-reports",
     label: "Audit / Reports",
-    capabilities: [],
-    serviceExposed: false,
-    description: "Audit / report read models — ยังไม่มี REST contract",
+    serviceExposed: true,
+    uiExposed: false,
+    capabilities: ["report.read", "audit.read"],
+    readCapability: "report.read",
+    description: "มี Audit และ Reporting REST contract แล้ว แต่ยังไม่มีหน้าจอเฉพาะ",
   },
 ];
 

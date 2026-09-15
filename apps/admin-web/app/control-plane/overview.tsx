@@ -342,7 +342,7 @@ export default function OverviewPage() {
             {NAVIGATION_AREAS.filter((area) => area.key !== "overview").map((area) => {
               const permitted = hasAnyCapability(admin.capabilities, area.capabilities);
               const live =
-                area.serviceExposed && (area.href || area.key === "approvals");
+                area.serviceExposed && area.uiExposed && (area.href || area.key === "approvals");
               return (
                 <AreaCard
                   key={area.key}
@@ -350,6 +350,7 @@ export default function OverviewPage() {
                   description={area.description}
                   href={area.href ?? (area.key === "approvals" ? "/" : undefined)}
                   exposed={area.serviceExposed}
+                  uiExposed={area.uiExposed}
                   permitted={permitted}
                   active={area.key === "approvals" && approvalsQueue.length > 0}
                 />
@@ -411,12 +412,14 @@ function ControlPlaneNav({
           const permitted = hasAnyCapability(admin.capabilities, area.capabilities);
           const isActive = area.key === activeKey;
           const clickable =
-            area.serviceExposed && (area.href || area.key === "approvals") && permitted;
+            area.serviceExposed && area.uiExposed && (area.href || area.key === "approvals") && permitted;
           const inner = (
             <>
               <span className="cp-nav-label-text">{area.label}</span>
               {!area.serviceExposed ? (
                 <span className="cp-nav-tag cp-nav-tag-warn">รอ API</span>
+              ) : !area.uiExposed ? (
+                <span className="cp-nav-tag cp-nav-tag-warn">รอหน้าจอ</span>
               ) : permitted ? null : (
                 <span className="cp-nav-tag">ไม่มีสิทธิ์</span>
               )}
@@ -443,7 +446,7 @@ function ControlPlaneNav({
               className={
                 isActive ? "cp-nav-item cp-nav-item-disabled cp-nav-item-active" : "cp-nav-item cp-nav-item-disabled"
               }
-              title={!area.serviceExposed ? "Service ยังไม่มี REST contract ใน checkpoint นี้" : "คุณไม่มีสิทธิ์เปิดพื้นที่นี้"}
+              title={!area.serviceExposed ? "Service ยังไม่มี REST contract ใน checkpoint นี้" : !area.uiExposed ? "มี REST contract แล้ว แต่ยังไม่มีหน้าจอปฏิบัติการ" : "คุณไม่มีสิทธิ์เปิดพื้นที่นี้"}
             >
               {inner}
             </span>
@@ -469,6 +472,7 @@ function AreaCard({
   description,
   href,
   exposed,
+  uiExposed,
   permitted,
   active,
 }: {
@@ -476,12 +480,15 @@ function AreaCard({
   description: string;
   href?: string;
   exposed: boolean;
+  uiExposed: boolean;
   permitted: boolean;
   active: boolean;
 }) {
-  const disabled = !exposed || !permitted;
+  const disabled = !exposed || !uiExposed || !permitted;
   const tag = !exposed
     ? "Service ยังไม่พร้อม"
+    : !uiExposed
+      ? "มี API แต่ยังไม่มีหน้าจอ"
     : !permitted
       ? "ไม่มีสิทธิ์"
       : active
@@ -493,7 +500,7 @@ function AreaCard({
         <h3>{label}</h3>
         <span
           className={
-            !exposed
+            !exposed || !uiExposed
               ? "cp-tag cp-tag-warn"
               : !permitted
                 ? "cp-tag"
