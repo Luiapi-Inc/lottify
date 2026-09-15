@@ -46,11 +46,27 @@ describe("Draw lifecycle", () => {
     (state) => {
       const cancelling = transitionDraw(state, "REQUEST_CANCELLATION");
       expect(cancelling).toBe("CANCELLING");
-      expect(transitionDraw(cancelling, "COMPLETE_CANCELLATION")).toBe(
-        "CANCELLED",
-      );
+      expect(
+        transitionDraw(cancelling, "COMPLETE_CANCELLATION", {
+          refundObligationsSatisfied: true,
+        }),
+      ).toBe("CANCELLED");
     },
   );
+
+  it("refuses COMPLETE_CANCELLATION until refund obligations are satisfied", () => {
+    const cancelling = transitionDraw("OPEN", "REQUEST_CANCELLATION");
+    expect(cancelling).toBe("CANCELLING");
+
+    expect(() => transitionDraw(cancelling, "COMPLETE_CANCELLATION")).toThrow(
+      /refund obligations/,
+    );
+    expect(() =>
+      transitionDraw(cancelling, "COMPLETE_CANCELLATION", {
+        refundObligationsSatisfied: false,
+      }),
+    ).toThrow(IllegalDrawTransitionError);
+  });
 
   it("rejects cancellation after result processing has started", () => {
     expect(() =>

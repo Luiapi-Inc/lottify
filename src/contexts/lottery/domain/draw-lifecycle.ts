@@ -31,6 +31,8 @@ export type DrawLifecycleCommand = (typeof DRAW_LIFECYCLE_COMMANDS)[number];
 export interface DrawLifecycleContext {
   privilegedReopen?: boolean;
   resultExists?: boolean;
+  /** True only after all of a cancellation's refund obligations are recorded as satisfied. */
+  refundObligationsSatisfied?: boolean;
 }
 
 const STANDARD_TRANSITIONS: Readonly<
@@ -118,6 +120,14 @@ export function transitionDraw(
   const nextState = STANDARD_TRANSITIONS[state]?.[command];
   if (!nextState) {
     throw new IllegalDrawTransitionError(state, command);
+  }
+
+  if (command === "COMPLETE_CANCELLATION" && context.refundObligationsSatisfied !== true) {
+    throw new IllegalDrawTransitionError(
+      state,
+      command,
+      "Draw cancellation requires all refund obligations to be recorded as satisfied",
+    );
   }
   return nextState;
 }
