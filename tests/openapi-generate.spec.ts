@@ -4,7 +4,7 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ApiModule } from "../apps/api/src/app.module";
 
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete", "options", "head"] as const;
@@ -17,12 +17,23 @@ describe("openapi spec generator (vitest boot)", () => {
   let app: INestApplication;
 
   beforeAll(async () => {
+    vi.stubEnv("APP_ENV", process.env.APP_ENV ?? "test");
+    vi.stubEnv(
+      "DATABASE_URL",
+      process.env.DATABASE_URL ?? "postgresql://lottify:lottify@localhost:5432/lottify?schema=public",
+    );
+    vi.stubEnv("REDIS_URL", process.env.REDIS_URL ?? "redis://localhost:6379");
+    vi.stubEnv(
+      "JWT_ACCESS_SECRET",
+      process.env.JWT_ACCESS_SECRET ?? "test-jwt-access-secret-at-least-32-characters",
+    );
     app = await NestFactory.create(ApiModule, { logger: false });
     await app.init();
   });
 
   afterAll(async () => {
     await app.close();
+    vi.unstubAllEnvs();
   });
 
   it("writes apps/api/openapi/openapi.json", async () => {
