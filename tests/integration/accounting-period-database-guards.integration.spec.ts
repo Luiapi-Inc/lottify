@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
@@ -26,12 +26,16 @@ const OPEN_PERIOD_END = new Date("2299-01-04T17:00:00.000Z");
 class RollbackFixture extends Error {}
 
 describe.runIf(runIntegration)("Accounting Period database guards", () => {
-  const prisma = new PrismaService();
+  let prisma: PrismaService;
   const closedPeriodId = randomUUID();
   const openPeriodId = randomUUID();
 
+  beforeAll(() => {
+    prisma = new PrismaService();
+  });
+
   afterAll(async () => {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   });
 
   function periodFixture(

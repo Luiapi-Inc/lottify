@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { loadExpectedFunctions } from "./migration-function-parser";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
@@ -35,7 +35,11 @@ function normalizeWhitespace(s: string): string {
 }
 
 describe.runIf(runIntegration)("Migration-ledger database drift", () => {
-  const prisma = new PrismaService();
+  let prisma: PrismaService;
+
+  beforeAll(() => {
+    prisma = new PrismaService();
+  });
 
   it("every function defined by a committed migration matches its pg_proc body", async () => {
     const expected = loadExpectedFunctions("prisma/migrations");
