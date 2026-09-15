@@ -20,7 +20,7 @@ Run when the main router classifies the change as high risk, including changes t
 3. **Plan and ownership**
    - Establish `Plan -> Intended Result -> Current State -> Gap -> Implementation`.
    - Keep WIP=1 on each unstable shared financial/schema/migration/API/event/transaction boundary.
-   - Use `lottify-multi-agent` whenever multiple agents are delegated. Parallel Writers are limited to proven-disjoint work with stable prerequisites; unstable shared critical boundaries remain serialized under one Writer while read-only Architecture/Test-Evidence Guards may still participate.
+   - Use `lottify` whenever multiple agents are delegated. Parallel Writers are limited to proven-disjoint work with stable prerequisites; unstable shared critical boundaries remain serialized under one Writer while read-only Architecture/Test-Evidence Guards may still participate.
 4. **Implementation**
    - Use `tdd` for deterministic invariant/regression seams.
    - Preserve authoritative once-only effects, durable orchestration state, compensation/reconciliation paths, and approved transaction ordering.

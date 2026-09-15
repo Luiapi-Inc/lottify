@@ -150,9 +150,10 @@ The core operating rules are:
 
 A delegated work package must identify its source requirement, immutable base commit, prerequisites, owner, allowed write scope, forbidden/shared boundaries, expected result, required evidence, completion rule, and escalation rule.
 
+
 ### Serena + Codex
 
-The Hermes checkout is configured with the Serena project `lottify` and the `lottify-multi-agent` mode. Codex connects to Serena over stdio MCP for project-aware semantic navigation and editing; Codex multi-agent runtime is responsible for spawning and coordinating routed sub-agents.
+The Hermes checkout is configured with the Serena project `lottify` and the `lottify` orchestration skill. Codex connects to Serena over stdio MCP for project-aware semantic navigation and editing; Codex multi-agent runtime is responsible for spawning and coordinating routed sub-agents.
 
 Useful diagnostics:
 

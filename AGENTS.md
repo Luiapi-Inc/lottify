@@ -15,7 +15,7 @@ Do not replace an existing plan, contract, invariant, or ownership decision with
 
 ## Multi-agent rules
 
-- Use the `lottify-multi-agent` skill when coordinating delegated/parallel work.
+- Use the `lottify` skill when coordinating delegated/parallel work.
 - Follow `docs/agents/multi-agent-workflow.md` for roles, delegation packets, worktree isolation, merge queue, and completion gates.
 - There is no project-wide WIP=1. WIP=1 applies per unstable shared critical boundary; independent work may run in parallel when dependencies and write scopes are proven disjoint.
 - One Writer owns each active shared financial/schema/transaction/migration/API/event boundary at a time.

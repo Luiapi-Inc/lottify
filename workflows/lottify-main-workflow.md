@@ -76,7 +76,7 @@ Do not invoke every skill on every task. Select only skills justified by the aff
 
 | Condition | Skill |
 | --- | --- |
-| Work is delegated across multiple agents, whether serialized or parallel | `lottify-multi-agent` |
+| Work is delegated across multiple agents, whether serialized or parallel | `lottify` |
 | Deterministic bug/repro investigation | `diagnosing-bugs` |
 | Behavior change needs test-first regression or acceptance coverage | `tdd` |
 | GitHub Actions / CI failure | `gh-fix-ci` |
@@ -106,7 +106,7 @@ Route to the critical workflow when the change can alter any of these approved b
 
 ## Multi-agent routing
 
-Use `lottify-multi-agent` whenever the Lead coordinates delegated work across multiple agents. Delegated work may be serialized or parallel.
+Use `lottify` whenever the Lead coordinates delegated work across multiple agents. Delegated work may be serialized or parallel.
 
 Parallel Writers are allowed only when all of the following are true:
 

@@ -26,7 +26,7 @@ If the requested behavior is not approved or conflicts with the active source of
    - Use `security-best-practices` when the implementation is security-sensitive.
    - Escalate to the critical-change workflow if the high-risk classifier matches.
 4. **Delegation**
-   - Use `lottify-multi-agent` whenever multiple agents are delegated.
+   - Use `lottify` whenever multiple agents are delegated.
    - Parallel Writers require stable prerequisites and proven-disjoint write/ownership boundaries. When an unstable shared boundary is involved, keep multi-agent coordination serialized with one Writer owning that boundary at a time.
 5. **Implementation**
    - Use `tdd` for behavior where a meaningful test-first seam exists.
