@@ -387,15 +387,19 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
     });
     expect(first.refund.refunded).toBe(1);
 
-    // Replay: the Order is already CANCELLED under its durable reversal, so the
-    // run reports ALREADY_REFUNDED and converges to the same single reversal.
+    // Replay: the Order is already CANCELLED under its durable reversal, so it is
+    // no longer a refundable candidate — the run considers 0 orders, refunds none,
+    // and converges to the same single reversal (idempotency, not a second refund).
     const second = await orchestrator.completeDrawCancellation({
       drawId,
       expectedVersion: 5,
       actor: actor(),
     });
-    expect(second.refund.alreadyRefunded).toBe(1);
+    expect(second.refund.considered).toBe(0);
     expect(second.refund.refunded).toBe(0);
+    expect(second.refund.alreadyRefunded).toBe(0);
+    expect(second.refund.outstanding).toBe(0);
+    expect(second.refund.obligationsSatisfied).toBe(true);
 
     const refunds = await prisma.financialTransaction.findMany({
       where: { operationType: "BET_STAKE_REFUND" },
