@@ -65,6 +65,12 @@ interface TransitionCall {
 /** A LotteryDrawService stand-in recording the transition it was asked for. */
 class FakeDrawService {
   readonly transitions: TransitionCall[] = [];
+  // The Draw's persisted state as getDraw would report it (default: still
+  // CANCELLING, so the orchestrator performs the completion transition).
+  state: string = "CANCELLING";
+  async getDraw(id: string) {
+    return { id, state: this.state, version: 1 };
+  }
   async transition(input: {
     id: string;
     command: string;
@@ -187,6 +193,33 @@ describe("Draw-cancellation refund orchestration", () => {
     // Converges to exactly one transition to CANCELLED.
     expect(draws.transitions).toHaveLength(1);
     expect(draws.transitions[0]!.command).toBe("COMPLETE_CANCELLATION");
+  });
+
+  it("replaying after the Draw is already CANCELLED converges without re-transitioning", async () => {
+    const { refunds, draws, orchestrator } = harness();
+    // The Draw has already reached its terminal CANCELLED state (the first run
+    // completed). The refund run is idempotent and reports every Order
+    // ALREADY_REFUNDED; the orchestrator must NOT re-attempt the terminal
+    // transition, which would throw "Draw state CANCELLED is terminal".
+    draws.state = "CANCELLED";
+    refunds.refundResult = refundResult({
+      considered: 1,
+      refunded: [],
+      alreadyRefunded: [entry("order-a", "ALREADY_REFUNDED", "tx-order-a")],
+      refundedStakeMinor: 0n,
+      obligationsSatisfied: true,
+    });
+
+    const result = await orchestrator.completeDrawCancellation({
+      drawId: DRAW,
+      expectedVersion: 8,
+    });
+
+    expect(result.draw.state).toBe("CANCELLED");
+    expect(result.refund.alreadyRefunded).toBe(1);
+    expect(result.refund.refunded).toBe(0);
+    // The terminal transition was never re-attempted.
+    expect(draws.transitions).toHaveLength(0);
   });
 
   it("rejects a blank Draw id before touching the refund seam", async () => {

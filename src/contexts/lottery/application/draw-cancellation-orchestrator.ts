@@ -104,13 +104,22 @@ export class DrawCancellationOrchestrator {
       );
     }
 
-    const detail = await this.draws.transition({
-      id: drawId,
-      command: "COMPLETE_CANCELLATION",
-      expectedVersion: input.expectedVersion,
-      context: { privilegedReopen: true, refundObligationsSatisfied: true },
-      actor: input.actor,
-    });
+    // Read the Draw's current state so a replay converges instead of re-throwing:
+    // once a cancellation has already completed (state CANCELLED) the gated
+    // transition is terminal and must not be re-attempted. The refund run above
+    // is idempotent and already reported ALREADY_REFUNDED for every Order, so the
+    // Draw is refund-clean and the replay is a safe no-op on the Draw lifecycle.
+    const current = await this.draws.getDraw(drawId);
+    const detail =
+      current.state === "CANCELLED"
+        ? current
+        : await this.draws.transition({
+            id: drawId,
+            command: "COMPLETE_CANCELLATION",
+            expectedVersion: input.expectedVersion,
+            context: { privilegedReopen: true, refundObligationsSatisfied: true },
+            actor: input.actor,
+          });
 
     return {
       draw: { id: detail.id, state: detail.state, version: detail.version },
