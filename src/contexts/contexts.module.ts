@@ -14,6 +14,7 @@ import { PayoutDestinationService } from "./payments/application/payout-destinat
 import { DEPOSIT_LEDGER_PORT } from "./payments/application/deposit-ledger.port";
 import { BettingQuoteService } from "./betting/application/betting-quote.service";
 import { BettingOrderService } from "./betting/application/betting-order.service";
+import { DrawStakeRefundService } from "./betting/application/draw-stake-refund.service";
 import { BET_ORDER_WALLET_PORT } from "./betting/application/betting-order-wallet.port";
 import { BETTING_ELIGIBILITY_PORT } from "./betting/application/betting-eligibility.port";
 import { SettlementService } from "./result-settlement/application/settlement.service";
@@ -102,6 +103,9 @@ import { CapabilityRestrictionAdminService } from "./member/application/capabili
     },
     BettingQuoteService,
     BettingOrderService,
+    // The Draw-cancellation refund operation is composed here, not in
+    // BettingModule, so the betting→wallet-ledger port it needs is visible.
+    DrawStakeRefundService,
     // Result & Settlement orchestration lives here (not in ResultSettlementModule)
     // so the settlement -> lottery draw, wallet-ledger and betting-orders port
     // adapters are all visible without one context module importing another.
@@ -193,6 +197,7 @@ import { CapabilityRestrictionAdminService } from "./member/application/capabili
     AdminApprovalModule,
     BettingQuoteService,
     BettingOrderService,
+    DrawStakeRefundService,
     SettlementService,
   ],
 })
