@@ -75,6 +75,15 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
     description: "Accounting Period, การอนุมัติและปิดรอบอย่างเป็นทางการ",
   },
   {
+    key: "withdrawals",
+    label: "Withdrawals",
+    capabilities: ["withdrawal.read"],
+    readCapability: "withdrawal.read",
+    serviceExposed: true,
+    uiExposed: false,
+    description: "มี Withdrawal review / payout / reconciliation REST contract แล้ว แต่ยังไม่มีหน้าจอเฉพาะ",
+  },
+  {
     key: "results-settlement",
     label: "ผลรางวัลและ Settlement",
     serviceExposed: true,

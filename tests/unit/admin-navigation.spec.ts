@@ -6,6 +6,7 @@ describe("Admin navigation capability map", () => {
     const results = NAVIGATION_AREAS.find((area) => area.key === "results-settlement");
     const reconciliation = NAVIGATION_AREAS.find((area) => area.key === "reconciliation");
     const promotions = NAVIGATION_AREAS.find((area) => area.key === "promotions");
+    const withdrawals = NAVIGATION_AREAS.find((area) => area.key === "withdrawals");
 
     expect(results).toMatchObject({
       serviceExposed: true,
@@ -21,6 +22,11 @@ describe("Admin navigation capability map", () => {
       serviceExposed: true,
       uiExposed: false,
       readCapability: "promotion.read",
+    });
+    expect(withdrawals).toMatchObject({
+      serviceExposed: true,
+      uiExposed: false,
+      readCapability: "withdrawal.read",
     });
   });
 
