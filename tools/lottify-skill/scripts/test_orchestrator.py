@@ -161,7 +161,7 @@ class ManifestGraphTest(unittest.TestCase):
                 source.write_text('approved source', encoding='utf-8')
             packages = []
             for identity, dependencies in (('core', []), ('consumer', ['core'])):
-                manifest = generate('wallet API', [], repo, ['domain-ticket=domain.md'], 'checkpoint.md', [f'apps/{identity}/**'])
+                manifest = generate('wallet API', [], repo, ['domain-ticket=domain.md'], 'checkpoint.md', [f'apps/{identity}/**'], dependencies=dependencies)
                 manifest['source_alignment'] = {'confirmed_by_lead': True, 'decision_ids': ['Ticket 04'], 'adr_disposition': 'not-applicable'}
                 manifest['ownership']['writer'] = 'backend-agent'
                 (repo / f'{identity}.json').write_text(json.dumps(manifest), encoding='utf-8')

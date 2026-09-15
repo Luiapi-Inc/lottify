@@ -69,6 +69,18 @@ def route(task, registry):
     return {key: entry[key] for key in ('id', 'owner', 'reviewers', 'exclusive_boundary', 'evidence')}
 
 
+def routes(task, registry):
+    if not isinstance(task, str) or not task.strip():
+        raise ValueError('task must be a non-empty string')
+    validate_registry(registry)
+    lowered = task.lower()
+    matches = [entry for entry in registry['capabilities'] if any(signal.lower() in lowered for signal in entry['signals'])]
+    return [
+        {key: entry[key] for key in ('id', 'owner', 'reviewers', 'exclusive_boundary', 'evidence')}
+        for entry in matches
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('task')

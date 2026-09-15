@@ -9,6 +9,7 @@ python3 tools/lottify-skill/scripts/manifest_generator.py \
   --task "add withdrawal approval" \
   --checkpoint docs/implementation/member-withdrawal-status.md \
   --source domain-ticket=.scratch/lottify-v1-specification/issues/04-financial-ledger-and-balance-invariants.md \
+  --dependency foundation \
   --allowed-scope 'apps/api/src/withdrawal/**' \
   --format yaml
 ```
@@ -21,6 +22,8 @@ python3 tools/lottify-skill/scripts/manifest_generator.py \
   --diff \
   --format json
 ```
+
+Use repeated `--dependency` values to bind the manifest to the package prerequisites used by the orchestration graph.
 
 Output:
 

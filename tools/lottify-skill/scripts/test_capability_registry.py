@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from capability_registry import load_registry, route, validate_registry
+from capability_registry import load_registry, route, routes, validate_registry
 
 
 class CapabilityRegistryTest(unittest.TestCase):
@@ -79,6 +79,22 @@ capabilities:
         registry = load_registry(path)
         self.assertEqual(route('prisma schema review', registry)['id'], 'schema')
         self.assertEqual(route('database migration review', registry)['id'], 'migration')
+
+    def test_routes_multiple_boundaries_without_hiding_ownership(self):
+        registry = {
+            'version': 1,
+            'capabilities': [
+                {
+                    'id': 'financial', 'owner': 'financial-integrity-agent', 'reviewers': ['quality-gate-agent'],
+                    'exclusive_boundary': True, 'signals': ['ledger'], 'evidence': ['ledger evidence'],
+                },
+                {
+                    'id': 'api', 'owner': 'backend-agent', 'reviewers': ['api-contract-agent'],
+                    'exclusive_boundary': True, 'signals': ['api'], 'evidence': ['API evidence'],
+                },
+            ],
+        }
+        self.assertEqual([item['id'] for item in routes('ledger API change', registry)], ['financial', 'api'])
 
 
 if __name__ == '__main__':

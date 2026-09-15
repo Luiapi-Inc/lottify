@@ -10,6 +10,8 @@ import subprocess
 
 import yaml
 
+from capability_registry import load_registry as load_capability_registry
+from capability_registry import routes as route_capabilities
 from skill_resolver import load_registry, resolve
 
 
@@ -104,7 +106,7 @@ def source_record(repo, kind, path):
     return {'kind': kind, 'path': resolved.relative_to(repo.resolve()).as_posix(), 'sha256': hashlib.sha256(resolved.read_bytes()).hexdigest()}
 
 
-def generate(task, files, repo=None, sources=(), checkpoint=None, allowed_scope=()):
+def generate(task, files, repo=None, sources=(), checkpoint=None, allowed_scope=(), dependencies=()):
     repo = Path.cwd() if repo is None else Path(repo)
     agents = ['lead-agent']
     subskills = []
@@ -197,10 +199,14 @@ def generate(task, files, repo=None, sources=(), checkpoint=None, allowed_scope=
             **resolve('lottify', load_registry(SKILL_REGISTRY)),
         }
     ]
+    capabilities = route_capabilities(
+        task + ' ' + ' '.join(files),
+        load_capability_registry(Path(__file__).resolve().parent.parent / 'skills' / 'capability-registry.yaml'),
+    )
     return {
         'contract': {'name': 'lottify-agent-execution-manifest', 'version': CONTRACT_VERSION},
         'task': {'objective': task, 'changed_files': list(files), 'source_of_truth': source_records},
-        'dependencies': [],
+        'dependencies': list(dependencies),
         'source_alignment': {'confirmed_by_lead': False, 'decision_ids': [], 'adr_disposition': None},
         'risk_assessment': {'suggested_level': risk, 'shared_boundaries': shared_boundaries, 'parallelism': 'Lead must prove stable dependencies and disjoint ownership' if shared_boundaries else 'Lead decides from actual ownership', 'production_release': production_release},
         'routing': {
@@ -210,6 +216,8 @@ def generate(task, files, repo=None, sources=(), checkpoint=None, allowed_scope=
             'matched_signals': matched_signals,
         },
         'skills': {'required': ['lottify'], 'resolved': resolved_skills},
+        'capabilities': capabilities,
+        'records': {'decisions': [], 'handoffs': [], 'checkpoints': [], 'evidence_refs': []},
         'ownership': {'writer_candidates': writer_candidates, 'writer': None, 'allowed_scope': list(allowed_scope), 'forbidden_scope': []},
         'evidence': {'required': evidence, 'records': []},
         'reviews': {'required': reviewers, 'records': []},
@@ -231,13 +239,14 @@ if __name__ == '__main__':
     parser.add_argument('--source', action='append', default=[], help='KIND=REPO_RELATIVE_PATH; repeat for domain ticket and ADR')
     parser.add_argument('--checkpoint', help='Active implementation checkpoint path')
     parser.add_argument('--allowed-scope', action='append', default=[], help='Lead-approved path or glob; repeat')
+    parser.add_argument('--dependency', action='append', default=[], help='Package dependency; repeat')
     parser.add_argument('--format', choices=('yaml', 'json'), default='yaml')
     parser.add_argument('--json', action='store_true', help='Compatibility alias for --format json')
     parser.add_argument('--output')
     args = parser.parse_args()
     try:
         files = sorted(set(args.file) | (set(git_files(args.repo)) if args.diff else set()))
-        output = generate(args.task, files, args.repo, args.source, args.checkpoint, args.allowed_scope)
+        output = generate(args.task, files, args.repo, args.source, args.checkpoint, args.allowed_scope, args.dependency)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.error(str(error))
     selected_format = 'json' if args.json else args.format

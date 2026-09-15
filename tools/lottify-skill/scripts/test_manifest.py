@@ -1,4 +1,5 @@
 import tempfile
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -26,6 +27,15 @@ class ManifestTest(unittest.TestCase):
             source = self.repo / path
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text('current', encoding='utf-8')
+        subprocess.run(['git', 'init', '-q', str(self.repo)], check=True)
+        subprocess.run(['git', '-C', str(self.repo), 'add', '-A'], check=True)
+        subprocess.run([
+            'git', '-C', str(self.repo), '-c', 'user.name=Lottify Tests',
+            '-c', 'user.email=tests@lottify.local', 'commit', '-qm', 'fixture',
+        ], check=True)
+        self.candidate = subprocess.check_output(
+            ['git', '-C', str(self.repo), 'rev-parse', 'HEAD'], text=True,
+        ).strip()
 
     def tearDown(self):
         self.directory.cleanup()
@@ -53,6 +63,48 @@ class ManifestTest(unittest.TestCase):
         })
         self.assertEqual(manifest['skills']['resolved'][0]['canonical'], 'lottify')
         self.assertEqual(manifest['execution']['state'], 'SOURCE_ALIGNMENT')
+        self.assertIn('records', manifest)
+        self.assertIn('capabilities', manifest)
+
+    def test_checker_enforces_schema_and_existing_candidate(self):
+        manifest = self.manifest()
+        manifest.pop('execution')
+        self.assertTrue(any('manifest schema violation' in problem for problem in check(manifest, self.repo, 'delegation')))
+
+        manifest = self.manifest(['apps/api/src/withdrawal/handler.ts'])
+        manifest['source_alignment'] = {'confirmed_by_lead': True, 'decision_ids': ['Ticket 04'], 'adr_disposition': 'not-applicable'}
+        manifest['ownership']['writer'] = 'backend-agent'
+        manifest['acceptance'] = {
+            'status': 'verified', 'candidate_sha': 'b' * 40,
+            'level': 'milestone-acceptance', 'gaps': [],
+        }
+        problems = check(manifest, self.repo, 'acceptance')
+        self.assertTrue(any('existing Git commit' in problem for problem in problems))
+
+    def test_production_acceptance_requires_production_go(self):
+        release_source = self.repo / '.scratch/lottify-v1-specification/issues/13-non-functional-targets-and-release-gates.md'
+        release_source.parent.mkdir(parents=True, exist_ok=True)
+        release_source.write_text('approved', encoding='utf-8')
+        manifest = generate(
+            'production deploy release candidate', [], self.repo,
+            [f'domain-ticket={self.domain}'], self.checkpoint,
+            ['deploy/**'],
+        )
+        manifest['source_alignment'] = {'confirmed_by_lead': True, 'decision_ids': ['Ticket 13', 'Ticket 16'], 'adr_disposition': 'not-applicable'}
+        manifest['ownership']['writer'] = 'qa-agent'
+        manifest['acceptance'] = {
+            'status': 'verified', 'candidate_sha': self.candidate,
+            'level': 'milestone-acceptance', 'gaps': [],
+        }
+        problems = check(manifest, self.repo, 'acceptance')
+        self.assertTrue(any('production-go' in problem for problem in problems))
+
+    def test_checker_rejects_stale_capability_routing(self):
+        manifest = self.manifest()
+        manifest['source_alignment'] = {'confirmed_by_lead': True, 'decision_ids': ['Ticket 04'], 'adr_disposition': 'not-applicable'}
+        manifest['ownership']['writer'] = 'backend-agent'
+        manifest['capabilities'] = []
+        self.assertTrue(any('capability routing' in problem for problem in check(manifest, self.repo, 'delegation')))
 
     def test_delegation_rejects_stale_skill_resolution(self):
         manifest = self.manifest()
@@ -82,8 +134,8 @@ class ManifestTest(unittest.TestCase):
         manifest = self.manifest(['apps/api/src/withdrawal/handler.ts'])
         manifest['source_alignment'] = {'confirmed_by_lead': True, 'decision_ids': ['Ticket 04'], 'adr_disposition': 'not-applicable'}
         manifest['ownership']['writer'] = 'backend-agent'
-        candidate = 'a' * 40
-        manifest['acceptance'] = {'status': 'verified', 'candidate_sha': candidate, 'gaps': []}
+        candidate = self.candidate
+        manifest['acceptance'] = {'status': 'verified', 'candidate_sha': candidate, 'level': 'milestone-acceptance', 'gaps': []}
         manifest['reviews']['records'] = [
             {'agent': agent, 'result': 'passed', 'candidate_sha': candidate, 'report': 'review artifact'}
             for agent in manifest['reviews']['required']
@@ -110,8 +162,8 @@ class ManifestTest(unittest.TestCase):
         manifest = self.manifest(['apps/api/src/withdrawal/handler.ts'])
         manifest['source_alignment'] = {'confirmed_by_lead': True, 'decision_ids': ['Ticket 04'], 'adr_disposition': 'not-applicable'}
         manifest['ownership']['writer'] = 'backend-agent'
-        candidate = 'a' * 40
-        manifest['acceptance'] = {'status': 'verified', 'candidate_sha': candidate, 'gaps': []}
+        candidate = self.candidate
+        manifest['acceptance'] = {'status': 'verified', 'candidate_sha': candidate, 'level': 'milestone-acceptance', 'gaps': []}
         manifest['reviews']['records'] = [
             {'agent': agent, 'result': 'passed', 'candidate_sha': 'b' * 40, 'report': 'stale review artifact'}
             for agent in manifest['reviews']['required']
@@ -131,8 +183,8 @@ class ManifestTest(unittest.TestCase):
         manifest = self.manifest(['apps/api/src/withdrawal/handler.ts'])
         manifest['source_alignment'] = {'confirmed_by_lead': True, 'decision_ids': ['Ticket 04'], 'adr_disposition': 'not-applicable'}
         manifest['ownership']['writer'] = 'backend-agent'
-        candidate = 'a' * 40
-        manifest['acceptance'] = {'status': 'verified', 'candidate_sha': candidate, 'gaps': []}
+        candidate = self.candidate
+        manifest['acceptance'] = {'status': 'verified', 'candidate_sha': candidate, 'level': 'milestone-acceptance', 'gaps': []}
         manifest['reviews']['records'] = [
             {'agent': agent, 'result': 'passed', 'candidate_sha': candidate, 'report': 'review artifact'}
             for agent in manifest['reviews']['required']

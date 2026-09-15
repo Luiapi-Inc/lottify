@@ -7,8 +7,15 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 
 import yaml
+try:
+    import jsonschema
+except ImportError:  # pragma: no cover - exercised only on incomplete hosts
+    jsonschema = None
+from capability_registry import load_registry as load_capability_registry
+from capability_registry import routes as route_capabilities
 from manifest_generator import (
     CONTRACT_VERSION,
     DEFAULT_SOURCES,
@@ -27,14 +34,44 @@ EVIDENCE_FIELDS = {
     'build_id', 'candidate_sha', 'result', 'executed_at', 'artifact',
     'implementation', 'actual_result',
 }
+SCHEMA_PATH = Path(__file__).resolve().parent.parent / 'schemas' / 'manifest.schema.json'
 
 
 def immutable_sha(value):
     return isinstance(value, str) and bool(re.fullmatch(r'(?:[a-f0-9]{40}|[a-f0-9]{64})', value))
 
 
-def check(manifest, repo, stage):
+def schema_problems(manifest):
+    if jsonschema is None:
+        return ['manifest schema validator is unavailable']
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as error:
+        return [f'manifest schema cannot be loaded: {error}']
+    try:
+        validator = jsonschema.Draft202012Validator(schema)
+    except jsonschema.exceptions.SchemaError as error:
+        return [f'manifest schema is invalid: {error.message}']
     problems = []
+    for error in sorted(validator.iter_errors(manifest), key=lambda item: tuple(str(part) for part in item.path)):
+        location = '.'.join(str(part) for part in error.path) or '<root>'
+        problems.append(f'manifest schema violation at {location}: {error.message}')
+    return problems
+
+
+def git_commit_exists(repo, candidate_sha):
+    try:
+        result = subprocess.run(
+            ['git', '-C', str(repo), 'cat-file', '-e', f'{candidate_sha}^{{commit}}'],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def check(manifest, repo, stage):
+    problems = schema_problems(manifest)
     contract = manifest.get('contract', {})
     if contract.get('name') != 'lottify-agent-execution-manifest' or contract.get('version') != CONTRACT_VERSION:
         problems.append(f'manifest contract must be lottify-agent-execution-manifest v{CONTRACT_VERSION}')
@@ -76,6 +113,19 @@ def check(manifest, repo, stage):
                 problems.append(f'skill resolution missing or stale: {requested}')
     except ValueError as error:
         problems.append(f'skill registry invalid: {error}')
+    try:
+        capability_registry = load_capability_registry(
+            Path(__file__).resolve().parent.parent / 'skills' / 'capability-registry.yaml'
+        )
+        expected_capabilities = route_capabilities(
+            task.get('objective', '') + ' ' + ' '.join(task.get('changed_files', [])),
+            capability_registry,
+        )
+        actual_capabilities = manifest.get('capabilities', [])
+        if actual_capabilities != expected_capabilities:
+            problems.append('capability routing is missing, stale, or out of order')
+    except ValueError as error:
+        problems.append(f'capability registry invalid: {error}')
     if not manifest.get('source_alignment', {}).get('confirmed_by_lead'):
         problems.append('Lead has not confirmed source alignment')
     if not manifest.get('source_alignment', {}).get('decision_ids'):
@@ -119,6 +169,10 @@ def check(manifest, repo, stage):
         candidate_sha = acceptance.get('candidate_sha')
         if not immutable_sha(candidate_sha):
             problems.append('acceptance candidate_sha must be an immutable Git SHA')
+        elif not git_commit_exists(repo, candidate_sha):
+            problems.append('acceptance candidate_sha is not an existing Git commit')
+        if production_release and acceptance.get('level') != 'production-go':
+            problems.append('production release acceptance level must be production-go')
         records = manifest.get('evidence', {}).get('records', [])
         if not records:
             problems.append('no evidence records')

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -7,9 +8,6 @@ from execution_plan import build_plan
 from manifest_generator import DEFAULT_SOURCES, generate
 from orchestrator import schedule
 from source_alignment_check import check
-
-
-CANDIDATE = 'b' * 40
 
 
 def runtime():
@@ -37,6 +35,15 @@ class ContractPipelineTest(unittest.TestCase):
         release = self.repo / '.scratch/lottify-v1-specification/issues/13-non-functional-targets-and-release-gates.md'
         release.parent.mkdir(parents=True, exist_ok=True)
         release.write_text('approved release source', encoding='utf-8')
+        subprocess.run(['git', 'init', '-q', str(self.repo)], check=True)
+        subprocess.run(['git', '-C', str(self.repo), 'add', '-A'], check=True)
+        subprocess.run([
+            'git', '-C', str(self.repo), '-c', 'user.name=Lottify Tests',
+            '-c', 'user.email=tests@lottify.local', 'commit', '-qm', 'fixture',
+        ], check=True)
+        self.candidate = subprocess.check_output(
+            ['git', '-C', str(self.repo), 'rev-parse', 'HEAD'], text=True,
+        ).strip()
 
     def production_manifest(self):
         manifest = generate(
@@ -75,21 +82,21 @@ class ContractPipelineTest(unittest.TestCase):
 
         acceptance = json.loads(json.dumps(manifest))
         acceptance['acceptance'] = {
-            'status': 'verified', 'candidate_sha': CANDIDATE,
+            'status': 'verified', 'candidate_sha': self.candidate,
             'level': 'production-go', 'gaps': [],
         }
         acceptance['evidence']['records'] = [{
             'requirement_id': 'Ticket 16', 'acceptance_id': 'AC-production',
             'scenario_id': 'production-release', 'level': 'integration',
             'environment': 'CI', 'build_id': 'build-1',
-            'candidate_sha': CANDIDATE, 'result': 'passed',
+            'candidate_sha': self.candidate, 'result': 'passed',
             'executed_at': '2026-09-15T00:00:00Z', 'artifact': 'ci://run/1',
             'implementation': ['deploy/release-plan.yaml'],
             'actual_result': 'all mandatory release evidence passed',
             'covers': list(acceptance['evidence']['required']),
         }]
         acceptance['reviews']['records'] = [
-            {'agent': agent, 'result': 'passed', 'candidate_sha': CANDIDATE, 'report': f'report://{agent}'}
+            {'agent': agent, 'result': 'passed', 'candidate_sha': self.candidate, 'report': f'report://{agent}'}
             for agent in acceptance['reviews']['required']
         ]
         self.assertEqual(check(acceptance, self.repo, 'acceptance'), [])

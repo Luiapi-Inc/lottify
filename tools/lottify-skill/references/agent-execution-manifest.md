@@ -20,6 +20,14 @@ task:
 
 dependencies: []
 
+capabilities: []
+
+records:
+  decisions: []
+  handoffs: []
+  checkpoints: []
+  evidence_refs: []
+
 source_alignment:
   confirmed_by_lead: false
   decision_ids: []

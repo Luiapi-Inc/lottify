@@ -19,7 +19,7 @@ def load_mapping(path):
 
 
 def contract_digest(manifest):
-    contract = {key: manifest.get(key) for key in ('contract', 'task', 'source_alignment', 'risk_assessment', 'routing', 'skills', 'ownership', 'execution')}
+    contract = {key: manifest.get(key) for key in ('contract', 'task', 'dependencies', 'source_alignment', 'risk_assessment', 'routing', 'skills', 'capabilities', 'ownership', 'records', 'execution')}
     contract['evidence_required'] = manifest.get('evidence', {}).get('required')
     contract['reviews_required'] = manifest.get('reviews', {}).get('required')
     return hashlib.sha256(json.dumps(contract, sort_keys=True).encode('utf-8')).hexdigest()
@@ -67,6 +67,9 @@ def build_plan(spec, directory):
         problems = check(manifest, repo, 'delegation')
         if problems:
             raise ValueError(f'{identity}: ' + '; '.join(problems))
+        manifest_dependencies = string_list(manifest.get('dependencies'), f'{identity}.manifest_dependencies')
+        if manifest_dependencies != dependencies:
+            raise ValueError(f'{identity}: manifest dependencies do not match package dependencies')
         plan['bindings'].append({'package': identity, 'repo': str(repo), 'manifest': str(path), 'contract_sha256': contract_digest(manifest)})
         writer = manifest['ownership']['writer']
         reviewers = string_list(manifest.get('reviews', {}).get('required'), f'{identity}.reviewers')
