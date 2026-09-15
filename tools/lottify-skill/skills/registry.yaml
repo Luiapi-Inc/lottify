@@ -13,11 +13,11 @@ skills:
       - manifest-generator
     status: installed
     path: manifest-generator.md
-  - canonical: project-agent
+  - canonical: luiapi-agent
     version: 1.0.0
-    aliases: [project-agent]
+    aliases: [luiapi-agent, project-agent]
     status: installed
-    path: ../../project-agent/SKILL.md
+    path: ../../luiapi-agent/SKILL.md
   - canonical: architecture
     version: 0.0.0
     aliases: [architecture]

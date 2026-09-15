@@ -1,9 +1,9 @@
 ---
-name: project-agent
+name: luiapi-agent
 description: Reusable evidence-gated project delivery core for source-aligned next-action decisions, capability routing, runtime skill selection, orchestration, and acceptance handoff.
 ---
 
-# Project Agent
+# Luiapi Agent
 
 Use this core through a project profile. The core must not invent product requirements, replace approved plans, or make project-specific domain decisions.
 
@@ -29,7 +29,7 @@ Do not invent work when no executable action exists. Return the actual wait/bloc
 
 Install the canonical core/profile into local agent runtimes with `scripts/install_runtime.py`. Supported targets are `hermes`, `codex`, and `all`. Run `--dry-run` first when an existing runtime already has a project skill; use `--migrate-existing` only when replacing that existing copy is intended. Migrated copies are backed up outside the runtime skill root.
 
-The installer also bridges shared engineering/Matt skills from `~/.agents/skills` only when the target runtime does not already provide that identifier. It writes `$HOME/.local/share/project-agent/<runtime>-inventory.json`; use that inventory when routing next actions so unavailable host skills are reported instead of selected.
+The installer also bridges shared engineering/Matt skills from `~/.agents/skills` only when the target runtime does not already provide that identifier. It writes `$HOME/.local/share/luiapi-agent/<runtime>-inventory.json`; use that inventory when routing next actions so unavailable host skills are reported instead of selected.
 
 `ask-matt` may remain installed for explicit use, but next-action decisions must not auto-route through it; the project Lead derives the recommendation from project source/state directly.
 

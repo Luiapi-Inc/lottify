@@ -109,9 +109,9 @@ def check(manifest, repo, stage):
         task.get('changed_files', []),
         manifest.get('routing', {}).get('agents', []),
     )
-    # Legacy manifest-v2 records created before project-agent integration remain readable.
-    # New manifests opt into deterministic runtime-skill validation by requiring project-agent.
-    if 'project-agent' in required_skills and required_skills != expected_skills:
+    # Manifest-v2 records from before reusable-core integration remain readable.
+    # New manifests opt into deterministic runtime-skill validation with luiapi-agent.
+    if 'luiapi-agent' in required_skills and required_skills != expected_skills:
         problems.append('runtime skill routing is missing, stale, or out of order')
     try:
         registry = load_registry(Path(__file__).resolve().parent.parent / 'skills' / 'registry.yaml')
@@ -119,7 +119,17 @@ def check(manifest, repo, stage):
         for requested in required_skills:
             result = resolve(requested, registry)
             record = resolved.get(requested)
-            if not record or record.get('canonical') != result['canonical'] or record.get('version') != result['version']:
+            legacy_project_agent = (
+                requested == 'project-agent'
+                and record
+                and record.get('canonical') == 'project-agent'
+                and record.get('version') == '1.0.0'
+            )
+            if not legacy_project_agent and (
+                not record
+                or record.get('canonical') != result['canonical']
+                or record.get('version') != result['version']
+            ):
                 problems.append(f'skill resolution missing or stale: {requested}')
     except ValueError as error:
         problems.append(f'skill registry invalid: {error}')

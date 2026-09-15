@@ -62,7 +62,7 @@ class ManifestTest(unittest.TestCase):
             'version': 2,
         })
         self.assertEqual(manifest['skills']['resolved'][0]['canonical'], 'lottify')
-        self.assertIn('project-agent', manifest['skills']['required'])
+        self.assertIn('luiapi-agent', manifest['skills']['required'])
         self.assertIn('tdd', manifest['skills']['required'])
         self.assertIn('code-review', manifest['skills']['required'])
         self.assertEqual(manifest['execution']['state'], 'SOURCE_ALIGNMENT')
@@ -138,6 +138,26 @@ class ManifestTest(unittest.TestCase):
         problems = check(manifest, self.repo, 'delegation')
         self.assertFalse(any('runtime skill routing' in problem for problem in problems))
         self.assertFalse(any('skill resolution missing or stale' in problem for problem in problems))
+
+    def test_legacy_project_agent_manifest_remains_readable_after_rename(self):
+        manifest = self.manifest()
+        index = manifest['skills']['required'].index('luiapi-agent')
+        manifest['skills']['required'][index] = 'project-agent'
+        record = next(
+            item for item in manifest['skills']['resolved']
+            if item['requested'] == 'luiapi-agent'
+        )
+        record['requested'] = 'project-agent'
+        record['canonical'] = 'project-agent'
+        manifest['source_alignment'] = {
+            'confirmed_by_lead': True,
+            'decision_ids': ['Ticket 04'],
+            'adr_disposition': 'not-applicable',
+        }
+        manifest['ownership']['writer'] = 'backend-agent'
+        problems = check(manifest, self.repo, 'delegation')
+        self.assertFalse(any('runtime skill routing' in problem for problem in problems))
+        self.assertFalse(any('skill resolution missing or stale: project-agent' in problem for problem in problems))
 
     def test_checker_rejects_removed_runtime_skill(self):
         manifest = self.manifest()

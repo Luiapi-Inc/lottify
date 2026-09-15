@@ -32,6 +32,16 @@ skills:
             'status': 'installed',
         })
 
+    def test_project_agent_alias_resolves_to_luiapi_agent(self):
+        registry = load_registry(
+            Path(__file__).resolve().parent.parent / 'skills' / 'registry.yaml'
+        )
+        self.assertEqual(resolve('project-agent', registry), {
+            'canonical': 'luiapi-agent',
+            'version': '1.0.0',
+            'status': 'installed',
+        })
+
     def test_rejects_unknown_alias_and_unavailable_skill(self):
         path = self.registry_path(
             """

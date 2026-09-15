@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install project-agent and project profiles into supported local agent runtimes."""
+"""Install luiapi-agent and project profiles into supported local agent runtimes."""
 
 import argparse
 import datetime as dt
@@ -39,7 +39,8 @@ def _runtime_roots(runtime, home, codex_home=None):
     if runtime == "hermes":
         return {
             "root": home / ".hermes" / "skills",
-            "project_target": home / ".hermes" / "skills" / "software-development" / "project-agent",
+            "project_target": home / ".hermes" / "skills" / "software-development" / "luiapi-agent",
+            "legacy_project_target": home / ".hermes" / "skills" / "software-development" / "project-agent",
             "profile_target": home / ".hermes" / "skills" / "software-development" / "lottify",
             "shared_target_root": home / ".hermes" / "skills",
         }
@@ -47,7 +48,8 @@ def _runtime_roots(runtime, home, codex_home=None):
         root = Path(codex_home) / "skills" if codex_home else home / ".codex" / "skills"
         return {
             "root": root,
-            "project_target": root / "project-agent",
+            "project_target": root / "luiapi-agent",
+            "legacy_project_target": root / "project-agent",
             "profile_target": root / "lottify",
             "shared_target_root": root,
         }
@@ -101,6 +103,26 @@ def _link(source, target, backup_root, *, migrate_existing=False, dry_run=False)
     return result
 
 
+def _retire_legacy_project_target(target, repo, *, migrate_existing=False, dry_run=False):
+    target = Path(target)
+    if not (target.exists() or target.is_symlink()):
+        return None
+    if not target.is_symlink():
+        return {'target': str(target), 'source': None, 'action': 'legacy-preserved'}
+    raw = Path(os.readlink(target))
+    linked = raw if raw.is_absolute() else target.parent / raw
+    linked = linked.resolve(strict=False)
+    allowed = {
+        (Path(repo).resolve() / 'tools' / 'project-agent').resolve(strict=False),
+        (Path(repo).resolve() / 'tools' / 'luiapi-agent').resolve(strict=False),
+    }
+    if linked not in allowed or not migrate_existing:
+        return {'target': str(target), 'source': str(linked), 'action': 'legacy-preserved'}
+    if not dry_run:
+        target.unlink()
+    return {'target': str(target), 'source': str(linked), 'action': 'legacy-retired'}
+
+
 def _discover_skill_names(root):
     root = Path(root)
     if not root.exists():
@@ -126,14 +148,23 @@ def install_runtime(runtime, repo, home, *, codex_home=None, migrate_existing=Fa
     repo = Path(repo).resolve()
     home = Path(home).resolve()
     roots = _runtime_roots(runtime, home, codex_home)
-    project_source = repo / "tools" / "project-agent"
+    project_source = repo / "tools" / "luiapi-agent"
     lottify_source = repo / "tools" / "lottify-skill"
     config = load_config(project_source / "skills" / "runtime-skill-packs.yaml")
     shared_source_root = home / ".agents" / "skills"
     stamp = timestamp or dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_root = home / ".local" / "share" / "project-agent" / "backups" / runtime / stamp
+    backup_root = home / ".local" / "share" / "luiapi-agent" / "backups" / runtime / stamp
 
-    actions = [
+    actions = []
+    legacy_action = _retire_legacy_project_target(
+        roots['legacy_project_target'],
+        repo,
+        migrate_existing=migrate_existing,
+        dry_run=dry_run,
+    )
+    if legacy_action:
+        actions.append(legacy_action)
+    actions.extend([
         _link(
             project_source,
             roots["project_target"],
@@ -148,7 +179,7 @@ def install_runtime(runtime, repo, home, *, codex_home=None, migrate_existing=Fa
             migrate_existing=migrate_existing,
             dry_run=dry_run,
         ),
-    ]
+    ])
 
     unresolved = []
     for skill in _referenced_skills(config):
@@ -171,7 +202,7 @@ def install_runtime(runtime, repo, home, *, codex_home=None, migrate_existing=Fa
         "unresolved_runtime_pack_skills": sorted(unresolved),
         "canonical_repo": str(repo),
     }
-    inventory_path = home / ".local" / "share" / "project-agent" / f"{runtime}-inventory.json"
+    inventory_path = home / ".local" / "share" / "luiapi-agent" / f"{runtime}-inventory.json"
     if not dry_run:
         inventory_path.parent.mkdir(parents=True, exist_ok=True)
         inventory_path.write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")

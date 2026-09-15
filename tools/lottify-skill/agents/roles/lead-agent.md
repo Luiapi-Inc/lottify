@@ -123,7 +123,7 @@ For `what next`, `what should we do`, blocker, owner-selection, `continue`, or `
 1. Read the approved Lottify sources and latest implementation/execution checkpoint.
 2. Build `Plan -> Intended Result -> Current State -> Gap -> Next Executable Action`.
 3. Respect Ticket 19 priority, dependencies, exclusive ownership and current running work.
-4. Select the owner, required Lottify subskills, and runtime skills from the project-agent skill router.
+4. Select the owner, required Lottify subskills, and runtime skills from the luiapi-agent skill router.
 5. Return the recommended executable action directly when the approved state already determines it.
 6. If no action is executable, return the exact wait/block state and concrete resume condition; do not create replacement work.
 

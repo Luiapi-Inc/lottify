@@ -111,11 +111,11 @@ Purpose:
 Purpose:
 - preserve decisions, ADRs, handoffs, and project context.
 
-## Reusable project-agent and runtime skill packs
+## Reusable luiapi-agent and runtime skill packs
 
-`project-agent` is the reusable delivery core used by Lottify for next-action decisions and runtime-skill selection. Lottify remains the authority for its project requirements, domain routing, review subskills, and acceptance gates.
+`luiapi-agent` is the reusable delivery core used by Lottify for next-action decisions and runtime-skill selection. Lottify remains the authority for its project requirements, domain routing, review subskills, and acceptance gates.
 
-Runtime skill selection is machine-readable in `../../project-agent/skills/runtime-skill-packs.yaml`. It combines role defaults with action packs. Installed engineering skills currently used by those packs include:
+Runtime skill selection is machine-readable in `../../luiapi-agent/skills/runtime-skill-packs.yaml`. It combines role defaults with action packs. Installed engineering skills currently used by those packs include:
 
 - `tdd`, `diagnosing-bugs`, and `code-review` for implementation/debugging verification;
 - `codebase-design`, `domain-modeling`, and `improve-codebase-architecture` for architecture/domain work;

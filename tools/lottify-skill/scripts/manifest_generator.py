@@ -15,7 +15,7 @@ from capability_registry import load_registry as load_capability_registry
 from capability_registry import routes as route_capabilities
 from skill_resolver import load_registry, resolve
 
-PROJECT_AGENT_SCRIPTS = Path(__file__).resolve().parents[2] / 'project-agent' / 'scripts'
+PROJECT_AGENT_SCRIPTS = Path(__file__).resolve().parents[2] / 'luiapi-agent' / 'scripts'
 if str(PROJECT_AGENT_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PROJECT_AGENT_SCRIPTS))
 from runtime_skill_router import load_config as load_runtime_skill_config
@@ -24,7 +24,7 @@ from runtime_skill_router import route_skills as route_runtime_skills
 
 CONTRACT_VERSION = 2
 SKILL_REGISTRY = Path(__file__).resolve().parent.parent / 'skills' / 'registry.yaml'
-RUNTIME_SKILL_CONFIG = Path(__file__).resolve().parents[2] / 'project-agent' / 'skills' / 'runtime-skill-packs.yaml'
+RUNTIME_SKILL_CONFIG = Path(__file__).resolve().parents[2] / 'luiapi-agent' / 'skills' / 'runtime-skill-packs.yaml'
 
 RULES = [
     (['prisma/schema'], ['backend-agent', 'quality-gate-agent'], ['prisma-schema-review']),
@@ -128,7 +128,7 @@ def runtime_skill_route(task, files, agents):
 
 
 def required_skill_names(task, files, agents):
-    names = ['lottify', 'project-agent']
+    names = ['lottify', 'luiapi-agent']
     for skill in runtime_skill_route(task, files, agents)['skills']:
         if skill not in names:
             names.append(skill)

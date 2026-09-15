@@ -8,7 +8,7 @@ from runtime_skill_router import load_config, route_skills
 
 ROOT = Path(__file__).resolve().parents[3]
 PROFILE = ROOT / 'tools' / 'lottify-skill' / 'project-profile.yaml'
-SKILL_CONFIG = ROOT / 'tools' / 'project-agent' / 'skills' / 'runtime-skill-packs.yaml'
+SKILL_CONFIG = ROOT / 'tools' / 'luiapi-agent' / 'skills' / 'runtime-skill-packs.yaml'
 
 
 class ProjectAgentTest(unittest.TestCase):
@@ -136,7 +136,7 @@ class ProjectAgentTest(unittest.TestCase):
             'sources': {'required': {'roadmap': 'docs/roadmap.md'}, 'status_globs': []},
             'priorities': ['security', 'critical-path', 'ux'],
             'roles': {'lead': 'lead-agent'},
-            'runtime_skills': {'config': 'tools/project-agent/skills/runtime-skill-packs.yaml'},
+            'runtime_skills': {'config': 'tools/luiapi-agent/skills/runtime-skill-packs.yaml'},
         }
         state = {
             'version': 1,

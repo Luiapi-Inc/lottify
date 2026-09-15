@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load and validate reusable project-agent profiles."""
+"""Load and validate reusable luiapi-agent profiles."""
 
 import argparse
 import json

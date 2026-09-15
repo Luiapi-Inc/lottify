@@ -19,4 +19,4 @@ priorities:
 roles:
   lead: lead-agent
 runtime_skills:
-  config: tools/project-agent/skills/runtime-skill-packs.yaml
+  config: tools/luiapi-agent/skills/runtime-skill-packs.yaml
