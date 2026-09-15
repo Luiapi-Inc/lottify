@@ -11,6 +11,7 @@ import { MemberAuthGuard } from "../../apps/api/src/member-auth.guard";
 import { AdminAuthService } from "../../src/contexts/identity-access/application/admin-auth.service";
 import { SessionService } from "../../src/contexts/identity-access/application/session.service";
 import { LotteryDrawService } from "../../src/contexts/lottery/application/lottery-draw.service";
+import { DrawCancellationOrchestrator } from "../../src/contexts/lottery/application/draw-cancellation-orchestrator";
 import { IdempotencyService } from "../../src/platform/idempotency/idempotency.service";
 
 describe("Lottery Draw API contract", () => {
@@ -26,6 +27,7 @@ describe("Lottery Draw API contract", () => {
         { provide: AdminAuthService, useValue: { authenticateAccess: vi.fn() } },
         { provide: SessionService, useValue: { authenticateAccess: vi.fn() } },
         { provide: LotteryDrawService, useValue: {} },
+        { provide: DrawCancellationOrchestrator, useValue: {} },
         { provide: IdempotencyService, useValue: {} },
       ],
     })
