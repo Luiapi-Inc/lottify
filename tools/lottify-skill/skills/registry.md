@@ -111,6 +111,22 @@ Purpose:
 Purpose:
 - preserve decisions, ADRs, handoffs, and project context.
 
+## Reusable luiapi-agent and runtime skill packs
+
+`luiapi-agent` is the reusable delivery core used by Lottify for next-action decisions and runtime-skill selection. Lottify remains the authority for its project requirements, domain routing, review subskills, and acceptance gates.
+
+Runtime skill selection is machine-readable in `../../luiapi-agent/skills/runtime-skill-packs.yaml`. It combines role defaults with action packs. Installed engineering skills currently used by those packs include:
+
+- `tdd`, `diagnosing-bugs`, and `code-review` for implementation/debugging verification;
+- `codebase-design`, `domain-modeling`, and `improve-codebase-architecture` for architecture/domain work;
+- `implement-spec` for source-aligned implementation;
+- `vercel-react-best-practices` and `playwright` for frontend/browser work;
+- `security-best-practices` and `security-threat-model` for security review;
+- `writing-for-agents`, `create-handoff`, and `session-compression` for handoff/context work;
+- `ask-matt` as an optional advisory technique provider.
+
+`to-spec` and `to-tickets` are installed but guarded. They are selected only for an explicit Change Request because they can create or reshape specification/ticket artifacts. Runtime skills are technique providers and never replace the project source of truth.
+
 ## External skill candidates
 
 Recommended additions from mattpocock/skills:

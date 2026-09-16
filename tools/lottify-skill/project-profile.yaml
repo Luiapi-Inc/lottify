@@ -1,0 +1,22 @@
+version: 1
+project:
+  id: lottify
+  name: Lottify
+  entry_skill: lottify
+sources:
+  required:
+    roadmap: .scratch/lottify-v1-specification/issues/19-implementation-roadmap-and-delivery-sequencing.md
+    workflow: .scratch/lottify-v1-specification/issues/02-end-to-end-business-workflows.md
+    acceptance: .scratch/lottify-v1-specification/issues/16-acceptance-criteria-and-test-traceability.md
+  status_globs:
+    - docs/implementation/*-status.md
+priorities:
+  - integrity-security-compliance
+  - functional-critical-path
+  - recovery-operations
+  - performance
+  - non-critical-ux
+roles:
+  lead: lead-agent
+runtime_skills:
+  config: tools/luiapi-agent/skills/runtime-skill-packs.yaml

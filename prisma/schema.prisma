@@ -10,6 +10,10 @@ model AuthSession {
   id               String    @id @default(uuid()) @db.Uuid
   memberId         String    @map("member_id") @db.Uuid
   deviceId         String?   @map("device_id")
+  /// G2 session forensics carried by the cutover ETL (decision D4). The UA string is *not* a device
+  /// identity, so `device_id` is deliberately left unpopulated for migrated sessions.
+  ipAddress        String?   @map("ip_address")
+  userAgent        String?   @map("user_agent")
   familyId         String    @map("family_id") @db.Uuid
   refreshTokenHash String    @map("refresh_token_hash")
   replacedById     String?   @map("replaced_by_id") @db.Uuid
@@ -28,7 +32,15 @@ model AuthSession {
 model Member {
   id        String         @id @default(uuid()) @db.Uuid
   phone     String         @unique
+  /// G2 legacy identifier carried by the G2->G3 cutover ETL (decision D1). G2 identity is
+  /// email+password and G3 identity is phone+OTP, so the migrated Member's only real identifier
+  /// needs a home or it is destroyed irreversibly at cutover. NULL for G3-native Members.
+  /// Unique so one legacy address can never attach to two Members. Self-service email claim/login
+  /// is deferred; login recovery for legacy Members stays an ops re-registration path.
+  legacyEmail String?      @unique @map("legacy_email")
   status    String         @default("ACTIVE")
+  /// Soft-deletion fact carried from G2 `users.deleted_at` (decision D2); NULL = not deleted.
+  deletedAt DateTime?      @map("deleted_at")
   fullName        String?   @map("full_name")
   dateOfBirth     DateTime? @map("date_of_birth") @db.Date
   province        String?

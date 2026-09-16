@@ -13,6 +13,11 @@ skills:
       - manifest-generator
     status: installed
     path: manifest-generator.md
+  - canonical: luiapi-agent
+    version: 1.0.0
+    aliases: [luiapi-agent, project-agent]
+    status: installed
+    path: ../../luiapi-agent/SKILL.md
   - canonical: architecture
     version: 0.0.0
     aliases: [architecture]
@@ -137,3 +142,29 @@ skills:
     aliases: [tdd]
     status: installed
     path: runtime:tdd
+
+  - canonical: implement-spec
+    version: 1.0.0
+    aliases: [implement-spec]
+    status: installed
+    path: runtime:implement-spec
+  - canonical: improve-codebase-architecture
+    version: 1.0.0
+    aliases: [improve-codebase-architecture]
+    status: installed
+    path: runtime:improve-codebase-architecture
+  - canonical: ask-matt
+    version: 1.0.0
+    aliases: [ask-matt]
+    status: installed
+    path: runtime:ask-matt
+  - canonical: to-spec
+    version: 1.0.0
+    aliases: [to-spec]
+    status: installed
+    path: runtime:to-spec
+  - canonical: to-tickets
+    version: 1.0.0
+    aliases: [to-tickets]
+    status: installed
+    path: runtime:to-tickets

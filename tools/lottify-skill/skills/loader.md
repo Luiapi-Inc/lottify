@@ -59,3 +59,13 @@ Before adding an external skill:
 - compare with installed skills;
 - keep one canonical capability owner;
 - document why it improves Lottify workflow.
+
+## Automatic runtime-skill routing
+
+Use the reusable router in `../../luiapi-agent/scripts/runtime_skill_router.py` with `../../luiapi-agent/skills/runtime-skill-packs.yaml`. The Lottify manifest generator records the resolved runtime skills together with the canonical `lottify` and `luiapi-agent` skills.
+
+Role defaults and action packs may select installed engineering skills such as `tdd`, `diagnosing-bugs`, `code-review`, `domain-modeling`, `codebase-design`, `implement-spec`, `improve-codebase-architecture`, `vercel-react-best-practices`, or `playwright`. These skills do not become project source of truth. `ask-matt` remains available only for deliberate explicit use and is not the next-action decision engine.
+
+`to-spec` and `to-tickets` are guarded: they are not selected unless the task is an explicit Change Request. This prevents runtime tooling from silently redefining an existing plan or requirement.
+
+For Hermes/Codex execution, install/sync the project stack with `../../luiapi-agent/scripts/install_runtime.py` and pass the generated runtime inventory to `runtime_skill_router.py` or `next_action.py`. A configured skill that is absent from the host inventory is an unavailable capability, not permission to impersonate that skill.
