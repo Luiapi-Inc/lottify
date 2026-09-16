@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LocalMemberOtpDelivery } from "../../src/contexts/identity-access/application/local-member-otp-delivery";
-import { createMemberOtpDelivery } from "../../src/contexts/identity-access/application/member-otp-delivery.factory";
+import { createMemberOtpDelivery } from "../../src/contexts/identity-access/member-otp-delivery.factory";
 import {
   ThaiBulkSmsDeliveryError,
   ThaiBulkSmsMemberOtpDelivery,

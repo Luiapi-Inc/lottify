@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { AdminAuthService } from "./application/admin-auth.service";
 import { LocalMemberOtpDelivery } from "./application/local-member-otp-delivery";
-import { createMemberOtpDelivery } from "./application/member-otp-delivery.factory";
+import { createMemberOtpDelivery } from "./member-otp-delivery.factory";
 import { MemberAuthService } from "./application/member-auth.service";
 import { MEMBER_OTP_DELIVERY_PORT } from "./application/member-otp-delivery.port";
 import { SessionService } from "./application/session.service";

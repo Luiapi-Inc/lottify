@@ -1,7 +1,7 @@
-import type { Environment } from "../../../platform/config/env";
-import { LocalMemberOtpDelivery } from "../application/local-member-otp-delivery";
-import type { MemberOtpDeliveryPort } from "../application/member-otp-delivery.port";
-import { ThaiBulkSmsMemberOtpDelivery } from "../infrastructure/thaibulksms-member-otp-delivery";
+import type { Environment } from "../../platform/config/env";
+import { LocalMemberOtpDelivery } from "./application/local-member-otp-delivery";
+import type { MemberOtpDeliveryPort } from "./application/member-otp-delivery.port";
+import { ThaiBulkSmsMemberOtpDelivery } from "./infrastructure/thaibulksms-member-otp-delivery";
 
 /**
  * Member OTP delivery selection (Ticket 09 sequencing). `console` keeps the
