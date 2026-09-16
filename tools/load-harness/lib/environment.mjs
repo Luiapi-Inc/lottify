@@ -39,14 +39,22 @@ export function cgroupMemoryLimitBytes() {
 export function gitCandidate(repoRoot) {
   const sha = tryExec("git", ["rev-parse", "HEAD"], repoRoot);
   const branch = tryExec("git", ["rev-parse", "--abbrev-ref", "HEAD"], repoRoot);
-  const dirty = tryExec("git", ["status", "--porcelain"], repoRoot);
+  // Untracked files are excluded on purpose: a run always produces evidence
+  // output under .hermes/evidence/, and counting that as "dirty" would mark
+  // every honest run — including a fresh CI checkout — as a modified tree. What
+  // matters for a report is whether the *tracked* tree differed from the commit.
+  const dirty = tryExec("git", ["status", "--porcelain", "--untracked-files=no"], repoRoot);
+  const untracked = tryExec("git", ["status", "--porcelain", "--untracked-files=all"], repoRoot);
   const describe = tryExec("git", ["describe", "--tags", "--always"], repoRoot);
+  const untrackedFiles = untracked === null ? null : untracked.split("\n").filter((line) => line.startsWith("??")).length;
   return {
     sha,
     shortSha: sha ? sha.slice(0, 12) : null,
     branch,
     describe,
-    worktreeDirty: dirty === null ? null : dirty.length > 0,
+    worktreeDirty: dirty === null ? null : dirty.trim().length > 0,
+    trackedChanges: dirty === null ? null : dirty.split("\n").filter((line) => line.trim().length > 0).length,
+    untrackedFiles,
     repoRoot,
   };
 }

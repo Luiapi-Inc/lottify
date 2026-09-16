@@ -51,7 +51,7 @@ export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, 
   lines.push("");
   lines.push(`- Candidate under test: \`${candidateSha ?? candidate.sha ?? "unknown"}\``);
   lines.push(
-    `- Harness revision that produced this report: \`${harnessRevisionSha ?? candidate.sha ?? "unknown"}\` (branch \`${candidate.branch ?? "?"}\`, worktree dirty: ${candidate.worktreeDirty})`,
+    `- Harness revision that produced this report: \`${harnessRevisionSha ?? candidate.sha ?? "unknown"}\` (branch \`${candidate.branch ?? "?"}\`, tracked tree modified: ${candidate.worktreeDirty}, untracked files: ${candidate.untrackedFiles ?? "?"})`,
   );
   lines.push(`- Scenario: \`${scenario.id}\` v${scenario.version}, source \`${scenario.sourceOfTruth}\`, card ${scenario.card}`);
   lines.push(`- Profile: \`${profile.name}\` (claimsTarget=${profile.claimsTarget}) — ${profile.purpose}`);
