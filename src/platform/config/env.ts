@@ -39,6 +39,17 @@ const environmentSchema = z
     MEMBER_OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
     MEMBER_OTP_REQUEST_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
     MEMBER_OTP_REQUEST_MAX_PER_WINDOW: z.coerce.number().int().positive().default(5),
+    /**
+     * Member OTP delivery provider selection. `console` keeps the local
+     * in-memory sink used by dev/test harnesses (no real SMS is sent);
+     * `thaibulksms` delivers real SMS through the ThaiBulkSMS standard API
+     * (Ticket 09 notification-provider sequencing).
+     */
+    OTP_PROVIDER: z.enum(["console", "thaibulksms"]).default("console"),
+    THAIBULKSMS_API_KEY: z.string().min(1).optional(),
+    THAIBULKSMS_API_SECRET: z.string().min(1).optional(),
+    THAIBULKSMS_SENDER: z.string().min(1).default("Demo"),
+    THAIBULKSMS_FORCE: z.enum(["standard", "corporate"]).default("standard"),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(500),
     OUTBOX_LOCK_TTL_SECONDS: z.coerce.number().int().positive().default(30),
     OTEL_SERVICE_NAME: z.string().min(1).default("lottify-api"),
@@ -55,6 +66,13 @@ const environmentSchema = z
         code: "custom",
         path: ["ADMIN_MFA_ENCRYPTION_KEY"],
         message: "ADMIN_MFA_ENCRYPTION_KEY is required in staging and production",
+      });
+    }
+    if (env.OTP_PROVIDER === "thaibulksms" && (!env.THAIBULKSMS_API_KEY || !env.THAIBULKSMS_API_SECRET)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["OTP_PROVIDER"],
+        message: "THAIBULKSMS_API_KEY and THAIBULKSMS_API_SECRET are required when OTP_PROVIDER=thaibulksms",
       });
     }
   });
