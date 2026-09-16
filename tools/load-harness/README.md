@@ -84,6 +84,20 @@ and are bound to the candidate SHA, the environment fingerprint, the scenario
 identity, the timestamps, the raw samples, the metric inventory and (for
 settlement) the independent SQL assertion output.
 
+Both halves of a report must name the same candidate; CI enforces it in the smoke
+job, and a reviewer can check a report the same way:
+
+```bash
+node tools/load-harness/scripts/assert-report.mjs \
+  .hermes/evidence/release/load-harness-ticket13-capacity-v1-smoke-<sha>.json \
+  "$(git rev-parse --short=12 HEAD)"
+```
+
+`scratch-db.sh` and `boot-api.sh` also take caller-provided `DATABASE_URL`,
+`LOAD_DATABASE_URL`, `JWT_ACCESS_SECRET`, `REDIS_URL` and `API_PORT` over the
+checkout's `.env`, so a reproduction targets the load database it was given rather
+than whatever a working copy points at.
+
 ## What the drivers do
 
 | Driver | Target(s) | How |

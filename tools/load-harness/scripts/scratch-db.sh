@@ -74,12 +74,13 @@ case "$db_name" in
     ;;
 esac
 
-case "$load_db" in
-  lottify_dev|lottify_prod)
-    echo "refusing to operate on database '$load_db' (expected lottify_load_*)" >&2
-    exit 2
-    ;;
-esac
+# Defence in depth: every path above must end on a dedicated load database name,
+# so lottify_dev / lottify_prod can never be the target of a create, migrate or
+# drop, whatever the caller passes in.
+if [[ "$load_db" != lottify_load_* ]]; then
+  echo "refusing to operate on database '$load_db' (expected lottify_load_*)" >&2
+  exit 2
+fi
 
 load_url="${base_url}/${load_db}"
 
