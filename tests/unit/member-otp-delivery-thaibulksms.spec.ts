@@ -4,7 +4,7 @@ import { createMemberOtpDelivery } from "../../src/contexts/identity-access/memb
 import {
   ThaiBulkSmsDeliveryError,
   ThaiBulkSmsMemberOtpDelivery,
-} from "../../src/contexts/identity-access/infrastructure/thaibulksms-member-otp-delivery";
+} from "../../src/contexts/identity-access/thaibulksms-member-otp-delivery";
 import type { Environment } from "../../src/platform/config/env";
 
 function envWith(overrides: Partial<Environment>): Environment {

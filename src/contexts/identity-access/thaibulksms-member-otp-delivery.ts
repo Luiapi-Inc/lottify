@@ -1,4 +1,4 @@
-import type { MemberOtpDeliveryPort } from "../application/member-otp-delivery.port";
+import type { MemberOtpDeliveryPort } from "./application/member-otp-delivery.port";
 
 /**
  * ThaiBulkSMS standard SMS API (developer.thaibulksms.com — POST /sms,
