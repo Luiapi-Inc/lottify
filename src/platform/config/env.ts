@@ -79,6 +79,17 @@ const environmentSchema = z
         message: "THAIBULKSMS_API_KEY and THAIBULKSMS_API_SECRET are required when OTP_PROVIDER=thaibulksms",
       });
     }
+    if (
+      (env.APP_ENV === "staging" || env.APP_ENV === "production") &&
+      !env.OPS_AUTH_TOKEN
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["OPS_AUTH_TOKEN"],
+        message:
+          "OPS_AUTH_TOKEN is required in staging and production so the ops surface (/metrics, /internal/health/*) is never left unauthenticated on the shared listener (W5-F4)",
+      });
+    }
   });
 
 export type Environment = z.infer<typeof environmentSchema>;

@@ -38,8 +38,11 @@ See `.env.example` for the documented value shape.
 `GET /metrics` and `GET /internal/health/*` are gated by `OpsAuthGuard`
 (`apps/api/src/ops-auth.guard.ts`). When `OPS_AUTH_TOKEN` is set (production),
 requests must present `Authorization: Bearer <OPS_AUTH_TOKEN>`; otherwise 401.
-When unset (local/dev/test), the surface is open so sandbox probes and the
-container smoke test keep working unchanged.
+The environment schema (`src/platform/config/env.ts`) refuses to boot
+`staging`/`production` without `OPS_AUTH_TOKEN`, so in those environments the
+ops surface can never be left unauthenticated on the shared listener. The
+open/pass-through guard only applies to `local`/`test` (sandbox probes and the
+container smoke test, which runs `APP_ENV=test`, keep working unchanged).
 
 The committed Prometheus scrape + alert configuration lives under
 `deploy/observability/prometheus/`:
@@ -65,9 +68,19 @@ accepted, otherwise a UUID is generated.
 - **Traces**: the active span gets the `lottify.correlation_id` attribute, so
   the exported OTLP payload carries it and the transaction is joinable from
   telemetry.
-- **Outbox**: `correlation_id` is already persisted through the outbox code
-  path, so a critical transaction is traceable API → workflow → Ledger →
-  Outbox/worker.
+- **Persisted state**: the id flows into the durable domain rows that carry it
+  — e.g. `payment_deposits.correlation_id` on the deposit, and
+  `financial_transactions.correlation_id` on the ledger posting that a
+  completed deposit credits (both proven at runtime — see
+  `.hermes/evidence/release/w5-telemetry-fix-0d3b6cb1.md`).
+
+**Outbox/worker hop (not yet drivable).** The outbox persists/propagates
+`correlation_id` by code (`outbox.service.ts` persists it, the dispatcher
+forwards it to the queue job), but **no business flow currently enqueues an
+outbox event** — the repo has no outbox producer wired into a context service.
+An end-to-end API → workflow → Ledger → Outbox/worker trace from telemetry is
+therefore not demonstrable today; a follow-up card tracks wiring a live outbox
+producer and carrying the id across the worker hop.
 
 ## 4. Operational alert pipeline
 
