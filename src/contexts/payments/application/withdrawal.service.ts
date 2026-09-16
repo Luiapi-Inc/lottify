@@ -51,6 +51,11 @@ import {
   type WithdrawalState,
 } from "../domain/withdrawal";
 import {
+  withdrawalRejectedOutboxEvent,
+  withdrawalReservedOutboxEvent,
+} from "../domain/withdrawal-outbox-event";
+import type { WithdrawalTransitionOutbox } from "../domain/withdrawal.repository";
+import {
   WITHDRAWAL_ELIGIBILITY_POLICY_VERSION,
   resolveWithdrawalEligibility,
   type WithdrawalEligibilityDecision,
@@ -215,6 +220,7 @@ export class WithdrawalService {
           evidenceRef: decision.evidenceRefs[0] ?? null,
           correlationId: correlation,
         },
+        withdrawalRejectedOutboxEvent(created, decision.reasonCodes.join(",")),
       );
     }
 
@@ -229,16 +235,18 @@ export class WithdrawalService {
       });
     } catch (error) {
       const insufficient = error instanceof WithdrawalFundsUnavailableError;
+      const failureReason = insufficient ? "INSUFFICIENT_FUNDS" : "RESERVATION_FAILED";
       await this.transitionOrThrow(
         created,
         "REQUESTED",
         "REJECTED",
-        { failureReason: insufficient ? "INSUFFICIENT_FUNDS" : "RESERVATION_FAILED" },
+        { failureReason },
         {
           actorType: "SYSTEM",
-          reason: insufficient ? "INSUFFICIENT_FUNDS" : "RESERVATION_FAILED",
+          reason: failureReason,
           correlationId: correlation,
         },
+        withdrawalRejectedOutboxEvent(created, failureReason),
       );
       if (insufficient) {
         throw new WithdrawalError(
@@ -255,6 +263,7 @@ export class WithdrawalService {
       "RESERVING",
       { reservationId },
       { actorType: "SYSTEM", correlationId: correlation },
+      withdrawalReservedOutboxEvent(created, reservationId),
     );
 
     return this.transitionOrThrow(
@@ -771,6 +780,12 @@ export class WithdrawalService {
       evidenceRef?: string | null;
       correlationId: string;
     },
+    /**
+     * Outbox event published atomically with this transition. It carries the
+     * caller's correlation id into the durable row, so the API request, the
+     * workflow record and the worker hop all join on one id (GH #92 / W5-F3).
+     */
+    outbox?: WithdrawalTransitionOutbox,
   ): Promise<WithdrawalRecord> {
     // The declared state machine is authoritative for every persisted transition,
     // so the domain rule and the durable guard can never disagree.
@@ -788,6 +803,7 @@ export class WithdrawalService {
         evidenceRef: event.evidenceRef ?? null,
         correlationId: event.correlationId,
       },
+      ...(outbox ? { outbox } : {}),
     });
     if (!updated) {
       throw new WithdrawalError(

@@ -91,6 +91,18 @@ export interface WithdrawalTransitionPatch {
   countReconciliationAttempt?: boolean;
 }
 
+/**
+ * A durable outbox event written in the SAME PostgreSQL transaction as the state
+ * transition it describes (transactional outbox). Either both the workflow
+ * record and the published intent land, or neither does, so a consumer can never
+ * be told about a transition that rolled back — and the API request that
+ * produced it carries the same `correlation_id` into the outbox row.
+ */
+export interface WithdrawalTransitionOutbox {
+  topic: string;
+  payload: Readonly<Record<string, unknown>>;
+}
+
 export interface WithdrawalTransitionInput {
   id: string;
   /** The single state the caller observed; the guard is exact, never a wildcard. */
@@ -105,6 +117,8 @@ export interface WithdrawalTransitionInput {
     evidenceRef?: string | null;
     correlationId: string;
   };
+  /** Recorded atomically with this transition; absent means no event is published. */
+  outbox?: WithdrawalTransitionOutbox;
 }
 
 export interface WithdrawalCursor {
