@@ -46,6 +46,8 @@ import { SettlementWalletAdapter } from "../platform/integration/settlement-wall
 import { SettlementDrawAdapter } from "../platform/integration/settlement-draw.adapter";
 import { SettlementOrdersAdapter } from "../platform/integration/settlement-orders.adapter";
 import { DrawRefundAdapter } from "../platform/integration/draw-refund.adapter";
+import { PrismaDrawAdmissionBoundary } from "../platform/concurrency/prisma-draw-admission.boundary";
+import { DRAW_ADMISSION_BOUNDARY } from "../platform/concurrency/draw-admission.port";
 import { DrawCancellationOrchestrator } from "./lottery/application/draw-cancellation-orchestrator";
 import { DRAW_REFUND_PORT } from "./lottery/application/draw-refund.port";
 import { WithdrawalLedgerAdapter } from "../platform/integration/withdrawal-ledger.adapter";
@@ -77,6 +79,14 @@ import { CapabilityRestrictionAdminService } from "./member/application/capabili
   ],
   providers: [
     LedgerWalletProjectionAdapter,
+    // The Draw admission boundary is ONE provider on purpose: Confirm (betting)
+    // and Draw cancellation (lottery) must serialise on the same PostgreSQL
+    // advisory lock, so a second instance would silently remove the guarantee.
+    PrismaDrawAdmissionBoundary,
+    {
+      provide: DRAW_ADMISSION_BOUNDARY,
+      useExisting: PrismaDrawAdmissionBoundary,
+    },
     LedgerWalletSourceAdapter,
     {
       provide: LEDGER_WALLET_PROJECTION_PORT,

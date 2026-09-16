@@ -22,11 +22,26 @@
 // refunded Orders instead of posting a second reversal, and the gate re-check
 // uses the same predicate as the refund operation, so it can never disagree.
 //
+// The whole sequence runs INSIDE the Draw admission boundary (step 0..3), the
+// same boundary a Bet Order Confirm holds around its own Draw-state revalidation
+// and stake commit. Holding it from the first read through the terminal
+// transition is what closes the confirm/cancel race:
+//   - a Confirm that reached the boundary first commits its stake while this run
+//     waits, so the scan that follows sees the CONFIRMED Order and refunds it;
+//   - a Confirm that reaches the boundary after this run has terminalized the
+//     Draw re-reads CANCELLED and is refused with zero money moved, instead of
+//     committing a stake the scans can no longer see.
+// See src/platform/concurrency/draw-admission.port.ts.
+//
 // This orchestrator owns the admin COMPLETE_CANCELLATION path. The generic
 // draw-transition path (LotteryDrawService.transition without the refund flag)
 // refuses COMPLETE_CANCELLATION, so the gate cannot be bypassed.
 
 import { Inject, Injectable } from "@nestjs/common";
+import {
+  DRAW_ADMISSION_BOUNDARY,
+  type DrawAdmissionBoundary,
+} from "../../../platform/concurrency/draw-admission.port";
 import {
   type DrawActor,
   DrawRuleError,
@@ -67,6 +82,7 @@ export class DrawCancellationOrchestrator {
   constructor(
     @Inject(DRAW_REFUND_PORT) private readonly refunds: DrawRefundPort,
     @Inject(LotteryDrawService) private readonly draws: LotteryDrawService,
+    @Inject(DRAW_ADMISSION_BOUNDARY) private readonly boundary: DrawAdmissionBoundary,
   ) {}
 
   /**
@@ -75,6 +91,10 @@ export class DrawCancellationOrchestrator {
    * through the gated transition. Fails closed if the Draw is not in a state
    * where COMPLETE_CANCELLATION is legal (no money moves), or if any refund
    * obligation remains outstanding.
+   *
+   * The whole sequence holds the Draw admission boundary, so no Bet Order can
+   * commit a stake against this Draw between the scan and the terminal
+   * transition (see the file header).
    */
   async completeDrawCancellation(
     input: CompleteDrawCancellationInput,
@@ -89,6 +109,15 @@ export class DrawCancellationOrchestrator {
       );
     }
 
+    return this.boundary.admit(drawId, () =>
+      this.completeCancellationInsideBoundary(drawId, input),
+    );
+  }
+
+  private async completeCancellationInsideBoundary(
+    drawId: string,
+    input: CompleteDrawCancellationInput,
+  ): Promise<CompleteDrawCancellationResult> {
     // Read the Draw's current state and version FIRST and fail closed before
     // any money moves. COMPLETE_CANCELLATION is only legal from state CANCELLING
     // at the expected version; an already-CANCELLED Draw is the idempotent
