@@ -1,8 +1,10 @@
 import "reflect-metadata";
-import { ConsoleLogger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import pinoHttp from "pino-http";
 import { getEnvironment } from "../../../src/platform/config/env";
+import {
+  RedactingConsoleLogger,
+  createHttpAccessLogger,
+} from "../../../src/platform/observability/log-redaction";
 import { initObservability, shutdownObservability } from "../../../src/platform/observability/observability";
 import { ApiModule } from "./app.module";
 import { configureApp } from "./configure-app";
@@ -13,9 +15,9 @@ async function bootstrap(): Promise<void> {
   initObservability(env.OTEL_SERVICE_NAME);
 
   const app = await NestFactory.create(ApiModule, {
-    logger: new ConsoleLogger({ json: true }),
+    logger: new RedactingConsoleLogger({ json: true }),
   });
-  app.use(pinoHttp({ level: env.LOG_LEVEL }));
+  app.use(createHttpAccessLogger(env.LOG_LEVEL));
   configureApp(app);
   await app.listen(env.API_PORT, "0.0.0.0");
   app.get(HealthService).markStarted();
