@@ -142,6 +142,24 @@ const fingerprint = environmentFingerprint({
 });
 const likeness = assessProductionLikeness(fingerprint);
 
+// The report must be bound to the candidate whose *API build* was exercised, not
+// to the harness commit that produced the report. They are normally the same tree
+// (the harness only adds tools/docs), but on a harness branch they differ, and a
+// reviewer needs both.
+const harnessRevisionSha = fingerprint.candidate.sha;
+const candidateSha = (() => {
+  if (typeof args["candidate-sha"] === "string") return args["candidate-sha"];
+  try {
+    return execFileSync("git", ["rev-parse", "origin/main"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return harnessRevisionSha;
+  }
+})();
+
 if (profile.claimsTarget && !likeness.productionLike) {
   console.error(
     [
@@ -309,6 +327,8 @@ const { jsonPath, mdPath } = writeReport({
   startedAt,
   finishedAt,
   commands,
+  candidateSha,
+  harnessRevisionSha,
 });
 
 const { counter, rows } = summariseVerdicts(runs);

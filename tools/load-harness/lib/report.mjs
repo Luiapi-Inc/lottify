@@ -43,13 +43,16 @@ export function summariseVerdicts(runs) {
   return { counter, rows };
 }
 
-export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands }) {
+export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha = null, harnessRevisionSha = null }) {
   const { counter, rows } = summariseVerdicts(runs);
   const candidate = fingerprint.candidate;
   const lines = [];
   lines.push(`# Load / performance harness report — ${scenario.id} (${profile.name} profile)`);
   lines.push("");
-  lines.push(`- Candidate: \`${candidate.sha ?? "unknown"}\` (branch \`${candidate.branch ?? "?"}\`, worktree dirty: ${candidate.worktreeDirty})`);
+  lines.push(`- Candidate under test: \`${candidateSha ?? candidate.sha ?? "unknown"}\``);
+  lines.push(
+    `- Harness revision that produced this report: \`${harnessRevisionSha ?? candidate.sha ?? "unknown"}\` (branch \`${candidate.branch ?? "?"}\`, worktree dirty: ${candidate.worktreeDirty})`,
+  );
   lines.push(`- Scenario: \`${scenario.id}\` v${scenario.version}, source \`${scenario.sourceOfTruth}\`, card ${scenario.card}`);
   lines.push(`- Profile: \`${profile.name}\` (claimsTarget=${profile.claimsTarget}) — ${profile.purpose}`);
   lines.push(`- Started: ${startedAt} · Finished: ${finishedAt}`);
@@ -135,8 +138,8 @@ export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, 
   return lines.join("\n");
 }
 
-export function writeReport({ outDir, scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands }) {
-  const sha = (fingerprint.candidate.sha ?? "unknown").slice(0, 12);
+export function writeReport({ outDir, scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha = null, harnessRevisionSha = null }) {
+  const sha = (candidateSha ?? fingerprint.candidate.sha ?? "unknown").slice(0, 12);
   const base = path.join(outDir, `load-harness-${scenario.id}-${profile.name}-${sha}`);
   mkdirSync(outDir, { recursive: true });
   const jsonPath = `${base}.json`;
@@ -145,7 +148,7 @@ export function writeReport({ outDir, scenario, profile, fingerprint, likeness, 
     scenario: { id: scenario.id, version: scenario.version, sourceOfTruth: scenario.sourceOfTruth, card: scenario.card, mix: scenario.mix, burst: scenario.burst },
     profile: { name: profile.name, claimsTarget: profile.claimsTarget, purpose: profile.purpose },
     targets: scenario.targets,
-    candidate: fingerprint.candidate,
+    candidate: { sha: candidateSha ?? fingerprint.candidate.sha, harnessRevisionSha: harnessRevisionSha ?? fingerprint.candidate.sha, branch: fingerprint.candidate.branch, worktreeDirty: fingerprint.candidate.worktreeDirty },
     environment: fingerprint,
     productionLikeAssessment: likeness,
     startedAt,

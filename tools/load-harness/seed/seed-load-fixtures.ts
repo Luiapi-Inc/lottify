@@ -549,18 +549,50 @@ async function fundCash(ledger: FinancialLedgerService, memberId: string, amount
 }
 
 /**
- * Deletes exactly the rows this manifest created, by id. Never prefix-based:
- * a shared database holds other verticals' fixture rows with overlapping ids.
+ * Deletes exactly the rows this run created, scoped to the fixture ids and to
+ * the fixture Draws (the load drivers mint Quotes/Orders against those Draws, so
+ * those rows are fixtures too). Never prefix-based on Member/phone: a shared
+ * database holds other verticals' rows with overlapping values.
  */
 async function cleanup(): Promise<void> {
   const manifest = JSON.parse(readFileSync(manifestPath!, "utf8"));
   const ids = manifest.cleanupIds ?? {};
   const list = (key: string): string[] => (Array.isArray(ids[key]) ? ids[key] : []);
-  const orderIds = list("orders");
-  const quoteIds = list("quotes");
   const memberIds = list("members");
+  const drawIds = list("draws");
+
+  // Quotes/Orders created by the harness runs live on the fixture Draws; they are
+  // not in cleanupIds, so they are collected by Draw. Both sets are deleted.
+  const drawQuotes = await prisma.bettingQuote.findMany({
+    where: { drawId: { in: drawIds } },
+    select: { id: true },
+  });
+  const drawOrders = await prisma.betOrder.findMany({
+    where: { drawId: { in: drawIds } },
+    select: { id: true },
+  });
+  const orderIds = [...new Set([...list("orders"), ...drawOrders.map((row) => row.id)])];
+  const quoteIds = [...new Set([...list("quotes"), ...drawQuotes.map((row) => row.id)])];
 
   const orderLines = await prisma.betOrderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
+
+  // Settlement facts first: they hold the restrict FK onto the Bet Orders.
+  const settlementOrders = await prisma.settlementOrder.findMany({
+    where: { orderId: { in: orderIds } },
+    select: { id: true },
+  });
+  await prisma.settlementOrder.deleteMany({ where: { id: { in: settlementOrders.map((row) => row.id) } } });
+  await prisma.settlementBatch.deleteMany({ where: { drawId: { in: drawIds } } });
+  // Result revisions (created by the settlement scenario) hold a restrict FK onto
+  // the Draw and are protected by an immutability trigger, so they go before the
+  // Draw and are removed the same way the integration suites remove protected
+  // evidence: inside a transaction that disables only that trigger.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe('ALTER TABLE "result_revisions" DISABLE TRIGGER "result_revisions_immutable"');
+    await tx.resultRevision.deleteMany({ where: { drawId: { in: drawIds } } });
+    await tx.$executeRawUnsafe('ALTER TABLE "result_revisions" ENABLE TRIGGER "result_revisions_immutable"');
+  });
+
   // These tables are protected by immutability triggers in production; the
   // harness disables them only for its own fixture rows, exactly like the
   // integration suites do. Order: receipts -> lines -> orders.
@@ -571,6 +603,14 @@ async function cleanup(): Promise<void> {
     await tx.betOrder.deleteMany({ where: { id: { in: orderIds } } });
     await tx.$executeRawUnsafe('ALTER TABLE "bet_receipts" ENABLE TRIGGER "bet_receipts_immutable"');
   });
+
+  const reservations = await prisma.reservation.findMany({
+    where: { purpose: "BET", businessReference: { in: orderIds } },
+    select: { id: true },
+  });
+  await prisma.reservationAllocation.deleteMany({ where: { reservationId: { in: reservations.map((row) => row.id) } } });
+  await prisma.reservation.deleteMany({ where: { id: { in: reservations.map((row) => row.id) } } });
+
   await prisma.bettingQuoteLine.deleteMany({ where: { quoteId: { in: quoteIds } } });
   await prisma.bettingQuote.deleteMany({ where: { id: { in: quoteIds } } });
   await prisma.authSession.deleteMany({ where: { id: { in: list("sessions") } } });
@@ -617,8 +657,27 @@ async function cleanup(): Promise<void> {
 
   const remainingOrders = await prisma.betOrder.count({ where: { id: { in: orderIds } } });
   const remainingMembers = await prisma.member.count({ where: { id: { in: memberIds } } });
+  // Ledger facts are append-only financial history: the harness does not rewrite
+  // them. On the normal path the whole dedicated load database is dropped
+  // (scripts/scratch-db.sh --drop), which is the correct disposition.
+  const fixtureAccounts = await prisma.ledgerAccount.findMany({
+    where: {
+      OR: [
+        { memberId: { in: memberIds } },
+        { systemCode: { startsWith: `load-harness-funding:${prefix}` } },
+      ],
+    },
+    select: { id: true },
+  });
+  const accountIds = fixtureAccounts.map((account) => account.id);
+  const remainingTransactions = await prisma.financialTransaction.count({
+    where: { postings: { some: { accountId: { in: accountIds } } } },
+  });
   console.log(
     `[seed] cleanup done. remaining fixture orders=${remainingOrders} members=${remainingMembers} (both must be 0)`,
+  );
+  console.log(
+    `[seed] append-only ledger history left behind: fixtures accounts=${accountIds.length} transactions=${remainingTransactions} — drop the dedicated load database (scripts/scratch-db.sh --drop) for a clean slate`,
   );
   if (remainingOrders !== 0 || remainingMembers !== 0) process.exitCode = 1;
 }
