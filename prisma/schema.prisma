@@ -471,6 +471,7 @@ model LotteryNumberLimit {
   updatedAt           DateTime        @updatedAt @map("updated_at")
   betType             LotteryBetType? @relation(fields: [betTypeId], references: [id], onDelete: Restrict)
   draw                LotteryDraw?    @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  drawBetType         LotteryDrawBetType? @relation("LotteryNumberLimitDrawBetType", fields: [drawId, betTypeId], references: [drawId, betTypeId], onDelete: Restrict)
 
   @@index([betTypeId, number])
   @@index([drawId, number])
@@ -543,6 +544,7 @@ model LotteryDrawBetType {
   settlementRuleVersionRef String      @map("settlement_rule_version_ref")
   createdAt                DateTime    @default(now()) @map("created_at")
   draw                     LotteryDraw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  numberLimits             LotteryNumberLimit[] @relation("LotteryNumberLimitDrawBetType")
 
   @@unique([drawId, betTypeId])
   @@index([betTypeVersionId])
