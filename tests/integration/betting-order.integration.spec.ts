@@ -26,6 +26,7 @@ import {
 } from "../../src/contexts/betting/application/betting-order.service";
 import { BettingQuoteDrawAdapter } from "../../src/platform/integration/quote-draw.adapter";
 import { BetOrderWalletAdapter } from "../../src/platform/integration/betting-order-wallet.adapter";
+import { PrismaDrawAdmissionBoundary } from "../../src/platform/concurrency/prisma-draw-admission.boundary";
 import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/application/financial-ledger.service";
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
@@ -78,6 +79,7 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
       drawAdapter,
       new BetOrderWalletAdapter(ledger, prisma),
       allowBetEligibility,
+      new PrismaDrawAdmissionBoundary(prisma),
     );
 
     adminId = randomUUID();
@@ -697,6 +699,7 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
       new BettingQuoteDrawAdapter(prisma),
       new BetOrderWalletAdapter(ledger, prisma),
       denyBetEligibility,
+      new PrismaDrawAdmissionBoundary(prisma),
     );
     const rejected = await deniedOrders.confirmOrder({
       memberId,

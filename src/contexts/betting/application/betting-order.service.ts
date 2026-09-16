@@ -49,6 +49,10 @@ import {
   BetOrderWalletError,
   type BetOrderWalletPort,
 } from "./betting-order-wallet.port";
+import {
+  DRAW_ADMISSION_BOUNDARY,
+  type DrawAdmissionBoundary,
+} from "../../../platform/concurrency/draw-admission.port";
 
 export type BettingOrderErrorCode =
   | "IDEMPOTENCY_KEY_REQUIRED"
@@ -160,6 +164,7 @@ export class BettingOrderService {
     @Inject(BETTING_QUOTE_DRAW_PORT) private readonly drawSource: BettingQuoteDrawPort,
     @Inject(BET_ORDER_WALLET_PORT) private readonly wallet: BetOrderWalletPort,
     @Inject(BETTING_ELIGIBILITY_PORT) private readonly eligibility: BettingEligibilityPort,
+    @Inject(DRAW_ADMISSION_BOUNDARY) private readonly admission: DrawAdmissionBoundary,
   ) {}
 
   now(): Date {
@@ -390,25 +395,38 @@ export class BettingOrderService {
     const denial = await this.confirmDenial(current, serverNow);
     if (denial) return this.resolveRejected(current, denial, serverNow);
 
-    let effect;
-    try {
-      effect = await this.wallet.commitStake({
-        orderId: current.id,
-        memberId: current.memberId,
-        drawId: current.drawId,
-        amountMinor: current.totalStakeMinor,
-        currency: "THB",
-        correlationId: current.id,
-        acceptedAt: serverNow,
-      });
-    } catch (error) {
-      if (error instanceof BetOrderWalletError) {
-        return this.resolveRejected(current, error.code, serverNow);
-      }
-      throw error;
-    }
-
-    return this.resolveConfirmed(current, effect, serverNow);
+    // The Draw admission boundary. Confirm's money movement AND the Order
+    // resolution that records it are both inside the boundary, so they are
+    // mutually exclusive with a Draw cancellation's scan -> complete: a stake
+    // can neither commit after the Draw terminalized CANCELLED, nor sit in a
+    // CONFIRMING state (committed, not yet visible to the refund scan) while
+    // the cancellation's scan runs. The Draw state is re-read INSIDE the
+    // boundary because only that read is trustworthy: the check above happened
+    // before mutual exclusion was held.
+    return this.admission.admit<BetOrderView>(
+      current.drawId,
+      async (): Promise<BetOrderView> => {
+        const admitted = await this.confirmDenial(current, serverNow);
+        if (admitted) return this.resolveRejected(current, admitted, serverNow);
+        try {
+          const effect = await this.wallet.commitStake({
+            orderId: current.id,
+            memberId: current.memberId,
+            drawId: current.drawId,
+            amountMinor: current.totalStakeMinor,
+            currency: "THB",
+            correlationId: current.id,
+            acceptedAt: serverNow,
+          });
+          return await this.resolveConfirmed(current, effect, serverNow);
+        } catch (error) {
+          if (error instanceof BetOrderWalletError) {
+            return this.resolveRejected(current, error.code, serverNow);
+          }
+          throw error;
+        }
+      },
+    );
   }
 
   /**

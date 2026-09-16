@@ -27,6 +27,11 @@ import {
   LotteryDrawService,
 } from "../../../src/contexts/lottery/application/lottery-draw.service";
 import {
+  DrawCancellationOrchestrator,
+  type CompleteDrawCancellationResult,
+} from "../../../src/contexts/lottery/application/draw-cancellation-orchestrator";
+import { DrawRefundError } from "../../../src/contexts/lottery/application/draw-refund.port";
+import {
   type DrawLifecycleCommand,
   DRAW_LIFECYCLE_COMMANDS,
   type DrawState,
@@ -93,6 +98,8 @@ export class AdminDrawController {
   constructor(
     @Inject(LotteryDrawService)
     private readonly draws: LotteryDrawService,
+    @Inject(DrawCancellationOrchestrator)
+    private readonly cancellation: DrawCancellationOrchestrator,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
   ) {}
@@ -201,6 +208,17 @@ export class AdminDrawController {
     const command = parseCommand(body, request);
     const expectedVersion = parseExpectedVersion(body, request);
     try {
+      // COMPLETE_CANCELLATION is routed through the refund orchestrator so the
+      // gate (refund obligations satisfied) can never be bypassed via the
+      // generic transition path. All other commands stay on the plain path.
+      if (command === "COMPLETE_CANCELLATION") {
+        const result = await this.cancellation.completeDrawCancellation({
+          drawId: id.trim(),
+          expectedVersion,
+          actor: admin,
+        });
+        return serializeCancellationResult(result);
+      }
       return await this.draws.transition({
         id: id.trim(),
         command,
@@ -240,6 +258,52 @@ export class AdminDrawController {
       throw mapDrawError(error);
     }
   }
+}
+
+/**
+ * The HTTP shape of a completed Draw cancellation.
+ *
+ * `DrawCancellationOrchestrator` reports `refundedStakeMinor` as a bigint. JSON
+ * has no integer of that width, and Express cannot serialise a bigint at all:
+ * returning the orchestrator result directly makes the route answer 500 *after*
+ * the refund has already run. The amount therefore crosses the HTTP boundary as
+ * a minor-unit decimal string, exactly like every other Lottify amount
+ * (see the response DTOs in member-withdrawal.controller.ts).
+ */
+interface DrawCancellationResponse {
+  readonly draw: {
+    readonly id: string;
+    readonly state: string;
+    readonly version: number;
+  };
+  readonly refund: {
+    readonly considered: number;
+    readonly refunded: number;
+    readonly alreadyRefunded: number;
+    readonly outstanding: number;
+    readonly refundedStakeMinor: string;
+    readonly obligationsSatisfied: boolean;
+  };
+}
+
+function serializeCancellationResult(
+  result: CompleteDrawCancellationResult,
+): DrawCancellationResponse {
+  return {
+    draw: {
+      id: result.draw.id,
+      state: result.draw.state,
+      version: result.draw.version,
+    },
+    refund: {
+      considered: result.refund.considered,
+      refunded: result.refund.refunded,
+      alreadyRefunded: result.refund.alreadyRefunded,
+      outstanding: result.refund.outstanding,
+      refundedStakeMinor: result.refund.refundedStakeMinor.toString(),
+      obligationsSatisfied: result.refund.obligationsSatisfied,
+    },
+  };
 }
 
 function requiredAdmin(request: AdminAuthenticatedRequest) {
@@ -321,6 +385,12 @@ function apiError(request: AdminAuthenticatedRequest, status: number, code: stri
 function mapDrawError(error: unknown): HttpException {
   if (error instanceof HttpException) return error;
   if (error instanceof DrawRuleError) {
+    return new HttpException(
+      { code: error.code, message: error.message, details: error.details, correlationId: currentCorrelationId() ?? "unknown" },
+      error.status,
+    );
+  }
+  if (error instanceof DrawRefundError) {
     return new HttpException(
       { code: error.code, message: error.message, details: error.details, correlationId: currentCorrelationId() ?? "unknown" },
       error.status,
