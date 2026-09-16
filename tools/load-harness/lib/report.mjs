@@ -163,7 +163,7 @@ export function writeReport({ outDir, scenario, profile, fingerprint, likeness, 
   writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   writeFileSync(
     mdPath,
-    buildMarkdownReport({ scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands }),
+    buildMarkdownReport({ scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha, harnessRevisionSha }),
     "utf8",
   );
   return { jsonPath, mdPath };

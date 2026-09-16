@@ -301,6 +301,8 @@ jobs:
           test -f "$report" || { echo "missing report $report"; ls .hermes/evidence/release; exit 1; }
           grep -q '"settlement_idempotent_resume"' "$report" || { echo "settlement scenario did not run"; exit 1; }
           grep -q 'duplicate_financial_effect_under_load' "$report" || { echo "duplicate-effect assertion missing"; exit 1; }
+          # Both halves of the artifact must name the same candidate SHA.
+          node tools/load-harness/scripts/assert-report.mjs "$report" "$sha"
       - name: API log on failure
         if: failure()
         run: tail -100 ".hermes/evidence/release/w5-raw-load/api-${API_PORT}.log" || true

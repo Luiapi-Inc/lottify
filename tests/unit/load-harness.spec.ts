@@ -4,7 +4,8 @@
 // verdict rule fails CI instead of quietly producing a green capacity claim.
 // They also pin the statistics the drivers rely on.
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 // The harness is plain ESM (`.mjs`) on purpose: it must run from a bare `node`
@@ -55,11 +56,16 @@ describe("load harness scenario (Ticket 13 / GH #91)", () => {
   it("rejects a scenario that lowers a target", () => {
     const weakened = JSON.parse(JSON.stringify(scenario));
     weakened.targets.quote_requests_per_second.min = 50;
-    const tempPath = path.join(repoRoot, ".hermes", "weakened-scenario.json");
+    // Written to a temp dir: a spec must not drop files into the checkout.
+    const tempDir = mkdtempSync(path.join(tmpdir(), "load-scenario-"));
+    const tempPath = path.join(tempDir, "weakened-scenario.json");
     mkdirSync(path.dirname(tempPath), { recursive: true });
     writeFileSync(tempPath, JSON.stringify(weakened));
-    expect(() => loadScenario(tempPath)).toThrow(/weaker than the Ticket 13 value/);
-    rmSync(tempPath);
+    try {
+      expect(() => loadScenario(tempPath)).toThrow(/weaker than the Ticket 13 value/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("declares the required observability families for the unobservable SLOs", () => {
@@ -138,6 +144,47 @@ describe("load harness environment assessment", () => {
     expect(assessment.failures.join(" ")).toMatch(/cpu/);
     expect(assessment.failures.join(" ")).toMatch(/co-located/);
     expect(assessment.failures.join(" ")).toMatch(/development database/);
+  });
+});
+
+describe("load harness report binding", () => {
+  // Regression guard for the defect found in review round 1: the markdown half
+  // of a report named the harness revision as the candidate because
+  // writeReport() did not forward candidateSha/harnessRevisionSha.
+  it("binds both halves of a report to the candidate SHA, not the harness revision", async () => {
+    const reportModule = "../../tools/load-harness/lib/report.mjs";
+    const { writeReport } = await import(reportModule);
+    const candidateSha = "0d3b6cb1ce905387dd6822a29121bba70bddcf4a";
+    const harnessSha = "8ddf0326fb32b0eaab37fe510a0ba53859a152de";
+    const outDir = mkdtempSync(path.join(tmpdir(), "load-report-"));
+    try {
+      const { jsonPath, mdPath } = writeReport({
+        outDir,
+        scenario: { id: "ticket13.capacity", version: 1, sourceOfTruth: "GH #91", card: "ticket13", mix: {}, burst: {} },
+        profile: { name: "smoke", claimsTarget: false, purpose: "plumbing" },
+        fingerprint: { candidate: { sha: harnessSha, branch: "feat/load-harness-ticket13", worktreeDirty: false } },
+        likeness: { productionLike: false, failures: ["cpu"] },
+        runs: [],
+        signals: [],
+        inventory: {},
+        assertions: null,
+        startedAt: "2026-01-01T00:00:00.000Z",
+        finishedAt: "2026-01-01T00:00:01.000Z",
+        commands: [],
+        candidateSha,
+        harnessRevisionSha: harnessSha,
+      });
+      const markdown = readFileSync(mdPath, "utf8");
+      const json = JSON.parse(readFileSync(jsonPath, "utf8"));
+      expect(markdown).toContain(`Candidate under test: \`${candidateSha}\``);
+      expect(markdown).toContain(`Harness revision that produced this report: \`${harnessSha}\``);
+      expect(markdown).not.toContain(`Candidate under test: \`${harnessSha}\``);
+      expect(path.basename(mdPath)).toContain(candidateSha.slice(0, 12));
+      expect(json.candidate.sha).toBe(candidateSha);
+      expect(json.candidate.harnessRevisionSha).toBe(harnessSha);
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
   });
 });
 
