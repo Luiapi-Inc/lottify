@@ -53,12 +53,14 @@ describe("ThaiBulkSmsMemberOtpDelivery", () => {
     await delivery.deliver({ phone: "+66812345678", purpose: "LOGIN", code: "123456" });
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe("https://api-v2.thaibulksms.com/sms");
-    expect(calls[0].headers.Authorization).toBe(
+    const call = calls[0];
+    if (!call) throw new Error("expected exactly one delivery call");
+    expect(call.url).toBe("https://api-v2.thaibulksms.com/sms");
+    expect(call.headers.Authorization).toBe(
       `Basic ${Buffer.from("test-key:test-secret").toString("base64")}`,
     );
-    expect(calls[0].headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
-    const form = new URLSearchParams(calls[0].body);
+    expect(call.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
+    const form = new URLSearchParams(call.body);
     expect(form.get("sender")).toBe("Demo");
     expect(form.get("msisdn")).toBe("66812345678");
     expect(form.get("force")).toBe("standard");
@@ -89,7 +91,7 @@ describe("ThaiBulkSmsMemberOtpDelivery", () => {
   });
 
   it("honors the corporate force override", async () => {
-    let capturedForce: string | null;
+    let capturedForce: string | null = null;
     const delivery = new ThaiBulkSmsMemberOtpDelivery(
       { ...config, force: "corporate" },
       async (_url, init) => {
