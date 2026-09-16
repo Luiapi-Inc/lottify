@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { summariseVerdicts } from "../lib/report.mjs";
+import { summariseVerdicts, onceOnlyEvidenceFailures } from "../lib/report.mjs";
 
 const [jsonPath, expectedSha] = process.argv.slice(2);
 if (!jsonPath) {
@@ -44,6 +44,9 @@ if (!report?.scenario?.id || !report?.profile?.name) {
 if (!report?.environment?.candidate?.sha) {
   failures.push(`${jsonPath}: environment fingerprint is not bound to a revision`);
 }
+// A report must not be able to claim "no duplicate financial effect under load"
+// from an assertion that examined an empty population.
+failures.push(...onceOnlyEvidenceFailures(report.runs ?? []));
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`[assert-report] FAIL: ${failure}`);

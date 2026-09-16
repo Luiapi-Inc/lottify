@@ -19,6 +19,7 @@ import { readFileSync, existsSync } from "node:fs";
 
 import { PrismaService } from "../../../src/platform/persistence/prisma.service";
 import { resetEnvironmentForTests } from "../../../src/platform/config/env";
+import { evaluateStakeEffectOnceOnly } from "../lib/stake-effect.mjs";
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const args: Record<string, string | boolean> = {};
@@ -95,41 +96,30 @@ async function main(): Promise<void> {
   const samples: Record<string, unknown> = {};
   const failures: string[] = [];
 
-  // ---- 1. once-only stake effect on the seeded confirmed population -------
-  let confirmedOrders = 0;
-  let stakeTransactions = 0;
-  let ordersMissingStakeEffect = 0;
-  let ordersWithDuplicateStakeEffect = 0;
-  const duplicateStakeSamples: unknown[] = [];
-  for (const ids of chunk(orderIds, CHUNK)) {
-    const orders = await prisma.betOrder.findMany({ where: { id: { in: ids } }, select: { id: true, state: true } });
-    confirmedOrders += orders.filter((order) => order.state === "CONFIRMED").length;
-    const transactions = await prisma.financialTransaction.findMany({
-      where: { businessTransactionId: { in: ids } },
-      select: { businessTransactionId: true, id: true },
-    });
-    stakeTransactions += transactions.length;
-    const perOrder = new Map<string, number>();
-    for (const transaction of transactions) {
-      perOrder.set(transaction.businessTransactionId, (perOrder.get(transaction.businessTransactionId) ?? 0) + 1);
-    }
-    for (const order of orders.filter((candidate) => candidate.state === "CONFIRMED")) {
-      const count = perOrder.get(order.id) ?? 0;
-      if (count === 0) ordersMissingStakeEffect += 1;
-      if (count > 1) {
-        ordersWithDuplicateStakeEffect += 1;
-        if (duplicateStakeSamples.length < 10) duplicateStakeSamples.push({ orderId: order.id, stakeTransactions: count });
-      }
-    }
-  }
-  checks.confirmedOrders = confirmedOrders;
-  checks.stakeTransactions = stakeTransactions;
-  checks.ordersMissingStakeEffect = ordersMissingStakeEffect;
-  checks.ordersWithDuplicateStakeEffect = ordersWithDuplicateStakeEffect;
-  samples.duplicateStakeSamples = duplicateStakeSamples;
-  if (ordersMissingStakeEffect > 0) failures.push(`${ordersMissingStakeEffect} confirmed order(s) have no stake financial transaction`);
-  if (ordersWithDuplicateStakeEffect > 0)
-    failures.push(`${ordersWithDuplicateStakeEffect} order(s) have more than one stake financial transaction`);
+  // ---- 1. once-only stake effect over the whole load database -------------
+  // The population is the dedicated load database, NOT the manifest list and NOT
+  // one Order state: the settlement driver moves the seeded Orders CONFIRMED ->
+  // SETTLED earlier in the same run, and the Orders the live load creates are
+  // equally subject to a duplicate stake effect. `evaluateStakeEffectOnceOnly`
+  // owns the rule (and fails on an empty examined population).
+  const allOrders = await prisma.betOrder.findMany({ select: { id: true, state: true } });
+  const allStakeCommits = await prisma.financialTransaction.findMany({
+    where: { operationType: "BET_STAKE_COMMIT" },
+    select: { businessTransactionId: true },
+  });
+  const allRefunds = await prisma.financialTransaction.findMany({
+    where: { operationType: "BET_STAKE_REFUND" },
+    select: { businessTransactionId: true },
+  });
+  const stakeEffect = evaluateStakeEffectOnceOnly({
+    orders: allOrders,
+    stakeCommits: allStakeCommits,
+    refunds: allRefunds,
+    manifestOrderIds: orderIds,
+  });
+  Object.assign(checks, stakeEffect.checks);
+  Object.assign(samples, stakeEffect.samples);
+  failures.push(...stakeEffect.failures);
 
   // ---- 2/3/4. settlement batch facts -------------------------------------
   if (settlementDrawId) {
@@ -144,6 +134,11 @@ async function main(): Promise<void> {
     checks.settlementBatchLosingOrders = batch?.losingOrderCount ?? null;
     checks.settlementTotalPayoutMinor = batch?.totalPayoutMinor?.toString() ?? null;
     if (batches.length > 1) failures.push(`${batches.length} settlement batches exist for one Draw (expected exactly 1: the resume path must not create a second batch)`);
+    if (batches.length === 0) {
+      failures.push(
+        `no settlement batch exists for Draw ${settlementDrawId}: the settlement assertion examined an empty population and cannot certify idempotent resume or the once-only payout effect`,
+      );
+    }
     if (batch && batch.state !== "COMPLETED") failures.push(`settlement batch state is ${batch.state}, not COMPLETED`);
 
     if (batch) {
@@ -186,6 +181,9 @@ async function main(): Promise<void> {
       checks.settlementReversalTransactions = reversalTransactions;
       checks.ordersPaidTwice = ordersPaidTwice;
       checks.settlementScopeExpectedOrders = orderIds.length;
+      if (settlementOrders.length === 0) {
+        failures.push("the settlement batch has 0 Settlement Order rows: the payout assertions examined an empty population");
+      }
       if (ordersPaidTwice > 0) failures.push(`${ordersPaidTwice} order(s) received more than one settlement payout transaction`);
       if (settlementOrders.length !== orderIds.length && orderIds.length > 0) {
         failures.push(

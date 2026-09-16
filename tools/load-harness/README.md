@@ -58,7 +58,11 @@ bash tools/load-harness/scripts/scratch-db.sh --suffix <card-id>     # prints LO
 export LOAD_DATABASE_URL=...
 
 # 2. fixtures (Members, sessions, funding, published product/Draw, settlement Orders)
-pnpm load:seed -- --profile smoke --manifest .hermes/evidence/release/w5-raw-load/load-manifest-smoke.json
+#    The seeding step reads DATABASE_URL and refuses anything that is not a load
+#    database, so the load URL must be passed explicitly here too:
+pnpm load:seed -- --profile smoke \
+  --manifest .hermes/evidence/release/w5-raw-load/load-manifest-smoke.json \
+  --database-url "$LOAD_DATABASE_URL"
 
 # 3. boot the candidate API (tsc-compiled, the container shape) against that database
 bash tools/load-harness/scripts/boot-api.sh --port 19199
@@ -75,9 +79,16 @@ pnpm load:run -- --profile smoke --base-url http://127.0.0.1:19199 \
 
 # 6. stop the API and remove the fixtures / database
 bash tools/load-harness/scripts/boot-api.sh --port 19199 --stop
-pnpm load:seed -- --manifest .hermes/evidence/release/w5-raw-load/load-manifest-smoke.json --cleanup
+pnpm load:seed -- --manifest .hermes/evidence/release/w5-raw-load/load-manifest-smoke.json \
+  --database-url "$LOAD_DATABASE_URL" --cleanup
 bash tools/load-harness/scripts/scratch-db.sh --suffix <card-id> --drop
 ```
+
+`--cleanup` removes the fixture rows but never rewrites append-only ledger
+history, and it does **not** delete the manifest. A manifest holds real Member
+access tokens and the (redacted-host, unredacted-password) connection string, so
+it is a secret-bearing local file: never attach it to a card, a PR or a report —
+attach the report, which carries the counts, not the tokens.
 
 Reports land in `.hermes/evidence/release/load-harness-<scenario>-<profile>-<sha>.{md,json}`
 and are bound to the candidate SHA, the environment fingerprint, the scenario
@@ -108,7 +119,7 @@ than whatever a working copy points at.
 | `quote-confirm` | Quote/Confirm req/s + p95/p99, error rate, duplicate effect | drives `POST …/quotes` → `…/orders` → `…/orders/:id/confirm` with real Idempotency-Keys; every Nth cycle confirms so the mix matches the target rate ratio; replays sampled Confirms concurrently with the SAME key to probe duplicate effects |
 | `payment-events` | ≥200 payment/webhook events/s | discovers candidate ingress routes from the OpenAPI contract and drives one only when a caller names it with its signature header; otherwise `NOT_MEASURED` with the route inventory as evidence |
 | `settlement-capacity` | ≥100k Bet Lines / 10 min, idempotent resume, no Member-visible partial completion | closes the Draw, intakes + confirms the Result through the Admin commands, runs the Settlement command twice (resume), and polls `GET /api/v1/member/orders/:id/settlement` while the batch is in flight |
-| `seed/assert-financial-effects.ts` | once-only financial effect, settlement scope | SQL counts: one stake transaction per confirmed Order, exactly one settlement batch, no Order paid twice, every settlement row POSTED |
+| `seed/assert-financial-effects.ts` | once-only financial effect, settlement scope | SQL over the whole dedicated load database: exactly one stake commit per Order in a stake-committed state (`CONFIRMED`/`SETTLED`/`CANCELLING`/`CANCELLED`), never two for any Order, no duplicate refund, exactly one settlement batch, no Order paid twice, every settlement row POSTED. An empty examined population is a failure, so the counters can never be 0-over-zero |
 
 ## Limits that must be stated in every report
 

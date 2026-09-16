@@ -100,14 +100,30 @@ function reconcileSettlementWithAssertions({ runs, assertions, scenario, profile
             : "FAIL"
           : "MEASURED",
   };
+  // The once-only property is only certifiable over a NON-EMPTY population: the
+  // assertion script fails when the examined scope is empty, and the counters
+  // below are surfaced next to the boolean so "no duplicates" can never be read
+  // off an empty check (review round 2 finding B1).
+  const examinedPopulation = checks.stakeEffectExaminedPopulation ?? 0;
+  const duplicateEffectsFound = checks.duplicateFinancialEffectsFound ?? null;
   const onceOnlyOk =
+    examinedPopulation > 0 &&
     (checks.ordersWithDuplicateStakeEffect ?? 1) === 0 &&
     (checks.ordersMissingStakeEffect ?? 1) === 0 &&
+    (checks.ordersWithDuplicateRefundEffect ?? 1) === 0 &&
     (checks.ordersPaidTwice ?? 1) === 0 &&
     (assertions.failures ?? []).length === 0;
+  run.samples.duplicateFinancialEffectsFound = duplicateEffectsFound;
+  run.samples.stakeEffectExaminedPopulation = examinedPopulation;
+  run.notes = [
+    ...(run.notes ?? []),
+    `once-only financial effect: examined ${examinedPopulation} stake-committed Order(s) out of ${checks.ordersExamined ?? 0} in the load database, duplicate effects found: ${duplicateEffectsFound}`,
+  ];
   run.measurements.duplicate_financial_effect_under_load = {
     target: { allowed: false },
     achieved: assertions.measured ? onceOnlyOk : null,
+    duplicateEffectsFound,
+    examinedPopulation,
     verdict: !assertions.measured ? "NOT_MEASURED" : profile.claimsTarget ? (onceOnlyOk ? "PASS" : "FAIL") : "MEASURED",
   };
 }
@@ -307,7 +323,7 @@ reconcileSettlementWithAssertions({ runs, assertions, scenario, profile });
 
 const commands = [
   `# 1. scratch database + fixtures (test-scoped seeding; never against production)`,
-  `pnpm load:seed --profile ${profile.name} --manifest ${path.relative(repoRoot, manifestPath ?? "…")}`,
+  `pnpm load:seed --profile ${profile.name} --manifest ${path.relative(repoRoot, manifestPath ?? "…")} --database-url "$LOAD_DATABASE_URL"`,
   `# 2. boot the candidate API against the load database`,
   `bash tools/load-harness/scripts/boot-api.sh --base-url ${baseUrl}`,
   `# 3. run the scenario`,

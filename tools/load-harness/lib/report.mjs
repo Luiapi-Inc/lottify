@@ -43,6 +43,43 @@ export function summariseVerdicts(runs) {
   return { counter, rows };
 }
 
+/**
+ * The once-only financial-effect claim ("no duplicate financial effect under
+ * load") is only evidence over a NON-EMPTY population. A report whose assertion
+ * examined zero Orders must never be accepted as proof, so the CI binding check
+ * rejects it as well (review round 2 finding B1: `state === "CONFIRMED"`
+ * filtering over an already-SETTLED population produced counters that were
+ * 0-over-zero and read as a pass).
+ *
+ * Returns a list of failure strings; an empty list means the report carries
+ * real once-only evidence.
+ */
+export function onceOnlyEvidenceFailures(runs) {
+  const failures = [];
+  const carrying = (runs ?? []).filter((run) => run?.measurements?.duplicate_financial_effect_under_load);
+  if (carrying.length === 0) {
+    failures.push("no run carries the duplicate_financial_effect_under_load measurement");
+    return failures;
+  }
+  for (const run of carrying) {
+    const measurement = run.measurements.duplicate_financial_effect_under_load;
+    if (measurement.achieved === null || measurement.verdict === "NOT_MEASURED") {
+      failures.push(`run ${run.id}: the once-only financial-effect assertion is not measured, so it proves nothing`);
+      continue;
+    }
+    const examined = measurement.examinedPopulation;
+    if (typeof examined !== "number" || examined <= 0) {
+      failures.push(
+        `run ${run.id}: the once-only financial-effect assertion examined ${examined ?? "no"} stake-committed Order(s) — an empty population is not evidence`,
+      );
+    }
+    if (measurement.duplicateEffectsFound !== 0) {
+      failures.push(`run ${run.id}: duplicate financial effects found (${measurement.duplicateEffectsFound})`);
+    }
+  }
+  return failures;
+}
+
 export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha = null, harnessRevisionSha = null }) {
   const { counter, rows } = summariseVerdicts(runs);
   const candidate = fingerprint.candidate;

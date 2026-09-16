@@ -186,6 +186,116 @@ describe("load harness report binding", () => {
       rmSync(outDir, { recursive: true, force: true });
     }
   });
+
+  // Regression guard for review round 2 finding B1: the CI binding check used to
+  // accept a report whose once-only assertion examined zero Orders, so the
+  // "no duplicate financial effect under load" claim could rest on nothing.
+  it("rejects once-only evidence that examined an empty population", async () => {
+    const reportModule = "../../tools/load-harness/lib/report.mjs";
+    const { onceOnlyEvidenceFailures } = await import(reportModule);
+    const measured = (examinedPopulation: number, duplicateEffectsFound: number) => ({
+      id: "settlement-capacity",
+      measurements: {
+        duplicate_financial_effect_under_load: {
+          target: { allowed: false },
+          achieved: true,
+          duplicateEffectsFound,
+          examinedPopulation,
+          verdict: "MEASURED",
+        },
+      },
+    });
+
+    // The reviewed defect: 0 examined rows, "no duplicates" reported anyway.
+    expect(onceOnlyEvidenceFailures([measured(0, 0)]).join(" ")).toMatch(/empty population is not evidence/);
+    // A real population with no duplicate is the pass case.
+    expect(onceOnlyEvidenceFailures([measured(120, 0)])).toEqual([]);
+    // A duplicate effect must fail regardless of population size.
+    expect(onceOnlyEvidenceFailures([measured(120, 1)]).join(" ")).toMatch(/duplicate financial effects found/);
+    // An unmeasured assertion proves nothing either.
+    const notMeasured = measured(120, 0);
+    notMeasured.measurements.duplicate_financial_effect_under_load.achieved = null as unknown as boolean;
+    notMeasured.measurements.duplicate_financial_effect_under_load.verdict = "NOT_MEASURED";
+    expect(onceOnlyEvidenceFailures([notMeasured]).join(" ")).toMatch(/not measured/);
+    // And a report that never ran the assertion cannot claim it.
+    expect(onceOnlyEvidenceFailures([]).join(" ")).toMatch(/no run carries/);
+  });
+});
+
+describe("load harness once-only stake-effect rule", () => {
+  // Regression guard for the defect found in review round 2 (B1): the assertion
+  // filtered its population to `state === "CONFIRMED"` while the settlement
+  // driver had already moved those Orders to SETTLED, so the duplicate/missing
+  // counters were 0-over-zero and read as a pass.
+  const stakeEffectModule = "../../tools/load-harness/lib/stake-effect.mjs";
+
+  it("examines a settled population instead of reporting zero over zero", async () => {
+    const { evaluateStakeEffectOnceOnly } = await import(stakeEffectModule);
+    const orders = [
+      { id: "order-a", state: "SETTLED" },
+      { id: "order-b", state: "SETTLED" },
+      { id: "order-c", state: "CONFIRMED" },
+    ];
+    const result = evaluateStakeEffectOnceOnly({
+      orders,
+      stakeCommits: orders.map((order) => ({ businessTransactionId: order.id })),
+      manifestOrderIds: ["order-a", "order-b", "order-c"],
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.checks.stakeEffectExaminedPopulation).toBe(3);
+    expect(result.checks.ordersMissingStakeEffect).toBe(0);
+    expect(result.checks.ordersWithDuplicateStakeEffect).toBe(0);
+    expect(result.checks.duplicateFinancialEffectsFound).toBe(0);
+  });
+
+  it("fails when the examined population is empty, whatever the state histogram says", async () => {
+    const { evaluateStakeEffectOnceOnly } = await import(stakeEffectModule);
+    const nothingExamined = evaluateStakeEffectOnceOnly({ orders: [], stakeCommits: [] });
+    expect(nothingExamined.failures.join(" ")).toMatch(/examined 0 Bet Orders/);
+
+    const onlyUncommitted = evaluateStakeEffectOnceOnly({
+      orders: [{ id: "order-quoted", state: "QUOTED" }],
+      stakeCommits: [],
+    });
+    expect(onlyUncommitted.checks.stakeEffectExaminedPopulation).toBe(0);
+    expect(onlyUncommitted.failures.join(" ")).toMatch(/empty population/);
+    // A QUOTED Order is not "missing a stake" — it simply has not been committed.
+    expect(onlyUncommitted.checks.ordersMissingStakeEffect).toBe(0);
+  });
+
+  it("detects a duplicate stake effect on an Order created by the live load", async () => {
+    const { evaluateStakeEffectOnceOnly } = await import(stakeEffectModule);
+    const result = evaluateStakeEffectOnceOnly({
+      orders: [{ id: "live-order", state: "CONFIRMED" }],
+      stakeCommits: [{ businessTransactionId: "live-order" }, { businessTransactionId: "live-order" }],
+    });
+    expect(result.checks.ordersWithDuplicateStakeEffect).toBe(1);
+    expect(result.checks.duplicateFinancialEffectsFound).toBe(1);
+    expect(result.failures.join(" ")).toMatch(/more than one stake financial transaction/);
+  });
+
+  it("reports an Order in a stake-committed state with no stake effect, and duplicate refunds", async () => {
+    const { evaluateStakeEffectOnceOnly } = await import(stakeEffectModule);
+    const result = evaluateStakeEffectOnceOnly({
+      orders: [{ id: "order-missing", state: "SETTLED" }],
+      stakeCommits: [],
+      refunds: [{ businessTransactionId: "order-missing:refund" }, { businessTransactionId: "order-missing:refund" }],
+    });
+    expect(result.checks.ordersMissingStakeEffect).toBe(1);
+    expect(result.checks.ordersWithDuplicateRefundEffect).toBe(1);
+    expect(result.failures.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("fails when the manifest population is not inside the examined database", async () => {
+    const { evaluateStakeEffectOnceOnly } = await import(stakeEffectModule);
+    const result = evaluateStakeEffectOnceOnly({
+      orders: [{ id: "some-other-order", state: "CONFIRMED" }],
+      stakeCommits: [{ businessTransactionId: "some-other-order" }],
+      manifestOrderIds: ["seeded-order"],
+    });
+    expect(result.checks.manifestOrdersMissingFromScope).toBe(1);
+    expect(result.failures.join(" ")).toMatch(/wrong database/);
+  });
 });
 
 describe("load harness packaging", () => {
