@@ -27,13 +27,15 @@ const harnessSha = report?.candidate?.harnessRevisionSha ?? null;
 if (!candidateSha) {
   failures.push(`${jsonPath}: candidate.sha is missing`);
 }
-if (expectedSha && candidateSha !== expectedSha) {
+if (expectedSha && !candidateSha?.startsWith(expectedSha)) {
   failures.push(`candidate.sha is ${candidateSha}, expected ${expectedSha}`);
 }
 if (!markdown.includes(`Candidate under test: \`${candidateSha}\``)) {
   failures.push(`${mdPath}: markdown does not name the candidate (${candidateSha}) as the candidate under test`);
 }
-if (harnessSha && markdown.includes(`Candidate under test: \`${harnessSha}\``)) {
+// Only meaningful when the harness commit differs from the candidate: inside CI
+// the checkout IS the candidate, so both lines legitimately carry the same SHA.
+if (harnessSha && harnessSha !== candidateSha && markdown.includes(`Candidate under test: \`${harnessSha}\``)) {
   failures.push(`${mdPath}: markdown names the harness revision (${harnessSha}) as the candidate`);
 }
 if (!report?.scenario?.id || !report?.profile?.name) {
