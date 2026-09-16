@@ -26,7 +26,10 @@ import {
   DrawRuleError,
   LotteryDrawService,
 } from "../../../src/contexts/lottery/application/lottery-draw.service";
-import { DrawCancellationOrchestrator } from "../../../src/contexts/lottery/application/draw-cancellation-orchestrator";
+import {
+  DrawCancellationOrchestrator,
+  type CompleteDrawCancellationResult,
+} from "../../../src/contexts/lottery/application/draw-cancellation-orchestrator";
 import { DrawRefundError } from "../../../src/contexts/lottery/application/draw-refund.port";
 import {
   type DrawLifecycleCommand,
@@ -214,7 +217,7 @@ export class AdminDrawController {
           expectedVersion,
           actor: admin,
         });
-        return result;
+        return serializeCancellationResult(result);
       }
       return await this.draws.transition({
         id: id.trim(),
@@ -255,6 +258,52 @@ export class AdminDrawController {
       throw mapDrawError(error);
     }
   }
+}
+
+/**
+ * The HTTP shape of a completed Draw cancellation.
+ *
+ * `DrawCancellationOrchestrator` reports `refundedStakeMinor` as a bigint. JSON
+ * has no integer of that width, and Express cannot serialise a bigint at all:
+ * returning the orchestrator result directly makes the route answer 500 *after*
+ * the refund has already run. The amount therefore crosses the HTTP boundary as
+ * a minor-unit decimal string, exactly like every other Lottify amount
+ * (see the response DTOs in member-withdrawal.controller.ts).
+ */
+interface DrawCancellationResponse {
+  readonly draw: {
+    readonly id: string;
+    readonly state: string;
+    readonly version: number;
+  };
+  readonly refund: {
+    readonly considered: number;
+    readonly refunded: number;
+    readonly alreadyRefunded: number;
+    readonly outstanding: number;
+    readonly refundedStakeMinor: string;
+    readonly obligationsSatisfied: boolean;
+  };
+}
+
+function serializeCancellationResult(
+  result: CompleteDrawCancellationResult,
+): DrawCancellationResponse {
+  return {
+    draw: {
+      id: result.draw.id,
+      state: result.draw.state,
+      version: result.draw.version,
+    },
+    refund: {
+      considered: result.refund.considered,
+      refunded: result.refund.refunded,
+      alreadyRefunded: result.refund.alreadyRefunded,
+      outstanding: result.refund.outstanding,
+      refundedStakeMinor: result.refund.refundedStakeMinor.toString(),
+      obligationsSatisfied: result.refund.obligationsSatisfied,
+    },
+  };
 }
 
 function requiredAdmin(request: AdminAuthenticatedRequest) {
