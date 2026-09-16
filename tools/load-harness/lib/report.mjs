@@ -117,8 +117,14 @@ export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, 
   const coverage = coverageSummary(scenario.targets, runs);
   lines.push(
     `- Ticket 13 target coverage: **${coverage.driverBacked}/${coverage.totalTargets} driver-backed** rows` +
+      ` · **${coverage.unproven.length}/${coverage.totalTargets} still unproven** (no achieved value: ${coverage.unproven.join(", ") || "none"})` +
       ` · ${coverage.declaredUnmeasured.length} of ${coverage.totalTargets} declared NOT_MEASURED with a reason` +
       ` (${coverage.declaredUnmeasured.join(", ") || "none"}) · ${rows.length} rows in §1`,
+  );
+  lines.push(
+    "  - `driver-backed` counts rows a driver produced, and a driver can produce a NOT_MEASURED row " +
+      "(the payment-events driver does, because the candidate exposes no authenticated ingress), so the " +
+      "unproven count — not the driver-backed count — is the number of Ticket 13 targets with no achieved value.",
   );
   // `missing` is only ever non-empty if the pre-write coverage guard was bypassed.
   if (coverage.missing.length > 0) {
@@ -217,6 +223,41 @@ export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, 
   return lines.join("\n");
 }
 
+/**
+ * Extra soundness checks evaluated BEFORE the report is written to disk, using
+ * the same rules the CI binding step applies (`scripts/assert-report.mjs`).
+ *
+ * Why before, and not only after: the report path is deterministic
+ * (`load-harness-<scenario>-<profile>-<candidate>.{md,json}`), so a re-run of the
+ * same profile + candidate overwrites the artifact. Review round 4 showed that a
+ * re-run which failed to reach its load database (its `LOAD_DATABASE_URL` was not
+ * exported, so it fell back to the shared dev URL) still wrote a report over the
+ * previously delivered one. Its content was all-NOT_MEASURED, so the CI check
+ * would have rejected it — but by then the delivered artifact was gone from disk.
+ * Refusing to write an unsound report keeps the last sound artifact in place.
+ *
+ * The checks:
+ *  - both halves must name the candidate under test (or the artifact is not
+ *    bound to the thing it claims to measure);
+ *  - a report that carries assertion-derived settlement evidence must also carry
+ *    non-empty once-only financial-effect evidence. A run set with no settlement
+ *    evidence at all (`--only member-sessions`, say) is a partial drill and is
+ *    not blocked here.
+ */
+export function reportWriteBlockers({ markdown, candidateSha, runs }) {
+  const failures = [];
+  if (candidateSha && markdown && !markdown.includes(`Candidate under test: \`${candidateSha}\``)) {
+    failures.push(`the markdown report does not name ${candidateSha} as the candidate under test`);
+  }
+  const carriesSettlementEvidence = (runs ?? []).some(
+    (run) => run?.measurements?.settlement_capacity_bet_lines !== undefined,
+  );
+  if (carriesSettlementEvidence) {
+    failures.push(...onceOnlyEvidenceFailures(runs));
+  }
+  return failures;
+}
+
 export function writeReport({ outDir, scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha = null, harnessRevisionSha = null }) {
   // Refuse to write a report that does not account for every Ticket 13 target:
   // a missing row is the round-3 C1 defect (the headline counter then understates
@@ -228,6 +269,13 @@ export function writeReport({ outDir, scenario, profile, fingerprint, likeness, 
   mkdirSync(outDir, { recursive: true });
   const jsonPath = `${base}.json`;
   const mdPath = `${base}.md`;
+  // Build and validate both halves BEFORE touching the filesystem: nothing is
+  // written when the report would be rejected (review round 4 clobber note).
+  const markdown = buildMarkdownReport({ scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha, harnessRevisionSha });
+  const blockers = reportWriteBlockers({ markdown, candidateSha: candidateSha ?? fingerprint.candidate.sha ?? null, runs });
+  if (blockers.length > 0) {
+    throw new Error(`the report would not satisfy the binding checks, so it was not written:\n  - ${blockers.join("\n  - ")}`);
+  }
   const payload = {
     scenario: { id: scenario.id, version: scenario.version, sourceOfTruth: scenario.sourceOfTruth, card: scenario.card, mix: scenario.mix, burst: scenario.burst },
     profile: { name: profile.name, claimsTarget: profile.claimsTarget, purpose: profile.purpose },
@@ -246,10 +294,6 @@ export function writeReport({ outDir, scenario, profile, fingerprint, likeness, 
     phase: "draft",
   };
   writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  writeFileSync(
-    mdPath,
-    buildMarkdownReport({ scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha, harnessRevisionSha }),
-    "utf8",
-  );
+  writeFileSync(mdPath, markdown, "utf8");
   return { jsonPath, mdPath };
 }

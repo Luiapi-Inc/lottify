@@ -32,9 +32,18 @@ database created for the run.
   and `scripts/assert-report.mjs` fails the CI check if one disappears. `critical_queue_lag`
   is the current example (queue/outbox lag has no metric family yet — card
   `t_79b28bfc`): it is reported as unmeasured, not omitted. The header line
-  `Ticket 13 target coverage: N/11 driver-backed` and the §1 table therefore always
-  account for all 11 targets, and the verdict counter can never understate the
-  unproven set.
+  `Ticket 13 target coverage: N/11 driver-backed · M/11 still unproven` and the §1
+  table therefore always account for all 11 targets, and the verdict counter can
+  never understate the unproven set. `unproven` is the number that matters: a
+  driver can emit a `NOT_MEASURED` row (the payment-events driver does, because the
+  candidate exposes no authenticated ingress), so `driver-backed` alone reads as if
+  only the non-driver-backed target were unproven.
+- **A report is only written when it would pass the binding check.** `writeReport()`
+  validates both halves before touching the filesystem and refuses to write a
+  report that would fail `assert-report.mjs` (missing target row, unnamed candidate,
+  or settlement evidence without non-empty once-only evidence). The output path is
+  deterministic per profile + candidate, so without that guard a failed re-run would
+  overwrite the artifact it was trying to reproduce.
 
 ## Scenario identity
 
@@ -133,7 +142,7 @@ than whatever a working copy points at.
 | `read-sessions` | 5,000 concurrent sessions, read p95/p99, error rate | ramps one authenticated session per seeded Member, keeps continuous `GET /api/v1/member/profile` traffic, samples established sessions every second |
 | `quote-confirm` | Quote/Confirm req/s + p95/p99, error rate, duplicate effect | drives `POST …/quotes` → `…/orders` → `…/orders/:id/confirm` with real Idempotency-Keys; every Nth cycle confirms so the mix matches the target rate ratio; replays sampled Confirms concurrently with the SAME key to probe duplicate effects |
 | `payment-events` | ≥200 payment/webhook events/s | discovers candidate ingress routes from the OpenAPI contract and drives one only when a caller names it with its signature header; otherwise `NOT_MEASURED` with the route inventory as evidence |
-| `settlement-capacity` | ≥100k Bet Lines / 10 min, idempotent resume, no Member-visible partial completion | closes the Draw, intakes + confirms the Result through the Admin commands, runs the Settlement command twice (resume), and polls `GET /api/v1/member/orders/:id/settlement` while the batch is in flight |
+| `settlement-capacity` | ≥100k Bet Lines / 10 min, idempotent resume, no Member-visible partial completion | closes the Draw, intakes + confirms the Result through the Admin commands, runs the Settlement command twice (resume), and polls `GET /api/v1/member/orders/:id/settlement` while the batch is in flight. A Member-visible partial completion is a 200 read that presents a final result (`outcome != null` or `authoritative = true`) while that same response's `batchState` is not `COMPLETED` — the candidate's contract makes an in-flight read report `authoritative: false, outcome: null`, which is *not* a violation. If the poller never observed the in-flight window, the target is `NOT_MEASURED` instead of a vacuous `true` |
 | `seed/assert-financial-effects.ts` | once-only financial effect, settlement scope | SQL over the whole dedicated load database: exactly one stake commit per Order in a stake-committed state (`CONFIRMED`/`SETTLED`/`CANCELLING`/`CANCELLED`), never two for any Order, no duplicate refund, exactly one settlement batch, no Order paid twice, every settlement row POSTED. An empty examined population is a failure, so the counters can never be 0-over-zero |
 
 ## Limits that must be stated in every report

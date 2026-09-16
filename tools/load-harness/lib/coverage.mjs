@@ -140,6 +140,30 @@ export function assertTargetCoverage(targets, runs) {
   }
 }
 
+/**
+ * Targets with no achieved value anywhere in the report — the set that is still
+ * unproven, whichever run produced the row. A target can be "driver-backed" and
+ * still have no achieved value (the payment-events driver emits its row as
+ * NOT_MEASURED because the candidate exposes no authenticated ingress), so
+ * "10/11 driver-backed" and "2 of 11 unproven" are both true at once and the
+ * header must print both numbers; otherwise the headline reads as if only the
+ * non-driver-backed target were unproven (review round 4 note).
+ */
+export function unprovenTargets(targets, runs) {
+  const keys = Object.keys(targets ?? {});
+  const proven = new Set();
+  for (const run of runs ?? []) {
+    for (const [metric, result] of Object.entries(run?.measurements ?? {})) {
+      const achieved = result?.achieved;
+      if (result?.verdict === "NOT_MEASURED" || achieved === null || achieved === undefined) continue;
+      for (const key of keys) {
+        if (metricCoversTarget(metric, key)) proven.add(key);
+      }
+    }
+  }
+  return keys.filter((key) => !proven.has(key));
+}
+
 /** Headline coverage numbers for the report header and the JSON payload. */
 export function coverageSummary(targets, runs) {
   const keys = Object.keys(targets ?? {});
@@ -167,10 +191,12 @@ export function coverageSummary(targets, runs) {
       perTarget[key] = { source: "MISSING" };
     }
   }
+  const unproven = unprovenTargets(targets, runs);
   return {
     totalTargets: keys.length,
     driverBacked: driverBacked.length,
     driverBackedTargets: driverBacked,
+    unproven,
     declaredUnmeasured,
     missing,
     perTarget,

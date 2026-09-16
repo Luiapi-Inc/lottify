@@ -284,6 +284,7 @@ if (shouldRun("settlement") && manifest?.settlement?.drawId) {
       winningCanonicalNumber: scenario.mix.canonicalNumber,
       scenario,
       claimsTarget: profile.claimsTarget,
+      partialCompletionSamples: manifest.settlement.partialCompletionSamples ?? [],
       memberTokens: manifest.settlement.memberTokens ?? [],
       memberOrderIds: manifest.settlement.memberOrderIds ?? [],
     }),

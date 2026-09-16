@@ -15,10 +15,172 @@
 //   2. idempotent resume: re-issuing the command returns the same COMPLETED batch
 //      and creates no second batch / no second financial effect
 //   3. no Member-visible partial completion: while the batch is in flight, the
-//      Member settlement read for sampled Orders never exposes a partial payout
+//      Member settlement read for sampled Orders never PRESENTS a financial
+//      result as final (see evaluateMemberVisiblePartialCompletion below) — and
+//      the check is reported as NOT_MEASURED when no in-flight read was observed,
+//      because a property nobody exercised cannot be certified.
 
 import { HttpClient, jsonHeaders, sleep } from "../lib/http-client.mjs";
 import { LatencyRecorder } from "../lib/stats.mjs";
+
+/**
+ * Ticket 13 requires that "partial completion is never Member-visible". What
+ * "Member-visible" means is defined by the candidate's own Member-facing
+ * contract, not by the harness: `MemberSettlementOutcomeBody`
+ * (apps/api/src/member-settlement.controller.ts:28-39,53-56) documents that
+ *
+ *   - `authoritative` is true ONLY when the owning batch has COMPLETED, and
+ *   - `outcome` is non-null only when the read is authoritative,
+ *   - an in-flight or failed batch reports `authoritative: false` and
+ *     "never exposes a partial financial outcome".
+ *
+ * So an in-flight read that returns `batchState: "POSTING"` with
+ * `authoritative: false, outcome: null` is the contract working as designed.
+ *
+ * Review round 4 finding R1: the first version of this check called ANY 200 whose
+ * batchState matched /PAYOUT|REVERS|POSTING|COMMITTING|CALCULATING/ a
+ * Member-visible partial completion. That contradicted the candidate's own
+ * contract — it reported the candidate as violating Ticket 13 while the observed
+ * payload (`outcome: null, authoritative: false, batchState: "POSTING"`) was
+ * exactly the non-visible state the contract promises.
+ *
+ * A violation is now a 200 read that PRESENTS a financial result as final — i.e.
+ * `authoritative === true` or `outcome !== null` — while the batchState reported
+ * in that same response is not "COMPLETED". That happens if either
+ *   (a) the read exposes an outcome while the batch is still in flight (a Member
+ *       can see a partial settlement result), or
+ *   (b) the read claims authority over a batch that is not COMPLETED (so a
+ *       partial result would be presented as final) — a contract violation in
+ *       the candidate itself.
+ *
+ * `exercised` says whether the property was actually put to the test: a poller
+ * that only ever saw COMPLETED reads certifies nothing, so the caller must report
+ * NOT_MEASURED rather than a vacuous success.
+ */
+export function evaluateMemberVisiblePartialCompletion(observations = []) {
+  const violations = [];
+  let inFlightObservations = 0;
+  let authoritativeObservations = 0;
+  let unreadableObservations = 0;
+  for (const observation of observations) {
+    if (observation?.status !== 200) continue;
+    const batchState = observation.batchState ?? null;
+    const outcome = observation.outcome;
+    const authoritative = observation.authoritative === true;
+    if (observation.bodyParsed === false || (observation.batchState === null && observation.authoritative === null)) {
+      unreadableObservations += 1;
+      continue;
+    }
+    if (batchState === "COMPLETED") {
+      if (authoritative) authoritativeObservations += 1;
+      continue;
+    }
+    const exposesOutcome = outcome !== null && outcome !== undefined;
+    if (authoritative || exposesOutcome) {
+      violations.push({
+        at: observation.at ?? null,
+        orderId: observation.orderId ?? null,
+        batchState,
+        outcome: outcome ?? null,
+        authoritative,
+        reason: exposesOutcome
+          ? "the read exposes a settlement outcome while its batch is not COMPLETED"
+          : "the read claims authority (authoritative=true) while its batch is not COMPLETED",
+      });
+      continue;
+    }
+    inFlightObservations += 1;
+  }
+  return {
+    violations,
+    violationCount: violations.length,
+    inFlightObservations,
+    authoritativeObservations,
+    unreadableObservations,
+    exercised: inFlightObservations > 0,
+  };
+}
+
+/**
+ * Aligned (orderId, memberToken) pairs for the Member-visible poll.
+ *
+ * The Member-facing read only answers for the Order's own Member, and it answers
+ * `404 BATCH_NOT_FOUND` both for "wrong Member" and for "no settlement row yet" —
+ * so a mismatched pair silently produces empty evidence. Manifests seeded from
+ * now on carry `partialCompletionSamples`, built as aligned pairs by the seed;
+ * the older `memberTokens` / `memberOrderIds` slices are accepted as a fallback
+ * (and flagged, because they are not index-aligned).
+ */
+export function resolvePartialCompletionSamples({ partialCompletionSamples = [], memberTokens = [], memberOrderIds = [] }) {
+  const aligned = (partialCompletionSamples ?? []).filter((sample) => sample?.orderId && sample?.memberToken);
+  if (aligned.length > 0) return { samples: aligned, fellBack: false };
+  const samples = (memberOrderIds ?? [])
+    .map((orderId, index) => ({ orderId, memberToken: memberTokens?.[index % Math.max(memberTokens.length, 1)] ?? null }))
+    .filter((sample) => sample.orderId && sample.memberToken);
+  return { samples, fellBack: samples.length > 0 };
+}
+
+/**
+ * Starts a sampler that reads the Member-facing settlement surface while a batch
+ * runs.
+ *
+ * Two deliberate choices, so the property check has real evidence behind it:
+ *  - it re-reads a bounded window of the seeded Orders (`partialSampleWidth`)
+ *    instead of walking all of them once. With 200 seeded Orders and a ~15
+ *    sample budget, a single pass would land on one in-flight read at most;
+ *    re-reading a small window gives several in-flight observations.
+ *  - it keeps sampling for `postBatchGraceMs` after the settlement call returns,
+ *    so the post-completion surface (batchState COMPLETED, authoritative true) is
+ *    observed too. Without that, a poll that only ever saw in-flight reads could
+ *    not tell "the surface never exposes a final result" apart from "the surface
+ *    never exposes anything".
+ */
+function startPartialCompletionPoller({
+  client,
+  samples,
+  partialPollMs,
+  partialObservations,
+  partialSampleWidth = 10,
+  postBatchGraceMs = 2000,
+  stopState = { stop: false, batchReturnedAt: null },
+}) {
+  const width = Math.max(1, Math.min(samples.length, partialSampleWidth));
+  const promise = (async () => {
+    if (samples.length === 0) return;
+    while (!stopState.stop) {
+      const index = partialObservations.length % width;
+      const { orderId, memberToken } = samples[index];
+      const response = await client.request({
+        method: "GET",
+        path: `/api/v1/member/orders/${encodeURIComponent(orderId)}/settlement`,
+        headers: jsonHeaders(memberToken),
+      });
+      const body = safeJson(response.body);
+      partialObservations.push({
+        at: new Date().toISOString(),
+        orderId,
+        status: response.status,
+        // Raw contract fields of MemberSettlementOutcomeBody, recorded verbatim so
+        // the property check reads the payload rather than a regex over it.
+        batchState: body?.batchState ?? body?.state ?? null,
+        outcome: body?.outcome ?? null,
+        authoritative: body?.authoritative ?? null,
+        bodyParsed: body !== null,
+        body: response.body.slice(0, 160),
+      });
+      await sleep(partialPollMs);
+      if (stopState.batchReturnedAt !== null && Date.now() - stopState.batchReturnedAt >= postBatchGraceMs) break;
+    }
+  })();
+  return {
+    // The loop ends by itself once `postBatchGraceMs` has elapsed since
+    // `stopState.batchReturnedAt` was set, so the caller waits for it instead of
+    // flipping a stop flag that would cut the grace window short.
+    waitForGrace: async () => {
+      await promise;
+    },
+  };
+}
 
 export async function runSettlementCapacity({
   baseUrl,
@@ -31,6 +193,7 @@ export async function runSettlementCapacity({
   winningCanonicalNumber = "42",
   scenario,
   claimsTarget,
+  partialCompletionSamples = [],
   memberTokens = [],
   memberOrderIds = [],
   partialPollMs = 250,
@@ -103,41 +266,47 @@ export async function runSettlementCapacity({
 
   // --- 3. Member-visible partial-completion poller -------------------------
   const partialObservations = [];
-  let polling = true;
-  const partialPoller = (async () => {
-    if (memberTokens.length === 0 || memberOrderIds.length === 0) return;
-    while (polling) {
-      const index = partialObservations.length % memberOrderIds.length;
-      const orderId = memberOrderIds[index];
-      const token = memberTokens[index % memberTokens.length];
-      const response = await client.request({
-        method: "GET",
-        path: `/api/v1/member/orders/${encodeURIComponent(orderId)}/settlement`,
-        headers: jsonHeaders(token),
-      });
-      partialObservations.push({
-        at: new Date().toISOString(),
-        orderId,
-        status: response.status,
-        state: safeJson(response.body)?.batchState ?? safeJson(response.body)?.state ?? null,
-        body: response.body.slice(0, 160),
-      });
-      await sleep(partialPollMs);
-    }
-  })();
+  const pollState = { stop: false, batchReturnedAt: null };
+  const partialSamples = resolvePartialCompletionSamples({ partialCompletionSamples, memberTokens, memberOrderIds });
+  if (partialSamples.fellBack) {
+    notes.push(
+      "the manifest carries no aligned partial-completion samples, so the poller paired memberTokens[i] with memberOrderIds[i]. " +
+        "Those two manifest slices are not index-aligned (the seed creates several Orders per Member), and a mismatched pair answers " +
+        "404 BATCH_NOT_FOUND, which is indistinguishable from an Order that has no settlement row yet — treat the Member-visible " +
+        "partial-completion read count as unreliable for such a manifest.",
+    );
+  }
+  const partialPoller = startPartialCompletionPoller({
+    client,
+    samples: partialSamples.samples,
+    partialPollMs,
+    partialObservations,
+    stopState: pollState,
+  });
 
   // --- 1. Throughput -------------------------------------------------------
-  const first = await client.request({
-    method: "POST",
-    path: `/api/v1/admin/draws/${encodeURIComponent(drawId)}/settlement`,
-    headers: jsonHeaders(adminToken, { "idempotency-key": `settlement-${drawId}-first` }),
-  });
+  // The poller is awaited in the finally-style flow below: even if the Settlement
+  // command throws, the batch-returned timestamp is set so the sampler terminates
+  // on its own instead of polling forever.
+  let first = null;
+  let firstError = null;
+  try {
+    first = await client.request({
+      method: "POST",
+      path: `/api/v1/admin/draws/${encodeURIComponent(drawId)}/settlement`,
+      headers: jsonHeaders(adminToken, { "idempotency-key": `settlement-${drawId}-first` }),
+    });
+  } catch (error) {
+    firstError = error;
+  }
+  // Keep the poller alive for a short grace window after the batch call returned,
+  // so the post-completion surface is observed as well (see the poller comment).
+  pollState.batchReturnedAt = Date.now();
+  await partialPoller.waitForGrace();
+  if (firstError) throw firstError;
   latency.record(first.ms);
   const firstBody = safeJson(first.body);
   const firstOk = first.status >= 200 && first.status < 300;
-
-  polling = false;
-  await partialPoller;
 
   // --- 2. Idempotent resume ------------------------------------------------
   const second = await client.request({
@@ -174,15 +343,24 @@ export async function runSettlementCapacity({
     linesForVerdict >= Math.min(betLines, target.min_bet_lines) &&
     withinBudget &&
     firstOk;
-  const partialCompletionObserved = partialObservations.some((observation) => {
-    const state = observation.state;
-    return (
-      observation.status === 200 &&
-      state !== null &&
-      state !== "COMPLETED" &&
-      /PAYOUT|REVERS|POSTING|COMMITTING|CALCULATING/.test(String(state))
-    );
-  });
+  const partialCompletion = evaluateMemberVisiblePartialCompletion(partialObservations);
+  const partialCompletionObserved = partialCompletion.violationCount > 0;
+  // The property is only evidence if the poller actually observed the in-flight
+  // window. A batch that was already COMPLETED on every sample proves nothing, so
+  // that case is reported as NOT_MEASURED instead of a vacuous `true` (R1).
+  const partialCompletionExercised = firstOk && partialCompletion.exercised;
+  const partialCompletionDefinition =
+    "violation = a 200 read of GET /api/v1/member/orders/:id/settlement that presents a final financial result " +
+    "(outcome != null or authoritative = true) while the batchState in that same response is not COMPLETED " +
+    "(contract: apps/api/src/member-settlement.controller.ts:37,55 — authoritative is true only once the batch COMPLETED)";
+  const partialCompletionReason = !firstOk
+    ? `not evaluated: the Settlement command did not succeed; ${partialCompletionDefinition}`
+    : !partialCompletion.exercised
+      ? `not exercised: the poller saw ${partialObservations.length} read(s) but none in flight (no non-COMPLETED sample), ` +
+        `so no read could have exposed a partial result; ${partialCompletionDefinition}`
+      : `${partialCompletionDefinition}; exercised on ${partialCompletion.inFlightObservations} in-flight read(s) ` +
+        `(authoritative=false, outcome=null) and ${partialCompletion.authoritativeObservations} COMPLETED read(s); ` +
+        `violations: ${partialCompletion.violationCount}`;
 
   client.close();
 
@@ -207,7 +385,22 @@ export async function runSettlementCapacity({
       sameBatchIdOnResume: sameBatch,
       resumedState,
       memberVisiblePartialCompletionObservations: partialObservations.slice(0, 200),
+      memberVisiblePartialCompletionObservedStates: partialObservations.reduce((accumulator, observation) => {
+        const key =
+          observation.status === 200
+            ? `${observation.batchState ?? "batchState:null"}${observation.authoritative === true ? " (authoritative)" : ""}${
+                observation.outcome === null ? " (outcome:null)" : ` (outcome:${observation.outcome})`
+              }`
+            : `HTTP ${observation.status}`;
+        accumulator[key] = (accumulator[key] ?? 0) + 1;
+        return accumulator;
+      }, {}),
       memberVisiblePartialCompletionFound: partialCompletionObserved,
+      memberVisiblePartialCompletionExercised: partialCompletion.exercised,
+      memberVisiblePartialCompletionInFlightReads: partialCompletion.inFlightObservations,
+      memberVisiblePartialCompletionAuthoritativeReads: partialCompletion.authoritativeObservations,
+      memberVisiblePartialCompletionViolations: partialCompletion.violations.slice(0, 50),
+      memberVisiblePartialCompletionDefinition: partialCompletionDefinition,
     },
     measurements: {
       settlement_capacity_bet_lines: {
@@ -230,15 +423,26 @@ export async function runSettlementCapacity({
       },
       settlement_no_member_visible_partial_completion: {
         target: { required: true },
-        achieved: firstOk ? !partialCompletionObserved : null,
-        achievedMeaning: "no Member-visible partial completion was observed (true) or one was (false)",
+        achieved: partialCompletionExercised ? !partialCompletionObserved : null,
+        achievedMeaning:
+          "the required property HOLDS — no read presented a final result while its batch was not COMPLETED (true) or one did (false); null means the property was not exercised",
+        definition: partialCompletionDefinition,
+        exercisedOn: {
+          inFlightReads: partialCompletion.inFlightObservations,
+          authoritativeReads: partialCompletion.authoritativeObservations,
+          unreadableReads: partialCompletion.unreadableObservations,
+        },
+        violations: partialCompletion.violations.slice(0, 50),
+        reason: partialCompletionReason,
         verdict: !firstOk
           ? "NOT_MEASURED"
-          : claimsTarget
-            ? partialCompletionObserved
-              ? "FAIL"
-              : "PASS"
-            : "MEASURED",
+          : !partialCompletion.exercised
+            ? "NOT_MEASURED"
+            : claimsTarget
+              ? partialCompletionObserved
+                ? "FAIL"
+                : "PASS"
+              : "MEASURED",
       },
       settlement_within_budget_seconds: {
         target: { max_seconds: budgetSeconds },

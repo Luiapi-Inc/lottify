@@ -60,7 +60,12 @@ failures.push(...targetCoverageFailures(scenarioTargets, report.runs ?? []));
 
 // The §6 reproduction block must be runnable as printed (review round 3 finding
 // C2): boot-api.sh accepts --port/--stop only, so a printed `--base-url` fails.
-if (/(^|\s)boot-api\.sh\s+--base-url/.test(markdown)) {
+// Review round 4 finding R2: the first pattern required whitespace before
+// `boot-api.sh`, but the generator prints a path
+// (`bash tools/load-harness/scripts/boot-api.sh …`), so the guard never matched
+// the artifact it was written to protect. Match the script name at a path or a
+// word boundary instead.
+if (/(^|[\s/])boot-api\.sh\s+--base-url/.test(markdown)) {
   failures.push(`${mdPath}: the reproduction block boots the API with --base-url, which boot-api.sh rejects (it takes --port)`);
 }
 

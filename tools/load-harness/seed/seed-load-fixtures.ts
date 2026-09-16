@@ -311,6 +311,15 @@ async function main(): Promise<void> {
     const settlementDraw = await openDraw(draws, `LHS${profile}`.toUpperCase(), "2099-11-01");
     const orderIds: string[] = [];
     const memberTokens: string[] = [];
+    // One (orderId, token) pair per Member, taken from the Member's FIRST Order in
+    // this dataset. The Member-facing settlement read only answers for the Order's
+    // own Member (any other token gets BATCH_NOT_FOUND, which is indistinguishable
+    // from "this Order has no settlement row yet"), so the poller needs pairs that
+    // are actually aligned. The previous manifest exposed `memberTokens` and
+    // `memberOrderIds` as two slices of different lengths, which are NOT aligned:
+    // the Orders are created per Member (all of Member 1's Orders first), while the
+    // tokens were one per Member.
+    const partialCompletionSamples: Array<{ orderId: string; memberToken: string }> = [];
     const perMember = Math.max(1, Math.ceil(settlementOrders / Math.max(sessions.length, 1)));
     let createdCount = 0;
     const startedOrders = Date.now();
@@ -344,6 +353,9 @@ async function main(): Promise<void> {
           idempotencyKey: `lhc-${randomUUID()}`,
         });
         orderIds.push(order.id);
+        if (index === 0 && partialCompletionSamples.length < 10) {
+          partialCompletionSamples.push({ orderId: order.id, memberToken: session.token });
+        }
         createdCount += 1;
       }
       memberTokens.push(session.token);
@@ -370,6 +382,9 @@ async function main(): Promise<void> {
       betLineTarget: settlementOrders,
       memberTokens: memberTokens.slice(0, 10),
       memberOrderIds: orderIds.slice(0, 10),
+      // Aligned (orderId, memberToken) pairs for the Member-visible partial-completion
+      // poll: the driver prefers these over the unaligned slices above.
+      partialCompletionSamples,
       allOrderIds: orderIds,
       confirmedOrderCount: confirmedCount,
     };

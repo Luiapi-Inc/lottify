@@ -262,6 +262,13 @@ export async function runQuoteConfirm({
       critical_server_error_rate: {
         target: { max: targets.critical_server_error_rate.max },
         achieved: combineErrorRates(quoteSnapshot, confirmSnapshot),
+        // §1 must carry the scope itself: without it a reader of the table (or of
+        // the release gate that consumes this row) would take the number as
+        // covering every critical surface, while it covers the Quote/Confirm
+        // critical path only (review round 4 note).
+        reason:
+          "scope: Quote/Confirm critical path only (quote + confirm failures over quote + confirm requests); " +
+          "read-path errors are reported separately as read_error_rate by the member-sessions driver",
         verdict: errorVerdict(combineErrorRates(quoteSnapshot, confirmSnapshot), targets, claimsTarget),
       },
     },
