@@ -74,7 +74,10 @@ export function onceOnlyEvidenceFailures(runs) {
       );
     }
     if (measurement.duplicateEffectsFound !== 0) {
-      failures.push(`run ${run.id}: duplicate financial effects found (${measurement.duplicateEffectsFound})`);
+      const found = measurement.duplicateEffectsFound;
+      failures.push(
+        `run ${run.id}: duplicate financial effects found (${found === undefined || found === null ? "not reported by this report" : found})`,
+      );
     }
   }
   return failures;
