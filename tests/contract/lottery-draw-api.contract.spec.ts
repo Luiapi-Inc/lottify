@@ -24,7 +24,7 @@ import { IdempotencyService } from "../../src/platform/idempotency/idempotency.s
  * This suite owns the *published shape* of the Admin Draw transition route and
  * the mapping of the cancellation orchestrator's refusals onto HTTP. It runs
  * without a database on purpose: the domain behaviour is proved against real
- * PostgreSQL by tests/integration/admin-draw-cancellation-api.integration.spec.ts
+ * PostgreSQL by tests/integration/draw-cancellation-orchestrator.integration.spec.ts
  * and tests/integration/draw-confirm-cancel-race.integration.spec.ts, while this
  * file pins what an API consumer actually sees (status, envelope, field types).
  */
