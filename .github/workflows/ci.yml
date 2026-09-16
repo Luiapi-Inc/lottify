@@ -220,3 +220,100 @@ jobs:
           for name in lottify-api lottify-worker lottify-member lottify-admin; do
             docker logs "$name" 2>/dev/null || true
           done
+
+  # Proves the Ticket 13 load harness runs end to end on every change (GH #91).
+  # This is PLUMBING evidence only: the smoke profile never claims the Ticket 13
+  # targets (claimsTarget=false), so no capacity number can ever come out of CI.
+  # The capacity run is a release-candidate step on the approved production-like
+  # environment; see docs/implementation/load-harness-scenario-and-environment.md.
+  load-harness-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: lottify
+          POSTGRES_PASSWORD: lottify
+          POSTGRES_DB: lottify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lottify -d lottify"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql://lottify:lottify@127.0.0.1:5432/lottify?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+      JWT_ACCESS_SECRET: "01234567890123456789012345678901"
+      ADMIN_MFA_ENCRYPTION_KEY: "ci-load-harness-admin-mfa-key-0123456789"
+      OTP_PROVIDER: console
+      RUN_INTEGRATION_TESTS: "0"
+      API_PORT: "19199"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.20.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma:generate
+      - run: pnpm prisma:migrate:deploy
+      - run: pnpm openapi:generate
+      - name: Create the dedicated load database from the candidate migrations
+        run: |
+          set -euo pipefail
+          LOAD_DATABASE_URL="$(bash tools/load-harness/scripts/scratch-db.sh --suffix ci | sed -n 's/^LOAD_DATABASE_URL=//p')"
+          if [ -z "$LOAD_DATABASE_URL" ]; then echo "scratch-db.sh did not report a load URL"; exit 1; fi
+          echo "LOAD_DATABASE_URL=$LOAD_DATABASE_URL" >> "$GITHUB_ENV"
+      - name: Seed the smoke fixtures
+        run: |
+          pnpm load:seed -- --profile smoke --members 10 --settlement-orders 40 \
+            --manifest .hermes/evidence/release/w5-raw-load/load-manifest-ci.json \
+            --database-url "$LOAD_DATABASE_URL"
+      - name: Boot the candidate API against the load database
+        run: bash tools/load-harness/scripts/boot-api.sh --port "$API_PORT"
+        env:
+          LOAD_DATABASE_URL: ${{ env.LOAD_DATABASE_URL }}
+      - name: Run the smoke scenario
+        run: |
+          pnpm load:run -- --profile smoke --base-url "http://127.0.0.1:${API_PORT}" \
+            --manifest .hermes/evidence/release/w5-raw-load/load-manifest-ci.json \
+            --database-url "$LOAD_DATABASE_URL"
+      - name: Assert the harness produced a bound report
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse --short=12 HEAD)"
+          report=".hermes/evidence/release/load-harness-ticket13-capacity-v1-smoke-${sha}.json"
+          test -f "$report" || { echo "missing report $report"; ls .hermes/evidence/release; exit 1; }
+          grep -q '"settlement_idempotent_resume"' "$report" || { echo "settlement scenario did not run"; exit 1; }
+          grep -q 'duplicate_financial_effect_under_load' "$report" || { echo "duplicate-effect assertion missing"; exit 1; }
+          # Both halves of the artifact must name the same candidate SHA.
+          node tools/load-harness/scripts/assert-report.mjs "$report" "$sha"
+      - name: API log on failure
+        if: failure()
+        run: tail -100 ".hermes/evidence/release/w5-raw-load/api-${API_PORT}.log" || true
+      - name: Stop the API
+        if: always()
+        run: bash tools/load-harness/scripts/boot-api.sh --port "$API_PORT" --stop
+      - name: Upload load harness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-harness-smoke-${{ github.sha }}
+          path: .hermes/evidence/release/load-harness-*.json
+          if-no-files-found: warn
+          retention-days: 30
