@@ -43,6 +43,7 @@ import { MemberReadinessController } from "./member-readiness.controller";
 import { AdminMemberTermsController } from "./admin-member-terms.controller";
 import { AdminMemberCapabilityRestrictionController } from "./admin-member-capability-restriction.controller";
 import { MetricsController } from "./metrics.controller";
+import { OpsAuthGuard } from "./ops-auth.guard";
 
 collectDefaultMetrics({ prefix: "lottify_" });
 
@@ -90,6 +91,7 @@ collectDefaultMetrics({ prefix: "lottify_" });
     WithdrawalReviewService,
     DepositMethodService,
     HealthService,
+    OpsAuthGuard,
   ],
 })
 export class ApiModule implements NestModule {

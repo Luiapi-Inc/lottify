@@ -55,6 +55,10 @@ const environmentSchema = z
     OTEL_SERVICE_NAME: z.string().min(1).default("lottify-api"),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional().default(""),
     SENTRY_DSN: z.string().optional().default(""),
+    /** Comma-separated http(s) alert webhook endpoints that receive operational alerts. */
+    OPERATIONAL_ALERT_WEBHOOK_URLS: z.string().optional().default(""),
+    /** Bearer token required on the ops surface (`/metrics`, `/internal/health/*`). Empty = disabled. */
+    OPS_AUTH_TOKEN: z.string().optional().default(""),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   })
   .superRefine((env, ctx) => {

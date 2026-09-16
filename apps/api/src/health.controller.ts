@@ -1,8 +1,10 @@
-import { Controller, Get, HttpException, HttpStatus } from "@nestjs/common";
+import { Controller, Get, HttpException, HttpStatus, UseGuards } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
 import { HealthService } from "./health.service";
+import { OpsAuthGuard } from "./ops-auth.guard";
 
 @ApiExcludeController()
+@UseGuards(OpsAuthGuard)
 @Controller("internal/health")
 export class HealthController {
   constructor(private readonly health: HealthService) {}

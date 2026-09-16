@@ -1,12 +1,17 @@
 import "reflect-metadata";
 import { ConsoleLogger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { Request } from "express";
 import pinoHttp from "pino-http";
 import { getEnvironment } from "../../../src/platform/config/env";
 import { initObservability, shutdownObservability } from "../../../src/platform/observability/observability";
 import { ApiModule } from "./app.module";
 import { configureApp } from "./configure-app";
+import { CORRELATION_HEADER, resolveCorrelationId } from "./correlation";
 import { HealthService } from "./health.service";
+
+/** A request that has had its correlation id resolved by pino's `genReqId`. */
+type CorrelationRequest = Request & { correlationId?: string };
 
 async function bootstrap(): Promise<void> {
   const env = getEnvironment();
@@ -15,7 +20,21 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(ApiModule, {
     logger: new ConsoleLogger({ json: true }),
   });
-  app.use(pinoHttp({ level: env.LOG_LEVEL }));
+  app.use(
+    pinoHttp({
+      level: env.LOG_LEVEL,
+      // Use the correlation id as the log request id so access logs are joinable
+      // to the transaction id (GH #92 / W5-F3). Same rule as CorrelationMiddleware.
+      genReqId: (req) => {
+        const header = req.headers[CORRELATION_HEADER];
+        const value = typeof header === "string" ? header : undefined;
+        const correlationId = resolveCorrelationId(value);
+        (req as CorrelationRequest).correlationId = correlationId;
+        return correlationId;
+      },
+      customProps: (req) => ({ correlationId: (req as CorrelationRequest).correlationId }),
+    }),
+  );
   configureApp(app);
   await app.listen(env.API_PORT, "0.0.0.0");
   app.get(HealthService).markStarted();

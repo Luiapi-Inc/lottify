@@ -1,0 +1,83 @@
+# Lottify Prometheus alerting rules — mirror of deploy/observability/alert-definitions.yaml.
+#
+# Families with an in-code detector AND a metric fire here. Families whose
+# metrics are not yet produced (detector_status: rule_only in alert-definitions.yaml)
+# are declared but inactive (commented); they activate once the backing metric
+# exists. Reconciliation (F1) is wired to its produced metric so it is live.
+groups:
+  - name: lottify-operational
+    rules:
+      # F1 — reconciliation discrepancy (in-code detector + metric-backed)
+      - alert: ReconciliationDiscrepancy
+        expr: lottify_reconciliation_discrepancies > 0
+        for: 5m
+        labels:
+          family: reconciliation_discrepancy
+          severity: error
+        annotations:
+          summary: "Ledger/wallet reconciliation discrepancy detected"
+          description: "lottify_reconciliation_discrepancies is {{ $value }} for 5m (family F1)."
+
+      - alert: ReconciliationDiscrepancyCritical
+        expr: lottify_reconciliation_discrepancies_critical > 0
+        for: 5m
+        labels:
+          family: reconciliation_discrepancy
+          severity: critical
+        annotations:
+          summary: "Critical reconciliation discrepancy requires escalation"
+          description: "Critical reconciliation discrepancy present (family F1, critical)."
+
+      # F2 — Confirm error / failure spike
+      # - alert: ConfirmErrorRateSpike
+      #   expr: rate(lottify_confirm_errors_total[5m]) / (rate(lottify_confirm_requests_total[5m]) + 1) > 0.05
+      #   for: 5m
+      #   labels: { family: confirm_error_failure_spike, severity: error }
+      #   annotations:
+      #     summary: "Confirm error rate spike (family F2)"
+      #     description: "Confirm error ratio is {{ $value }} over 5m (family F2)."
+
+      # F3 — payment webhook failure
+      # - alert: PaymentWebhookFailure
+      #   expr: rate(lottify_payment_webhook_failures_total[10m]) > 0
+      #   for: 5m
+      #   labels: { family: payment_webhook_failure, severity: error }
+      #   annotations:
+      #     summary: "Payment webhook failures (family F3)"
+      #     description: "Payment webhook failures at {{ $value }}/s over 10m (family F3)."
+
+      # F4 — stuck/reconciling withdrawal
+      # - alert: WithdrawalStuckReconciling
+      #   expr: lottify_withdrawals_stuck_reconciling > 0
+      #   for: 15m
+      #   labels: { family: withdrawal_stuck_reconciling, severity: error }
+      #   annotations:
+      #     summary: "Withdrawal stuck reconciling (family F4)"
+      #     description: "{{ $value }} withdrawal(s) stuck reconciling beyond SLO (family F4)."
+
+      # F5 — settlement failure
+      # - alert: SettlementFailure
+      #   expr: rate(lottify_settlement_failures_total[5m]) > 0
+      #   for: 5m
+      #   labels: { family: settlement_failure, severity: critical }
+      #   annotations:
+      #     summary: "Settlement failure (family F5)"
+      #     description: "Settlement failures at {{ $value }}/s over 5m (family F5)."
+
+      # F6 — queue / DLQ lag
+      # - alert: QueueDlqLag
+      #   expr: lottify_queue_dlq_lag > 1000
+      #   for: 10m
+      #   labels: { family: queue_dlq_lag, severity: error }
+      #   annotations:
+      #     summary: "Queue/DLQ lag high (family F6)"
+      #     description: "lottify_queue_dlq_lag is {{ $value }} (family F6)."
+
+      # F7 — provider health degradation
+      # - alert: ProviderHealthDegraded
+      #   expr: lottify_provider_health < 1
+      #   for: 5m
+      #   labels: { family: provider_health_degradation, severity: error }
+      #   annotations:
+      #     summary: "Provider health degraded (family F7)"
+      #     description: "A provider health signal is {{ $value }} (family F7)."
