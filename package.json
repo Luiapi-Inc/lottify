@@ -7,8 +7,8 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev:api": "tsx watch apps/api/src/main.ts",
-    "dev:worker": "tsx watch apps/workers/src/main.ts",
+    "dev:api": "node scripts/dev.mjs apps/api/src/main.ts",
+    "dev:worker": "node scripts/dev.mjs apps/workers/src/main.ts",
     "dev:member": "next dev apps/member-web",
     "dev:admin": "next dev apps/admin-web",
     "build:backend": "tsc -p tsconfig.backend.json",

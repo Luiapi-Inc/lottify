@@ -1,0 +1,7 @@
+GET /internal/health/live    -> HTTP 200 {"ok":true}
+GET /internal/health/startup -> HTTP 200 {"ok":true}
+GET /internal/health/ready   -> HTTP 200 {"ok":true,"dependencies":{"postgres":"up","redis":"up"}}  (read-only: SELECT 1 + redis ping)
+GET /metrics                 -> HTTP 200
+
+Captured via `pnpm dev:api` (scripts/dev.mjs -> tsc compile + node --watch) on API_PORT=4100,
+candidate 0d3b6cb1ce905387dd6822a29121bba70bddcf4a, clean worktree, NODE_ENV=development.

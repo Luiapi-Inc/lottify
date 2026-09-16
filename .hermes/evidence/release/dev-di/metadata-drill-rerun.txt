@@ -1,0 +1,4 @@
+--- tsx run (dev runner used by pnpm dev:api)
+{"runtime":"tsx","node":"v24.20.0","paramtypes_present":false,"paramtypes":null}
+--- tsc-compiled run (the shape production/container images execute)
+{"runtime":"tsc-node","node":"v24.20.0","paramtypes_present":true,"paramtypes":["Dep"]}
