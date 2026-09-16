@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
+import { getWithdrawalApprovalThresholdMinor } from "../../../platform/config/env";
 import {
   PAYOUT_PROVIDER_ADAPTER,
   PayoutProviderAdapterError,
@@ -24,6 +25,11 @@ import {
   type PayoutDestination,
 } from "../domain/payout-destination";
 import { createPaymentFeeQuote } from "../domain/payment-fee-policy";
+import {
+  DUAL_CONTROL_APPROVAL_EVIDENCE_REF,
+  DUAL_CONTROL_APPROVAL_REASON_CODE,
+  requiresDualControlApproval,
+} from "../domain/dual-control-approval";
 import type { PaymentCurrency, PaymentProviderOutcome } from "../domain/payment-provider-result";
 import {
   WITHDRAWAL_REPOSITORY,
@@ -150,7 +156,11 @@ export class WithdrawalService {
       );
     }
     const correlation = correlationId || randomUUID();
-    const decision = await this.evaluateEligibility(memberId, destination);
+    const decision = await this.evaluateEligibility(
+      memberId,
+      destination,
+      this.requiresDualControl(command.amountMinor),
+    );
     const feeQuote = createPaymentFeeQuote({
       operation: "WITHDRAWAL",
       providerCode: PAYOUT_PROVIDER_ID,
@@ -268,7 +278,11 @@ export class WithdrawalService {
         "Payout Destination is not linked to this Member",
       );
     }
-    const decision = await this.evaluateEligibility(memberId, destination);
+    const decision = await this.evaluateEligibility(
+      memberId,
+      destination,
+      this.requiresDualControl(command.amountMinor),
+    );
     const availableMinor = await this.ledger.getWithdrawalAvailableMinor({
       memberId,
       currency: command.currency,
@@ -450,7 +464,19 @@ export class WithdrawalService {
     }
 
     const destination = await this.destinations.findById(withdrawal.payoutDestinationId);
-    const decision = await this.evaluateEligibility(withdrawal.memberId, destination);
+    /**
+     * The dual-control signal is deliberately NOT re-applied here: it is a
+     * creation-time gate that routes the request to the `APPROVAL` queue, and this
+     * recheck treats a non-`ALLOW` verdict as a terminal rejection. Re-applying it
+     * would reject a Withdrawal an Admin has already approved (`APPROVED →
+     * REJECTED`), so the recheck keeps the pre-existing destination/capability
+     * semantics only.
+     */
+    const decision = await this.evaluateEligibility(
+      withdrawal.memberId,
+      destination,
+      false,
+    );
     if (decision.outcome !== "ALLOW") {
       const rejected = await this.transitionOrThrow(
         withdrawal,
@@ -685,9 +711,22 @@ export class WithdrawalService {
     });
   }
 
+  /**
+   * The already-evaluated dual-control signal for one amount, read from
+   * configuration (`WITHDRAWAL_APPROVAL_THRESHOLD_MINOR`, D11). Payments supplies
+   * the signal; the eligibility resolver still owns the deny-first outcome.
+   */
+  private requiresDualControl(amountMinor: bigint): boolean {
+    return requiresDualControlApproval(
+      amountMinor,
+      getWithdrawalApprovalThresholdMinor(),
+    );
+  }
+
   private async evaluateEligibility(
     memberId: string,
     destination: PayoutDestination | null,
+    dualControlRequired: boolean,
   ): Promise<WithdrawalEligibilityDecision> {
     const evaluatedAt = new Date();
     const restriction = await this.restrictions.evaluate({ memberId, at: evaluatedAt });
@@ -707,9 +746,15 @@ export class WithdrawalService {
         evidenceRefs: restriction.evidenceRefs,
       },
       additionalReview: {
-        required: restriction.reviewRequired,
-        reasonCodes: restriction.reasonCodes,
-        evidenceRefs: restriction.evidenceRefs,
+        required: restriction.reviewRequired || dualControlRequired,
+        reasonCodes: [
+          ...restriction.reasonCodes,
+          ...(dualControlRequired ? [DUAL_CONTROL_APPROVAL_REASON_CODE] : []),
+        ],
+        evidenceRefs: [
+          ...restriction.evidenceRefs,
+          ...(dualControlRequired ? [DUAL_CONTROL_APPROVAL_EVIDENCE_REF] : []),
+        ],
       },
     });
   }

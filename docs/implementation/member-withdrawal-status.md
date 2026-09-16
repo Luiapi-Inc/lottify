@@ -19,10 +19,35 @@ Payments-owned Withdrawal vertical on `/api/v1`, built on the accepted Wallet & 
 4. **Ambiguous provider outcome.** An outbound payout failure (classified *or* unclassified) is never a definitive failure: the Withdrawal enters `RECONCILING` with the Reservation retained and `reconciliationAttempts` incremented. Recovery happens only through `getPayoutStatus` by the known provider reference key — the external payout is never re-initiated (`initiateCallCount` stays 1 across reconciliation, proven deterministically). A resolved definitive provider rejection is `FAILED` with authoritative Reservation release.
 5. **Provider acceptance is not completion.** `COMPLETED` requires proven payout evidence *and* the authoritative Ledger finalization. The finalization posting and the Reservation consumption are atomic and idempotent on the Withdrawal identity, so a replay or crash recovery cannot produce a second effect.
 6. **Payout Destination representation.** The raw account reference is never persisted or returned: the aggregate stores an opaque SHA-256 digest (duplicate and sharing detection) plus a masked display value. Verification is independent of Member/KYC status and crosses its seam as a normalized outcome plus an opaque evidence reference.
-7. **Eligibility resolution.** `resolveWithdrawalEligibility` resolves deny-first over the rules this vertical can observe authoritatively (destination present/owned/verified/not-disabled, withdrawal capability restriction) and consumes the owning policy layer's already-evaluated review signal. It deliberately invents no threshold values: amount limit, daily aggregate, frequency, KYC tier, risk, and approval threshold remain with their owning policy.
+7. **Eligibility resolution.** `resolveWithdrawalEligibility` resolves deny-first over the rules this vertical can observe authoritatively (destination present/owned/verified/not-disabled, withdrawal capability restriction) and consumes the owning policy layer's already-evaluated review signal. It deliberately invents no threshold values: amount limit, daily aggregate, frequency, KYC tier, risk, and approval threshold remain with their owning policy. *Since the G2→G3 cutover work (decision D11) the **approval threshold** input is supplied by configuration — see "G2 runtime settings carried into configuration (D11)" below; the resolver itself is unchanged and still invents nothing.*
 8. **Pre-payout recheck.** Destination eligibility is re-evaluated before payout; an approved withdrawal that fails the recheck is `REJECTED` with authoritative release (`APPROVED → REJECTED`) rather than paid out.
 9. **Admin authorization.** New capabilities `withdrawal.read`, `withdrawal.review`, and `withdrawal.payout`; `AUDITOR` is read-only. Every governed command writes an immutable Audit Record with the payload hash, reason, actor/session, correlation id, and the allowed *or* denied outcome.
 10. **v1 default bindings.** No production payout rail or destination-verification provider is wired yet (Ticket 09 sequencing), and no Member capability-restriction store exists yet, so the deterministic payout provider, deterministic destination-verification fake, and an explicitly unrestricted restriction adapter are the default bindings. Each is a replaceable seam, not a policy decision.
+
+## G2 runtime settings carried into configuration (D11)
+
+G2 stored runtime knobs in `system_settings` (10 rows); G3 has no settings table, and the Lead has not
+approved one. The only setting a G3 code path can enforce is the withdrawal dual-control threshold, so
+only that value is carried as configuration — the other nine are recorded as dropped with a reason in
+`.hermes/decisions/2026-09-16-g2-to-g3-data-migration-design.md` §14 (the routing decision is D11 in
+`.hermes/decisions/2026-09-16-lead-routing-g2-to-g3-model-gaps.md`).
+
+- **Variable.** `WITHDRAWAL_APPROVAL_THRESHOLD_MINOR` (minor units / satang), read by
+  `getWithdrawalApprovalThresholdMinor()` (`src/platform/config/env.ts`).
+- **Cutover operational value.** `5000000` = 50,000.00 THB, copied from the G2 row
+  `system_settings.withdrawal.dual_control_threshold` (`/home/ubuntu/t13-evidence/sample3.out`). It is
+  also the **default when unset**, so an environment that forgets the variable does not silently lose
+  the pre-cutover control.
+- **Behaviour.** At creation, an amount at or above the threshold produces the already-evaluated
+  `additionalReview` signal (`APPROVAL_THRESHOLD` + `policy:withdrawal.dual-control-threshold`)
+  instead of fast-pathing to `APPROVED`, so the Withdrawal lands in the admin `APPROVAL` queue with its
+  Reservation held (`src/contexts/payments/application/withdrawal.service.ts`,
+  `src/contexts/payments/domain/dual-control-approval.ts`).
+- **Not applied on the pre-payout recheck.** That recheck treats any non-`ALLOW` verdict as a terminal
+  `REJECTED`, so re-applying a creation-time gate there would reject a Withdrawal an Admin had just
+  approved. The gate is creation-time only, by construction.
+- **No schema change.** No migration, no model, no settings table: the value is configuration and the
+  rule needs no persisted state.
 
 ## Schema and migration
 
