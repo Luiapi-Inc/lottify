@@ -97,7 +97,6 @@ export function checkPushed(repoPath, sha, pushedRef = DEFAULT_PUSHED_REF) {
 /** Parse a check-runs API body or a reduced summary into {head_sha, checks}. */
 export function parseCiEvidence(raw) {
   const data = typeof raw === "string" ? JSON.parse(raw) : raw;
-  const headSha = data.head_sha ?? data.headSha ?? null;
   let checks = [];
   if (Array.isArray(data.check_runs)) {
     checks = data.check_runs.map((run) => ({
@@ -107,6 +106,12 @@ export function parseCiEvidence(raw) {
       url: run.html_url ?? null,
       runId: run.id ?? null,
     }));
+    // The raw `gh api .../commits/<sha>/check-runs` body carries head_sha on
+    // each check_run, not at the top level. Derive it when top-level is absent.
+    if (data.head_sha == null && data.headSha == null && checks.length > 0) {
+      const derived = checks.map((c) => data.check_runs.find((r) => r.id === c.runId)?.head_sha).filter(Boolean);
+      data.head_sha = derived.length > 0 ? derived[0] : null;
+    }
   } else if (Array.isArray(data.checks)) {
     checks = data.checks.map((check) => ({
       name: check.name,
@@ -118,7 +123,7 @@ export function parseCiEvidence(raw) {
   } else {
     throw new Error("CI evidence has neither check_runs nor checks");
   }
-  return { headSha, checks, runId: data.githubRunId ?? data.run_id ?? null };
+  return { headSha: data.head_sha ?? data.headSha ?? null, checks, runId: data.githubRunId ?? data.run_id ?? null };
 }
 
 /** Leg 3: every required check ran against this exact SHA and concluded success. */

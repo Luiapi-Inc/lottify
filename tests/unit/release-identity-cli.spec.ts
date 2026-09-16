@@ -179,6 +179,35 @@ describe("release identity: plan (fail-closed)", () => {
     expect(record.releaseTag).toBe("v0.0.0-test");
   });
 
+  it("accepts the raw gh api /commits/{sha}/check-runs body (head_sha on each run)", () => {
+    const evidence = join(tmpRoot, "ci-rawbody.json");
+    writeFileSync(
+      evidence,
+      JSON.stringify({
+        total_count: 2,
+        check_runs: [
+          { id: 2001, name: "verify", conclusion: "success", status: "completed", head_sha: candidate },
+          { id: 2002, name: "container-smoke", conclusion: "success", status: "completed", head_sha: candidate },
+        ],
+      }),
+    );
+    const result = run([
+      "plan",
+      "--repo",
+      repo,
+      "--candidate-sha",
+      candidate,
+      "--pushed-ref",
+      "main",
+      "--ci-evidence",
+      evidence,
+    ]);
+    expect(result.status).toBe(0);
+    const record = JSON.parse(result.stdout.slice(result.stdout.indexOf("{")));
+    expect(record.status).toBe("VERIFIED");
+    expect(record.ci.status).toBe("PASS");
+  });
+
   it("rejects an image reference that is not an immutable digest", () => {
     const evidence = join(tmpRoot, "ci-green2.json");
     writeEvidence(evidence, candidate, [
