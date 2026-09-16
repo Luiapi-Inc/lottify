@@ -20,6 +20,7 @@ import {
   type DrawRefundPort,
   type DrawRefundRunResult,
 } from "../../src/contexts/lottery/application/draw-refund.port";
+import { FakeDrawAdmissionBoundary } from "../support/draw-admission.fake";
 
 const DRAW = "draw-cancelled-117";
 const AT = new Date("2026-09-16T03:00:00.000Z");
@@ -119,11 +120,13 @@ class FakeRefundPort implements DrawRefundPort {
 function harness() {
   const refunds = new FakeRefundPort();
   const draws = new FakeDrawService();
+  const boundary = new FakeDrawAdmissionBoundary();
   const orchestrator = new DrawCancellationOrchestrator(
     refunds as never,
     draws as never,
+    boundary,
   );
-  return { refunds, draws, orchestrator };
+  return { refunds, draws, boundary, orchestrator };
 }
 
 describe("Draw-cancellation refund orchestration", () => {

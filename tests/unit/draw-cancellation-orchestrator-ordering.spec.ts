@@ -27,6 +27,7 @@ import {
   FakeBetOrderWalletPort,
   InMemoryStakeRefundRepository,
 } from "../support/stake-refund.fake";
+import { FakeDrawAdmissionBoundary } from "../support/draw-admission.fake";
 
 const DRAW = "draw-order-guard";
 
@@ -95,6 +96,7 @@ function harness(state: string, version: number) {
   const orchestrator = new DrawCancellationOrchestrator(
     new DrawRefundAdapter(new DrawStakeRefundService(orders, wallet)),
     new DomainDrawService(state, version) as never,
+    new FakeDrawAdmissionBoundary(),
   );
   return { orders, wallet, orchestrator };
 }

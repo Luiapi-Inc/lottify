@@ -24,6 +24,7 @@ import { BettingQuoteService } from "../../src/contexts/betting/application/bett
 import { BettingOrderService } from "../../src/contexts/betting/application/betting-order.service";
 import { BettingQuoteDrawAdapter } from "../../src/platform/integration/quote-draw.adapter";
 import { BetOrderWalletAdapter } from "../../src/platform/integration/betting-order-wallet.adapter";
+import { PrismaDrawAdmissionBoundary } from "../../src/platform/concurrency/prisma-draw-admission.boundary";
 import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/application/financial-ledger.service";
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
@@ -76,6 +77,7 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
       drawAdapter,
       new BetOrderWalletAdapter(ledger, prisma),
       allowBetEligibility,
+      new PrismaDrawAdmissionBoundary(prisma),
     );
     const resultProvider = new LocalResultProviderAdapter();
     settlement = new SettlementService(

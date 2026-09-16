@@ -6,16 +6,43 @@
 //     member wallet zero-net, draw state CANCELLED;
 //   - replaying the orchestrator yields exactly one refund transaction per order;
 //   - the generic draw transition path refuses COMPLETE_CANCELLATION without the
-//     refund flag (the orchestrator is the only admin path that reaches CANCELLED).
+//     refund flag (the orchestrator is the only admin path that reaches CANCELLED);
+//   - Ticket 16: the same behaviour through the authenticated admin HTTP route —
+//     bearer authentication, capability denial, body validation, the 409 for a
+//     Draw that does not authorise the cancellation, the {draw, refund} response
+//     shape (money as minor-unit strings), and a mid-batch refund failure that
+//     stays a durable CANCELLING state reported as 409 outstanding obligations
+//     and converges on a re-drive with exactly one reversal per Order.
 //
 // Every financial assertion is a durable count/balance, not a status code: the
 // refund posts exactly one BET_STAKE_REFUND per Order, and the Member's CASH
 // returns to its pre-stake balance.
 
+import "reflect-metadata";
 import { randomUUID } from "node:crypto";
+import { Module, type INestApplication } from "@nestjs/common";
+import { NestFactory, Reflector } from "@nestjs/core";
+import { JwtService } from "@nestjs/jwt";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { AdminDrawController } from "../../apps/api/src/admin-draw.controller";
+import { AdminAuthGuard } from "../../apps/api/src/admin-auth.guard";
+import { AdminCapabilityGuard } from "../../apps/api/src/admin-capability.guard";
+import { AdminAuthService } from "../../src/contexts/identity-access/application/admin-auth.service";
+import type { AdminRole } from "../../src/contexts/identity-access/domain/admin-auth.repository";
+import { hashAdminPassword } from "../../src/contexts/identity-access/domain/admin-password";
+import { encryptAdminSecret } from "../../src/contexts/identity-access/domain/admin-secret-crypto";
+import { generateTotpCode, generateTotpSecret } from "../../src/contexts/identity-access/domain/totp";
+import { PrismaAdminAuthRepository } from "../../src/contexts/identity-access/infrastructure/prisma-admin-auth.repository";
+import {
+  getAdminMfaEncryptionKey,
+  resetEnvironmentForTests,
+} from "../../src/platform/config/env";
+import { IdempotencyService } from "../../src/platform/idempotency/idempotency.service";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
-import { resetEnvironmentForTests } from "../../src/platform/config/env";
+import type {
+  BetOrderWalletPort,
+  BetStakeEffect,
+} from "../../src/contexts/betting/application/betting-order-wallet.port";
 import { LotteryDrawService } from "../../src/contexts/lottery/application/lottery-draw.service";
 import { DrawCancellationOrchestrator } from "../../src/contexts/lottery/application/draw-cancellation-orchestrator";
 import { DrawRefundAdapter } from "../../src/platform/integration/draw-refund.adapter";
@@ -25,6 +52,7 @@ import { BettingQuoteService } from "../../src/contexts/betting/application/bett
 import { BettingOrderService } from "../../src/contexts/betting/application/betting-order.service";
 import { BettingQuoteDrawAdapter } from "../../src/platform/integration/quote-draw.adapter";
 import { BetOrderWalletAdapter } from "../../src/platform/integration/betting-order-wallet.adapter";
+import { PrismaDrawAdmissionBoundary } from "../../src/platform/concurrency/prisma-draw-admission.boundary";
 import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/application/financial-ledger.service";
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
@@ -32,11 +60,59 @@ import { allowBetEligibility } from "../support/betting-eligibility.fake";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 
+/**
+ * The production Wallet & Ledger port with a switchable, per-Order failure.
+ *
+ * Ticket 16 asks for real-DB evidence that a mid-batch refund failure stays a
+ * recoverable operational state. The failure has to be injected somewhere, and
+ * it is injected here — at the ledger seam — so everything else stays
+ * production code against real PostgreSQL: the refund service, the Order
+ * claim/settle CAS, the ledger reversals of the Orders that did succeed, and
+ * the Draw state machine are all the real ones.
+ */
+class FaultInjectingRefundWallet implements BetOrderWalletPort {
+  /** Orders whose reversal fails as if the ledger were unavailable. */
+  readonly failingOrderIds = new Set<string>();
+
+  constructor(private readonly inner: BetOrderWalletPort) {}
+
+  commitStake(input: {
+    orderId: string;
+    memberId: string;
+    drawId: string;
+    amountMinor: bigint;
+    currency: "THB";
+    correlationId: string;
+    acceptedAt: Date;
+  }): Promise<BetStakeEffect> {
+    return this.inner.commitStake(input);
+  }
+
+  refundStake(input: {
+    orderId: string;
+    memberId: string;
+    stakeTransactionId: string;
+    currency: "THB";
+    correlationId: string;
+  }): Promise<BetStakeEffect> {
+    if (this.failingOrderIds.has(input.orderId)) {
+      return Promise.reject(
+        new Error(`injected ledger outage for Order ${input.orderId}`),
+      );
+    }
+    return this.inner.refundStake(input);
+  }
+}
+
 describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin path)", () => {
   let prisma: PrismaService;
   let ledger: FinancialLedgerService;
   let draws: LotteryDrawService;
   let orchestrator: DrawCancellationOrchestrator;
+  let refundWallet: FaultInjectingRefundWallet;
+  let app: INestApplication;
+  let baseUrl: string;
+  let adminAuth: AdminAuthService;
   let adminId: string;
   let sessionId: string;
 
@@ -48,6 +124,8 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
   const drawIds: string[] = [];
   const orderIds: string[] = [];
   const fundingAccountIds: string[] = [];
+  /** Admin users created for the HTTP-path tests (cleaned up with the rest). */
+  const httpAdminIds: string[] = [];
 
   const actor = () => ({ adminId, sessionId, role: "ADMIN" as const });
 
@@ -69,18 +147,26 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
       drawAdapter,
       new BetOrderWalletAdapter(ledger, prisma),
       allowBetEligibility,
+      new PrismaDrawAdmissionBoundary(prisma),
     );
 
     // Wire the orchestrator exactly as ContextsModule does: refund seam adapter
-    // -> betting refund service -> betting repository + wallet-ledger port.
+    // -> betting refund service -> betting repository + wallet-ledger port, and
+    // the SAME Draw admission boundary the betting Confirm path holds. The
+    // wallet seam is the fault-injecting one so a mid-batch failure can be
+    // induced without replacing any production component.
     const stakeRefundRepo = new PrismaStakeRefundRepository(prisma);
+    refundWallet = new FaultInjectingRefundWallet(
+      new BetOrderWalletAdapter(ledger, prisma),
+    );
     const refundService = new DrawStakeRefundService(
       stakeRefundRepo,
-      new BetOrderWalletAdapter(ledger, prisma),
+      refundWallet,
     );
     orchestrator = new DrawCancellationOrchestrator(
       new DrawRefundAdapter(refundService),
       draws,
+      new PrismaDrawAdmissionBoundary(prisma),
     );
 
     adminId = randomUUID();
@@ -106,6 +192,32 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
         createdAt: new Date(),
       },
     });
+    // The admin HTTP surface for the COMPLETE_CANCELLATION path, wired exactly
+    // as apps/api does: the real controller, the real guards, real Admin auth
+    // (JWT + session in the shared database) and the orchestrator built above.
+    adminAuth = new AdminAuthService(
+      new PrismaAdminAuthRepository(prisma),
+      new JwtService(),
+    );
+
+    @Module({
+      controllers: [AdminDrawController],
+      providers: [
+        AdminAuthGuard,
+        AdminCapabilityGuard,
+        { provide: Reflector, useValue: new Reflector() },
+        { provide: AdminAuthService, useValue: adminAuth },
+        { provide: LotteryDrawService, useValue: draws },
+        { provide: DrawCancellationOrchestrator, useValue: orchestrator },
+        { provide: IdempotencyService, useValue: new IdempotencyService(prisma) },
+      ],
+    })
+    class AdminDrawHttpModule {}
+
+    app = await NestFactory.create(AdminDrawHttpModule, { logger: false });
+    await app.listen(0, "127.0.0.1");
+    baseUrl = await app.getUrl();
+
     void orders;
     void quotes;
   });
@@ -171,13 +283,21 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
       await tx.lotteryProduct.deleteMany({ where: { id: { in: productIds } } });
       await tx.member.deleteMany({ where: { id: { in: memberIds } } });
       await tx.adminAuthSession.deleteMany({ where: { id: sessionId } });
+      await tx.adminAuthSession.deleteMany({
+        where: { adminUserId: { in: httpAdminIds } },
+      });
+      await tx.adminReauthEvidence.deleteMany({
+        where: { adminUserId: { in: httpAdminIds } },
+      });
       await tx.adminUser.deleteMany({ where: { id: adminId } });
+      await tx.adminUser.deleteMany({ where: { id: { in: httpAdminIds } } });
 
       await tx.$executeRawUnsafe('ALTER TABLE "lottery_bet_type_versions" ENABLE TRIGGER "lottery_bet_type_versions_published_immutable"');
       await tx.$executeRawUnsafe('ALTER TABLE "lottery_product_versions" ENABLE TRIGGER "lottery_product_versions_published_immutable"');
       await tx.$executeRawUnsafe('ALTER TABLE "lottery_product_version_bet_types" ENABLE TRIGGER "lottery_product_version_links_immutable"');
       await tx.$executeRawUnsafe('ALTER TABLE "bet_receipts" ENABLE TRIGGER "bet_receipts_immutable"');
     });
+    await app?.close();
     await prisma.$disconnect();
   });
 
@@ -348,6 +468,7 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
       new BettingQuoteDrawAdapter(prisma),
       new BetOrderWalletAdapter(ledger, prisma),
       allowBetEligibility,
+      new PrismaDrawAdmissionBoundary(prisma),
     );
   }
 
@@ -489,4 +610,300 @@ describe.runIf(runIntegration)("Draw-cancellation refund orchestration (admin pa
     const still = await prisma.lotteryDraw.findUniqueOrThrow({ where: { id: drawId } });
     expect(still.state).toBe("CANCELLING");
   });
+
+  // ---------------------------------------------------------------------------
+  // Ticket 16: the authenticated admin HTTP path.
+  //
+  // The tests above drive the orchestrator directly. These drive the real
+  // controller over HTTP — real AdminAuthGuard/AdminCapabilityGuard, a real
+  // Admin access token from the shared database, and the same orchestrator
+  // instance — because "end-to-end admin path" is a claim about the route, not
+  // about the service.
+  // ---------------------------------------------------------------------------
+
+  const HTTP_TEST_TIMEOUT_MS = 60_000;
+
+  async function createAdminSession(role: AdminRole): Promise<string> {
+    const id = randomUUID();
+    const email = `draw-cancel-http+${role.toLowerCase()}-${id}@example.test`;
+    const password = "Draw cancellation HTTP integration password 123!";
+    const secret = generateTotpSecret();
+    await prisma.adminUser.create({
+      data: {
+        id,
+        email,
+        name: `Draw cancellation HTTP ${role}`,
+        passwordHash: await hashAdminPassword(password),
+        role,
+        status: "ACTIVE",
+        mfaEnabled: true,
+        mfaSecretEncrypted: encryptAdminSecret(secret, getAdminMfaEncryptionKey()),
+      },
+    });
+    httpAdminIds.push(id);
+    const login = await adminAuth.login(email, password);
+    if (login.status !== "MFA_REQUIRED") throw new Error("Expected an MFA challenge");
+    const tokens = await adminAuth.verifyMfa(
+      login.challengeToken,
+      generateTotpCode(secret),
+      "127.0.0.1",
+      "draw-cancellation-orchestrator-integration",
+    );
+    return tokens.accessToken;
+  }
+
+  function postTransition(
+    accessToken: string | null,
+    drawId: string,
+    body: unknown,
+  ): Promise<Response> {
+    return fetch(`${baseUrl}/api/v1/admin/draws/${drawId}/transition`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function refundTransactionsFor(
+    orderId: string,
+    memberId: string,
+  ): Promise<number> {
+    const refunds = await prisma.financialTransaction.findMany({
+      where: { operationType: "BET_STAKE_REFUND" },
+      include: { postings: { include: { account: true } } },
+    });
+    return refunds.filter(
+      (tx) =>
+        (tx.domainReferences as { orderId?: string } | null)?.orderId === orderId &&
+        tx.postings.some((posting) => posting.account.memberId === memberId),
+    ).length;
+  }
+
+  it("authenticates and authorises the admin COMPLETE_CANCELLATION request", async () => {
+    const { drawId, betTypeCode } = await openDraw("T06_HTTP_AUTH", "2099-09-01");
+    const memberId = await newMember();
+    const startingCash = 1_000n;
+    const stakeMinor = 300n;
+    await fundCash(memberId, startingCash);
+    const { orderId } = await confirmedOrderForDraw(drawId, betTypeCode, memberId, stakeMinor);
+    await draws.transition({
+      id: drawId,
+      command: "REQUEST_CANCELLATION",
+      expectedVersion: 3,
+      actor: actor(),
+    });
+
+    const unauthenticated = await postTransition(null, drawId, {
+      command: "COMPLETE_CANCELLATION",
+      expectedVersion: 4,
+    });
+    expect(unauthenticated.status).toBe(401);
+    expect(await unauthenticated.json()).toMatchObject({
+      code: "AUTHENTICATION_REQUIRED",
+    });
+
+    // An Admin without lottery-draw.manage is refused by the capability guard.
+    const auditor = await createAdminSession("AUDITOR");
+    const denied = await postTransition(auditor, drawId, {
+      command: "COMPLETE_CANCELLATION",
+      expectedVersion: 4,
+    });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      code: "ACCESS_DENIED",
+      details: { required: ["lottery-draw.manage"] },
+    });
+
+    // Neither refusal terminalized the Draw or moved money.
+    expect(
+      (await prisma.lotteryDraw.findUniqueOrThrow({ where: { id: drawId } })).state,
+    ).toBe("CANCELLING");
+    const order = await prisma.betOrder.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.state).toBe("CONFIRMED");
+    expect(order.refundTransactionId).toBeNull();
+    expect(await cashAvailable(memberId)).toBe(startingCash - stakeMinor);
+    expect(await refundTransactionsFor(orderId, memberId)).toBe(0);
+  }, HTTP_TEST_TIMEOUT_MS);
+
+  it("validates the transition body and refuses a Draw that does not authorise the cancellation", async () => {
+    const { drawId, betTypeCode } = await openDraw("T06_HTTP_INPUT", "2099-09-02");
+    const memberId = await newMember();
+    const startingCash = 1_000n;
+    const stakeMinor = 300n;
+    await fundCash(memberId, startingCash);
+    const { orderId } = await confirmedOrderForDraw(drawId, betTypeCode, memberId, stakeMinor);
+    // The Draw is OPEN: COMPLETE_CANCELLATION is not legal from here.
+    await draws.transition({ id: drawId, command: "CLOSE", expectedVersion: 3, actor: actor() });
+
+    const admin = await createAdminSession("ADMIN");
+
+    const badCommand = await postTransition(admin, drawId, {
+      command: "NOT_A_DRAW_COMMAND",
+      expectedVersion: 4,
+    });
+    expect(badCommand.status).toBe(400);
+    expect(await badCommand.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { field: "command" },
+    });
+
+    const missingVersion = await postTransition(admin, drawId, {
+      command: "COMPLETE_CANCELLATION",
+    });
+    expect(missingVersion.status).toBe(400);
+    expect(await missingVersion.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { field: "expectedVersion" },
+    });
+
+    // A valid body against a Draw that is not CANCELLING is a 409, not money.
+    const illegalState = await postTransition(admin, drawId, {
+      command: "COMPLETE_CANCELLATION",
+      expectedVersion: 4,
+    });
+    expect(illegalState.status).toBe(409);
+    expect(await illegalState.json()).toMatchObject({
+      code: "ILLEGAL_DRAW_TRANSITION",
+      details: { state: "CLOSED", command: "COMPLETE_CANCELLATION" },
+    });
+
+    // Nothing above touched the Draw or the money.
+    expect(
+      (await prisma.lotteryDraw.findUniqueOrThrow({ where: { id: drawId } })).state,
+    ).toBe("CLOSED");
+    const order = await prisma.betOrder.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.state).toBe("CONFIRMED");
+    expect(order.refundTransactionId).toBeNull();
+    expect(await cashAvailable(memberId)).toBe(startingCash - stakeMinor);
+    expect(await refundTransactionsFor(orderId, memberId)).toBe(0);
+  }, HTTP_TEST_TIMEOUT_MS);
+
+  it("cancels a Draw through the admin route and reports the money moved", async () => {
+    const { drawId, betTypeCode } = await openDraw("T06_HTTP_OK", "2099-09-03");
+    const memberId = await newMember();
+    const startingCash = 1_000n;
+    const stakeMinor = 400n;
+    await fundCash(memberId, startingCash);
+    const { orderId } = await confirmedOrderForDraw(drawId, betTypeCode, memberId, stakeMinor);
+    await draws.transition({
+      id: drawId,
+      command: "REQUEST_CANCELLATION",
+      expectedVersion: 3,
+      actor: actor(),
+    });
+
+    const admin = await createAdminSession("ADMIN");
+    const response = await postTransition(admin, drawId, {
+      command: "COMPLETE_CANCELLATION",
+      expectedVersion: 4,
+    });
+
+    expect(response.status).toBe(201);
+    // Money crosses the HTTP boundary as a minor-unit string: the orchestrator
+    // reports a bigint, and Express cannot serialise one at all.
+    expect(await response.json()).toEqual({
+      draw: { id: drawId, state: "CANCELLED", version: 5 },
+      refund: {
+        considered: 1,
+        refunded: 1,
+        alreadyRefunded: 0,
+        outstanding: 0,
+        refundedStakeMinor: stakeMinor.toString(),
+        obligationsSatisfied: true,
+      },
+    });
+
+    const order = await prisma.betOrder.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.state).toBe("CANCELLED");
+    expect(order.refundTransactionId).not.toBeNull();
+    expect(await refundTransactionsFor(orderId, memberId)).toBe(1);
+    expect(await cashAvailable(memberId)).toBe(startingCash);
+  }, HTTP_TEST_TIMEOUT_MS);
+
+  it("reports a mid-batch refund failure as 409 outstanding obligations and recovers on a re-drive", async () => {
+    const { drawId, betTypeCode } = await openDraw("T06_HTTP_PARTIAL", "2099-09-04");
+    const firstMember = await newMember();
+    const secondMember = await newMember();
+    const startingCash = 1_000n;
+    await fundCash(firstMember, startingCash);
+    await fundCash(secondMember, startingCash);
+    const first = await confirmedOrderForDraw(drawId, betTypeCode, firstMember, 300n);
+    const second = await confirmedOrderForDraw(drawId, betTypeCode, secondMember, 200n);
+    await draws.transition({
+      id: drawId,
+      command: "REQUEST_CANCELLATION",
+      expectedVersion: 3,
+      actor: actor(),
+    });
+
+    const admin = await createAdminSession("ADMIN");
+
+    // The ledger refuses the reversal of the second Order only.
+    refundWallet.failingOrderIds.add(second.orderId);
+    const failed = await postTransition(admin, drawId, {
+      command: "COMPLETE_CANCELLATION",
+      expectedVersion: 4,
+    });
+
+    expect(failed.status).toBe(409);
+    expect(await failed.json()).toMatchObject({
+      code: "REFUND_OBLIGATIONS_OUTSTANDING",
+      details: { drawId, outstanding: 1 },
+    });
+
+    // Partial failure is a durable operational state, not a completed draw and
+    // not a hidden one: the Draw is still CANCELLING, the first Order's reversal
+    // is already committed, the second Order is claimed but not refunded.
+    expect(
+      (await prisma.lotteryDraw.findUniqueOrThrow({ where: { id: drawId } })).state,
+    ).toBe("CANCELLING");
+    const firstOrder = await prisma.betOrder.findUniqueOrThrow({
+      where: { id: first.orderId },
+    });
+    expect(firstOrder.state).toBe("CANCELLED");
+    expect(firstOrder.refundTransactionId).not.toBeNull();
+    expect(await refundTransactionsFor(first.orderId, firstMember)).toBe(1);
+    expect(await cashAvailable(firstMember)).toBe(startingCash);
+    const secondOrderBefore = await prisma.betOrder.findUniqueOrThrow({
+      where: { id: second.orderId },
+    });
+    expect(secondOrderBefore.state).toBe("CANCELLING");
+    expect(secondOrderBefore.refundTransactionId).toBeNull();
+    expect(await cashAvailable(secondMember)).toBe(startingCash - 200n);
+    expect(await refundTransactionsFor(second.orderId, secondMember)).toBe(0);
+
+    // Re-drive the same admin request once the ledger recovers.
+    refundWallet.failingOrderIds.delete(second.orderId);
+    const recovered = await postTransition(admin, drawId, {
+      command: "COMPLETE_CANCELLATION",
+      expectedVersion: 4,
+    });
+
+    expect(recovered.status).toBe(201);
+    expect(await recovered.json()).toEqual({
+      draw: { id: drawId, state: "CANCELLED", version: 5 },
+      refund: {
+        considered: 1,
+        refunded: 1,
+        alreadyRefunded: 0,
+        outstanding: 0,
+        refundedStakeMinor: "200",
+        obligationsSatisfied: true,
+      },
+    });
+
+    // Convergence, not a second refund: exactly one reversal per Order.
+    const secondOrderAfter = await prisma.betOrder.findUniqueOrThrow({
+      where: { id: second.orderId },
+    });
+    expect(secondOrderAfter.state).toBe("CANCELLED");
+    expect(secondOrderAfter.refundTransactionId).not.toBeNull();
+    expect(await refundTransactionsFor(second.orderId, secondMember)).toBe(1);
+    expect(await refundTransactionsFor(first.orderId, firstMember)).toBe(1);
+    expect(await cashAvailable(firstMember)).toBe(startingCash);
+    expect(await cashAvailable(secondMember)).toBe(startingCash);
+  }, HTTP_TEST_TIMEOUT_MS);
 });
