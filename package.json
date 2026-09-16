@@ -28,6 +28,9 @@
     "openapi:client": "openapi-typescript apps/api/openapi/openapi.json -o packages/contracts/src/generated/api.ts",
     "openapi:docs": "node apps/api/scripts/generate-api-docs.mjs",
     "openapi:generate": "pnpm openapi:spec && pnpm openapi:client && pnpm openapi:docs",
+    "load:seed": "tsx tools/load-harness/seed/seed-load-fixtures.ts",
+    "load:run": "node tools/load-harness/run.mjs",
+    "load:assert": "tsx tools/load-harness/seed/assert-financial-effects.ts",
     "check": "pnpm prisma:generate && pnpm openapi:generate && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
