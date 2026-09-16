@@ -47,11 +47,28 @@ if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
   exit 0
 fi
 
+# Caller-provided values win over the checkout's .env, matching scratch-db.sh:
+# a reproduction run must use the load database and secrets it was given, not a
+# developer's local .env.
+caller_database_url="${DATABASE_URL:-}"
+caller_load_database_url="${LOAD_DATABASE_URL:-}"
+caller_jwt_access_secret="${JWT_ACCESS_SECRET:-}"
+caller_api_port="${API_PORT:-}"
+caller_redis_url="${REDIS_URL:-}"
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
   . ./.env
   set +a
+fi
+[[ -n "$caller_database_url" ]] && DATABASE_URL="$caller_database_url"
+[[ -n "$caller_load_database_url" ]] && LOAD_DATABASE_URL="$caller_load_database_url"
+[[ -n "$caller_jwt_access_secret" ]] && JWT_ACCESS_SECRET="$caller_jwt_access_secret"
+[[ -n "$caller_redis_url" ]] && REDIS_URL="$caller_redis_url"
+if [[ -n "$caller_api_port" ]]; then
+  port="$caller_api_port"
+  pid_file="$evidence_dir/api-${port}.pid"
+  log_file="$evidence_dir/api-${port}.log"
 fi
 
 if [[ -n "${LOAD_DATABASE_URL:-}" ]]; then

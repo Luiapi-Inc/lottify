@@ -22,7 +22,8 @@
 
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { JwtService } from "@nestjs/jwt";
 
 import { PrismaService } from "../../../src/platform/persistence/prisma.service";
@@ -399,6 +400,7 @@ async function main(): Promise<void> {
     cleanupIds: created,
   };
 
+  mkdirSync(dirname(manifestPath!), { recursive: true });
   writeFileSync(manifestPath!, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   console.log(`[seed] manifest written: ${manifestPath}`);
   console.log(

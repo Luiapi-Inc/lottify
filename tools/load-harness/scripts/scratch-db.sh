@@ -24,11 +24,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# A caller-supplied DATABASE_URL wins over the checkout's .env: a reproduction
+# must measure the URL it was given, not the one in a developer's working copy.
+caller_database_url="${DATABASE_URL:-}"
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
   . ./.env
   set +a
+fi
+if [[ -n "$caller_database_url" ]]; then
+  DATABASE_URL="$caller_database_url"
 fi
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -37,23 +43,45 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 fi
 
 psql_url="${DATABASE_URL%%\?*}"
-# Guard: never let this script resolve to the application database. Only the
-# trailing path segment (the database name) is rewritten — rewriting the whole
-# string would also hit the username, which literally contains "lottify_".
-case "$psql_url" in
-  *lottify_dev*|*lottify_prod*|*lottify_load_*)
-    load_url="${psql_url%/*}/lottify_load_${suffix}"
+base_url="${psql_url%/*}"
+db_name="${psql_url##*/}"
+
+# Guard: the DATABASE_URL path segment (the database name) is resolved rather
+# than the whole URL pattern-matched — the username literally contains
+# "lottify_", so matching the full string is unreliable. Whatever the incoming
+# name is, this script only ever opens lottify_load_<suffix>: lottify_dev,
+# lottify_prod and plain lottify are read for their host only, never opened.
+if [[ ! "$db_name" =~ ^[A-Za-z0-9_]+$ ]]; then
+  echo "cannot resolve a database name from DATABASE_URL (path segment '${db_name}')" >&2
+  exit 2
+fi
+if [[ ! "$suffix" =~ ^[A-Za-z0-9_]+$ ]]; then
+  echo "refusing to use suffix '$suffix' (expected [A-Za-z0-9_]+)" >&2
+  exit 2
+fi
+
+load_db="lottify_load_${suffix}"
+case "$db_name" in
+  lottify_dev|lottify_prod)
+    echo "[scratch-db] source database '${db_name}' is never opened; using ${load_db} on the same host" >&2
     ;;
-  *)
-    load_url="${psql_url}"
+  lottify_load_*)
+    load_db="$db_name"
+    ;;
+  postgres|template0|template1)
+    echo "refusing to derive a load database from maintenance database '${db_name}'" >&2
+    exit 2
     ;;
 esac
 
-load_db="$(echo "$load_url" | sed -E 's#.*/([^/?]+)(\?.*)?$#\1#')"
-if [[ "$load_db" != lottify_load_* ]]; then
-  echo "refusing to operate on database '$load_db' (expected lottify_load_*)" >&2
-  exit 2
-fi
+case "$load_db" in
+  lottify_dev|lottify_prod)
+    echo "refusing to operate on database '$load_db' (expected lottify_load_*)" >&2
+    exit 2
+    ;;
+esac
+
+load_url="${base_url}/${load_db}"
 
 if [[ "$drop" == "1" ]]; then
   psql "${load_url%/*}/postgres" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"${load_db}\";"
