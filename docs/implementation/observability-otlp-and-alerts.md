@@ -96,8 +96,48 @@ routing sink composed of:
 The seven Ticket 13 alert families are enumerated in
 `deploy/observability/alert-definitions.yaml` with their codes, severities,
 conditions, source signals, and default routes, mirrored as Prometheus rules in
-`deploy/observability/prometheus/alerts.yml`. Family 1 (reconciliation
-discrepancy) has an in-code detector
-(`apps/workers/src/ledger-wallet-reconciliation-freshness.worker.ts`). Families
-2–7 are declared as rules and activate once their backing metrics are produced
-(see the `detector_status` field in `alert-definitions.yaml`).
+`deploy/observability/prometheus/alerts.yml`. Every family now has an in-code
+detector that produces its backing metric (`detector_status: in_code`).
+
+### 4.1 Where each family's signal is produced
+
+| Family | Signal site | Metric |
+| --- | --- | --- |
+| F1 reconciliation | `apps/workers/src/ledger-wallet-reconciliation-freshness.worker.ts` | `lottify_reconciliation_discrepancies[_critical]` |
+| F2 Confirm | `apps/api/src/member-order.controller.ts` (command boundary: CONFIRMED / REJECTED denial / ERROR) | `lottify_confirm_requests_total`, `_failures_total`, `_errors_total` |
+| F3 payment | `src/contexts/payments/application/deposit.service.ts` (failed inbound provider interaction) | `lottify_payment_webhook_failures_total` |
+| F4 withdrawal | `apps/workers/src/operational-freshness-detector.worker.ts` (periodic) | `lottify_withdrawals_stuck_reconciling` |
+| F5 settlement | `src/contexts/result-settlement/application/settlement.service.ts` (batch ends FAILED) | `lottify_settlement_failures_total` |
+| F6 queue/DLQ | `apps/workers/src/operational-freshness-detector.worker.ts` (periodic) | `lottify_outbox_lag`, `lottify_queue_dlq_lag` |
+| F7 provider health | `src/contexts/payments/application/deposit.service.ts` (observed adapter outcomes) | `lottify_provider_health` |
+
+Collectors, thresholds and the generic burst detector live in
+`src/platform/observability/operational-metrics.ts`; the alert pipeline itself
+moved to `src/platform/observability/operational-alert.sink.ts` so the API
+process can route F2/F3/F5/F7 through the same sinks the workers use
+(`apps/workers/src/operational-alert.sink.ts` re-exports it for the existing
+worker wiring). Both bootstraps bind the pipeline with
+`configureOperationalAlertsFromEnvironment()`.
+
+### 4.2 Scrape targets
+
+The API serves `/metrics` on the ops surface (bearer-gated when
+`OPS_AUTH_TOKEN` is set). F1/F4/F6 are produced **inside the worker process**, so
+the worker health listener serves the same registry on `/metrics` with the same
+token rule, and `prometheus.yml` carries a `lottify-worker` job with one target
+per worker group. A family whose metric is only produced in a process that is
+never scraped would leave its rule permanently silent.
+
+### 4.3 Known limitations (honest scope)
+
+- **F3 has no HTTP webhook ingress**: the repository still has no inbound payment
+  webhook endpoint, so the family signal is taken at the inbound
+  provider-interaction failure sites that do exist (deposit initiate/reconcile).
+  When the ingress lands it must call `recordInboundPaymentFailure`, the single
+  recorder behind the metric.
+- **F7 is outcome-derived**: the shipped payment adapters are deterministic
+  sandbox adapters, so provider health is computed from observed interaction
+  outcomes (1 = healthy, 0 = degraded per provider+capability), not from an
+  active provider health probe.
+- **F4/F6 thresholds** are SLO-based (30m reconciling SLO; 300s outbox lag;
+  1000 dead-lettered jobs per queue) and mirror the Prometheus rule thresholds.

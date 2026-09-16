@@ -10,6 +10,11 @@ import {
   WebhookOperationalAlertSink,
 } from "./operational-alert.sink";
 import { OutboxDispatcher } from "./outbox-dispatcher";
+import {
+  BullMqQueueDlqReader,
+  OperationalFreshnessDetectorWorker,
+  QUEUE_DLQ_READER,
+} from "./operational-freshness-detector.worker";
 
 @Module({
   imports: [PlatformModule, ContextsModule],
@@ -17,6 +22,9 @@ import { OutboxDispatcher } from "./outbox-dispatcher";
     AccountingPeriodScheduler,
     OutboxDispatcher,
     LedgerWalletReconciliationFreshnessWorker,
+    OperationalFreshnessDetectorWorker,
+    BullMqQueueDlqReader,
+    { provide: QUEUE_DLQ_READER, useExisting: BullMqQueueDlqReader },
     SentryOperationalAlertSink,
     WebhookOperationalAlertSink,
     {

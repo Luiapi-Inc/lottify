@@ -35,6 +35,7 @@ import {
   type BetOrderState,
 } from "../../../src/contexts/betting/domain/bet-order-lifecycle";
 import { currentCorrelationId } from "./correlation";
+import { recordConfirmCommand } from "../../../src/platform/observability/operational-metrics";
 import {
   MemberAuthGuard,
   type MemberAuthenticatedRequest,
@@ -374,8 +375,22 @@ export class MemberOrderController {
         expectedVersion: input.version,
         idempotencyKey: request.header(IDEMPOTENCY_HEADER),
       });
+      // F2 (confirm error/failure spike): a Confirm that resolves to REJECTED is
+      // a business denial — the signal the family alert counts alongside
+      // unexpected errors. Recorded at the command boundary so both the durable
+      // result and the thrown failures are observed exactly once.
+      recordConfirmCommand({
+        outcome: order.state === "REJECTED" ? "REJECTED" : "CONFIRMED",
+        reason: order.state === "REJECTED" ? order.rejectionReason : null,
+        orderId: order.id,
+      });
       return toOrderBody(order);
     } catch (error) {
+      recordConfirmCommand({
+        outcome: isConfirmDenial(error) ? "REJECTED" : "ERROR",
+        reason: confirmFailureReason(error),
+        orderId: id,
+      });
       throw mapOrderError(error);
     }
   }
@@ -571,6 +586,23 @@ export function decodeOrderCursor(value: string): BetOrderCursor {
       details: { field: "cursor" },
     });
   }
+}
+
+/**
+ * A Confirm "failure" is a denial the domain resolved deliberately or a
+ * caller-correctable conflict (a 4xx the Member can act on); anything else is an
+ * unexpected Confirm error and is counted in the error series instead (F2).
+ */
+function isConfirmDenial(error: unknown): boolean {
+  if (error instanceof BettingOrderError) return error.status < 500;
+  if (error instanceof BetOrderCommandError) return true;
+  return false;
+}
+
+function confirmFailureReason(error: unknown): string {
+  if (error instanceof BettingOrderError) return error.code;
+  if (error instanceof BetOrderCommandError) return error.code;
+  return error instanceof Error ? error.name : "UNKNOWN";
 }
 
 function mapOrderError(error: unknown): HttpException {

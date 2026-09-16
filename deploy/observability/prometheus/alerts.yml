@@ -1,9 +1,15 @@
 # Lottify Prometheus alerting rules — mirror of deploy/observability/alert-definitions.yaml.
 #
-# Families with an in-code detector AND a metric fire here. Families whose
-# metrics are not yet produced (detector_status: rule_only in alert-definitions.yaml)
-# are declared but inactive (commented); they activate once the backing metric
-# exists. Reconciliation (F1) is wired to its produced metric so it is live.
+# Every family F1-F7 now has a produced metric (see
+# src/platform/observability/operational-metrics.ts and
+# apps/workers/src/operational-freshness-detector.worker.ts), so all seven
+# families are active here. The metric each rule evaluates is produced by the
+# code-level detector of the same family; the rule adds the sustained-window
+# condition on top of the detector's immediate alert.
+#
+# Scrape targets: the API exposes /metrics (see prometheus.yml, job lottify-api)
+# and the workers expose the same registry on their health listener (/metrics,
+# job lottify-worker), because F1/F4/F6 are produced inside the worker process.
 groups:
   - name: lottify-operational
     rules:
@@ -29,55 +35,71 @@ groups:
           description: "Critical reconciliation discrepancy present (family F1, critical)."
 
       # F2 — Confirm error / failure spike
-      # - alert: ConfirmErrorRateSpike
-      #   expr: rate(lottify_confirm_errors_total[5m]) / (rate(lottify_confirm_requests_total[5m]) + 1) > 0.05
-      #   for: 5m
-      #   labels: { family: confirm_error_failure_spike, severity: error }
-      #   annotations:
-      #     summary: "Confirm error rate spike (family F2)"
-      #     description: "Confirm error ratio is {{ $value }} over 5m (family F2)."
+      - alert: ConfirmErrorRateSpike
+        expr: rate(lottify_confirm_errors_total[5m]) / (rate(lottify_confirm_requests_total[5m]) + 1) > 0.05
+        for: 5m
+        labels: { family: confirm_error_failure_spike, severity: error }
+        annotations:
+          summary: "Confirm error rate spike (family F2)"
+          description: "Confirm error ratio is {{ $value }} over 5m (family F2)."
+
+      - alert: ConfirmFailureBurst
+        expr: increase(lottify_confirm_failures_total[5m]) >= 5
+        for: 5m
+        labels: { family: confirm_error_failure_spike, severity: error }
+        annotations:
+          summary: "Confirm failure burst (family F2)"
+          description: "{{ $value }} Confirm denials in 5m (family F2)."
 
       # F3 — payment webhook failure
-      # - alert: PaymentWebhookFailure
-      #   expr: rate(lottify_payment_webhook_failures_total[10m]) > 0
-      #   for: 5m
-      #   labels: { family: payment_webhook_failure, severity: error }
-      #   annotations:
-      #     summary: "Payment webhook failures (family F3)"
-      #     description: "Payment webhook failures at {{ $value }}/s over 10m (family F3)."
+      - alert: PaymentWebhookFailure
+        expr: rate(lottify_payment_webhook_failures_total[10m]) > 0
+        for: 5m
+        labels: { family: payment_webhook_failure, severity: error }
+        annotations:
+          summary: "Payment webhook failures (family F3)"
+          description: "Payment webhook failures at {{ $value }}/s over 10m (family F3)."
 
       # F4 — stuck/reconciling withdrawal
-      # - alert: WithdrawalStuckReconciling
-      #   expr: lottify_withdrawals_stuck_reconciling > 0
-      #   for: 15m
-      #   labels: { family: withdrawal_stuck_reconciling, severity: error }
-      #   annotations:
-      #     summary: "Withdrawal stuck reconciling (family F4)"
-      #     description: "{{ $value }} withdrawal(s) stuck reconciling beyond SLO (family F4)."
+      - alert: WithdrawalStuckReconciling
+        expr: lottify_withdrawals_stuck_reconciling > 0
+        for: 15m
+        labels: { family: withdrawal_stuck_reconciling, severity: error }
+        annotations:
+          summary: "Withdrawal stuck reconciling (family F4)"
+          description: "{{ $value }} withdrawal(s) stuck reconciling beyond SLO (family F4)."
 
       # F5 — settlement failure
-      # - alert: SettlementFailure
-      #   expr: rate(lottify_settlement_failures_total[5m]) > 0
-      #   for: 5m
-      #   labels: { family: settlement_failure, severity: critical }
-      #   annotations:
-      #     summary: "Settlement failure (family F5)"
-      #     description: "Settlement failures at {{ $value }}/s over 5m (family F5)."
+      - alert: SettlementFailure
+        expr: rate(lottify_settlement_failures_total[5m]) > 0
+        for: 5m
+        labels: { family: settlement_failure, severity: critical }
+        annotations:
+          summary: "Settlement failure (family F5)"
+          description: "Settlement failures at {{ $value }}/s over 5m (family F5)."
 
       # F6 — queue / DLQ lag
-      # - alert: QueueDlqLag
-      #   expr: lottify_queue_dlq_lag > 1000
-      #   for: 10m
-      #   labels: { family: queue_dlq_lag, severity: error }
-      #   annotations:
-      #     summary: "Queue/DLQ lag high (family F6)"
-      #     description: "lottify_queue_dlq_lag is {{ $value }} (family F6)."
+      - alert: QueueDlqLag
+        expr: lottify_queue_dlq_lag > 1000
+        for: 10m
+        labels: { family: queue_dlq_lag, severity: error }
+        annotations:
+          summary: "Queue/DLQ lag high (family F6)"
+          description: "lottify_queue_dlq_lag is {{ $value }} (family F6)."
+
+      - alert: OutboxLag
+        expr: lottify_outbox_lag > 300
+        for: 10m
+        labels: { family: queue_dlq_lag, severity: error }
+        annotations:
+          summary: "Outbox lag high (family F6)"
+          description: "Oldest unpublished Outbox event is {{ $value }}s old (family F6)."
 
       # F7 — provider health degradation
-      # - alert: ProviderHealthDegraded
-      #   expr: lottify_provider_health < 1
-      #   for: 5m
-      #   labels: { family: provider_health_degradation, severity: error }
-      #   annotations:
-      #     summary: "Provider health degraded (family F7)"
-      #     description: "A provider health signal is {{ $value }} (family F7)."
+      - alert: ProviderHealthDegraded
+        expr: lottify_provider_health < 1
+        for: 5m
+        labels: { family: provider_health_degradation, severity: error }
+        annotations:
+          summary: "Provider health degraded (family F7)"
+          description: "A provider health signal is {{ $value }} (family F7)."

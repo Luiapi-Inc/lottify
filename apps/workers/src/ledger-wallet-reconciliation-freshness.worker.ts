@@ -5,6 +5,7 @@ import {
   OPERATIONAL_ALERT_SINK,
   type OperationalAlertSink,
 } from "./operational-alert.sink";
+import { recordReconciliationSnapshot } from "../../../src/platform/observability/operational-metrics";
 
 export const LEDGER_WALLET_FRESHNESS_INTERVAL_MS = 30_000;
 export const LEDGER_WALLET_STALE_DISCREPANCY_MS = 15 * 60_000;
@@ -58,6 +59,7 @@ export class LedgerWalletReconciliationFreshnessWorker {
 
   async runCycle(now: Date): Promise<void> {
     let afterMemberId: string | undefined;
+    let mismatches = 0;
 
     do {
       const page = await this.ledger.listReconciliationTargets({
@@ -76,6 +78,7 @@ export class LedgerWalletReconciliationFreshnessWorker {
               currency: target.currency,
             });
             if (result.result === "MISMATCH") {
+              mismatches += 1;
               this.alerts.emit({
                 code: "LEDGER_WALLET_MISMATCH",
                 severity: "ERROR",
@@ -101,6 +104,12 @@ export class LedgerWalletReconciliationFreshnessWorker {
     const summary = await this.reconciliation.getOperationalAlertSummary(
       new Date(now.getTime() - LEDGER_WALLET_STALE_DISCREPANCY_MS),
     );
+    // F1: the Prometheus rules for this family (alerts.yml) evaluate these two
+    // gauges, so publish the cycle snapshot after every sweep.
+    recordReconciliationSnapshot({
+      mismatches,
+      critical: summary.critical?.count ?? 0,
+    });
     if (summary.staleMonetary) {
       this.alerts.emit({
         code: "RECONCILIATION_MONETARY_DISCREPANCY_STALE",
