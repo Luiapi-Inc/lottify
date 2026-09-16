@@ -337,11 +337,21 @@ model AuditRecord {
 }
 
 model LotteryProduct {
-  id        String                  @id @default(uuid()) @db.Uuid
-  createdAt DateTime                @default(now()) @map("created_at")
-  updatedAt DateTime                @updatedAt @map("updated_at")
-  versions  LotteryProductVersion[]
-  draws     LotteryDraw[]
+  id           String                  @id @default(uuid()) @db.Uuid
+  // D8 display metadata, carried from G2 lottery_categories. Additive: existing
+  // rows keep working through the defaults, a migrated row carries the G2
+  // name/slug/is_active/display_order values.
+  name         String                  @default("")
+  // Nullable so the unique index only constrains rows that actually have a
+  // slug: Postgres treats NULLs as distinct, which is the partial-index
+  // behaviour without leaving an index the Prisma schema cannot express.
+  slug         String?                 @unique
+  isActive     Boolean                 @default(true) @map("is_active")
+  displayOrder Int                     @default(0) @map("display_order")
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
+  versions     LotteryProductVersion[]
+  draws        LotteryDraw[]
 
   @@map("lottery_products")
 }
@@ -353,6 +363,7 @@ model LotteryBetType {
   updatedAt           DateTime                       @updatedAt @map("updated_at")
   versions            LotteryBetTypeVersion[]
   productVersionLinks LotteryProductVersionBetType[]
+  numberLimits        LotteryNumberLimit[]
 
   @@map("lottery_bet_types")
 }
@@ -430,6 +441,43 @@ model LotteryProductVersionBetType {
   @@map("lottery_product_version_bet_types")
 }
 
+// Number limits (D8). G2 kept six number_limits rows (scope GLOBAL/TYPE/DRAW,
+// an optional number, tiers, min_stake / max_stake / max_stake_per_bet /
+// max_payout) with no G3 home. A limit resolves in the order DRAW -> TYPE ->
+// GLOBAL, so a row is made resolvable by the Draw it names and by the Bet Type
+// it was recorded against (G2's lottery_type_id is a per-product instance of one
+// G3 Bet Type code). Amounts follow the G3 minor-unit convention
+// (minor = G2 numeric(12,2) x 100) and stay nullable exactly where G2's column
+// was nullable. G2's redundant DrawLotteryType column is not carried: it is a
+// 1:1 re-spelling of the joined lottery_types.code (TWO_TOP <-> TWO_DIGIT_TOP)
+// and therefore already implied by bet_type_id.
+// The table keeps the lottery_ prefix because the G2 source table is itself
+// named number_limits: the two generations' table names must stay disjoint or
+// `prisma migrate deploy` cannot run over a G2 restore, which is exactly the
+// cutover shape (G2 tables and G3 tables in one database, T13 design record s2).
+model LotteryNumberLimit {
+  id                  String          @id @default(uuid()) @db.Uuid
+  scope               String
+  betTypeId           String?         @map("bet_type_id") @db.Uuid
+  drawId              String?         @map("draw_id") @db.Uuid
+  number              String?
+  tiers               Json?
+  minStakeMinor       BigInt?         @map("min_stake_minor")
+  maxStakeMinor       BigInt?         @map("max_stake_minor")
+  maxStakePerBetMinor BigInt?         @map("max_stake_per_bet_minor")
+  maxPayoutMinor      BigInt?         @map("max_payout_minor")
+  isActive            Boolean         @default(true) @map("is_active")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  betType             LotteryBetType? @relation(fields: [betTypeId], references: [id], onDelete: Restrict)
+  draw                LotteryDraw?    @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  drawBetType         LotteryDrawBetType? @relation("LotteryNumberLimitDrawBetType", fields: [drawId, betTypeId], references: [drawId, betTypeId], onDelete: Restrict)
+
+  @@index([betTypeId, number])
+  @@index([drawId, number])
+  @@map("lottery_number_limits")
+}
+
 // Draw aggregate. A Draw snapshots the effective published Product/Bet-Type
 // configuration at creation time so historical Draws stay reproducible and are
 // never reinterpreted through a later configuration version. The lifecycle state
@@ -464,6 +512,7 @@ model LotteryDraw {
   betTypes                    LotteryDrawBetType[]
   overrides                   LotteryDrawOverride[]
   resultRevisions             ResultRevision[]
+  numberLimits                LotteryNumberLimit[]
   settlementBatches           SettlementBatch[]
   quotes                      BettingQuote[]
   betOrders                   BetOrder[]
@@ -495,6 +544,7 @@ model LotteryDrawBetType {
   settlementRuleVersionRef String      @map("settlement_rule_version_ref")
   createdAt                DateTime    @default(now()) @map("created_at")
   draw                     LotteryDraw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  numberLimits             LotteryNumberLimit[] @relation("LotteryNumberLimitDrawBetType")
 
   @@unique([drawId, betTypeId])
   @@index([betTypeVersionId])
@@ -691,6 +741,16 @@ model ResultRevision {
   correlationId          String          @map("correlation_id")
   confirmedAt            DateTime?       @map("confirmed_at")
   confirmedByAdminId     String?         @map("confirmed_by_admin_id") @db.Uuid
+  // D6 provenance. G2 recorded the actor that announced a result in
+  // draw_results.announced_by, a G2 users.id that cannot be an AdminUser, so the
+  // CONFIRMED revision is attributed to the DISABLED migration principal and the
+  // real actor is preserved here. Typed (uuid) and queryable rather than left
+  // inside result_source_ref text. Deliberately not a foreign key: an
+  // ADMIN/SUPERADMIN G2 actor is not migrated as a Member (D3), and the G2 users
+  // table has no G3 counterpart, so a hard FK would reject exactly the rows this
+  // column exists for. NULL means "confirmed by a G3 admin", i.e. the ordinary
+  // post-cutover case.
+  legacyConfirmedByUserId String?        @map("legacy_confirmed_by_user_id") @db.Uuid
   createdAt              DateTime        @default(now()) @map("created_at")
   updatedAt              DateTime        @updatedAt @map("updated_at")
   draw                   LotteryDraw     @relation(fields: [drawId], references: [id], onDelete: Restrict)
