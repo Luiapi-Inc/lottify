@@ -85,12 +85,14 @@ identity, the timestamps, the raw samples, the metric inventory and (for
 settlement) the independent SQL assertion output.
 
 Both halves of a report must name the same candidate; CI enforces it in the smoke
-job, and a reviewer can check a report the same way:
+job, and a reviewer can check a report the same way. The expected SHA is the
+*candidate* — inside CI the checked-out commit is the candidate, but on a harness
+branch the candidate is `origin/main`:
 
 ```bash
 node tools/load-harness/scripts/assert-report.mjs \
-  .hermes/evidence/release/load-harness-ticket13-capacity-v1-smoke-<sha>.json \
-  "$(git rev-parse --short=12 HEAD)"
+  .hermes/evidence/release/load-harness-ticket13-capacity-v1-smoke-<candidate-sha-12>.json \
+  "$(git rev-parse --short=12 origin/main)"   # CI passes HEAD, which is the candidate there
 ```
 
 `scratch-db.sh` and `boot-api.sh` also take caller-provided `DATABASE_URL`,
