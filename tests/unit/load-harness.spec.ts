@@ -4,6 +4,7 @@
 // verdict rule fails CI instead of quietly producing a green capacity claim.
 // They also pin the statistics the drivers rely on.
 
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -17,6 +18,7 @@ import { loadScenario, resolveProfile, TICKET13_FLOOR } from "../../tools/load-h
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const scenario = loadScenario() as {
+  id: string;
   targets: Record<string, Record<string, number>>;
   requiredObservability: { families: Array<{ id: string }> };
   profiles: Record<string, { claimsTarget: boolean }>;
@@ -295,6 +297,141 @@ describe("load harness once-only stake-effect rule", () => {
     });
     expect(result.checks.manifestOrdersMissingFromScope).toBe(1);
     expect(result.failures.join(" ")).toMatch(/wrong database/);
+  });
+});
+
+describe("load harness target coverage (review round 3 finding C1)", () => {
+  const coverageModule = "../../tools/load-harness/lib/coverage.mjs";
+  const reproductionModule = "../../tools/load-harness/lib/reproduction.mjs";
+
+  it("reports a NOT_MEASURED row for every target no driver measured", async () => {
+    const { buildCoverageRun, findUncoveredTargets, targetCoverageFailures } = await import(coverageModule);
+    const scenarioTargets = scenario.targets;
+    // A run set that measures everything except queue lag, exactly like the
+    // reviewed artifact: 10 of 11 targets had a row and the 11th was invisible.
+    const measuredKeys = Object.keys(scenarioTargets).filter((key) => key !== "critical_queue_lag");
+    const runs = [
+      { id: "settlement-capacity", measurements: Object.fromEntries(measuredKeys.map((key) => [key, { verdict: "MEASURED" }])) },
+    ];
+    expect(findUncoveredTargets(scenarioTargets, runs)).toEqual(["critical_queue_lag"]);
+    // The pre-fix report would have failed this check.
+    expect(targetCoverageFailures(scenarioTargets, runs).join(" ")).toMatch(/critical_queue_lag/);
+
+    const signals = [
+      { id: "queueLag", purpose: "critical Outbox/queue delivery lag p95", available: false, matchedFamilies: [], surfaces: [] },
+    ];
+    const coverageRun = buildCoverageRun({ targets: scenarioTargets, scenarioId: scenario.id, runs, signals, inventory: { api: { familyCount: 0, families: [] } } });
+    expect(coverageRun).not.toBeNull();
+    expect(coverageRun.measured).toBe(false);
+    const row = coverageRun.measurements.critical_queue_lag;
+    expect(row.verdict).toBe("NOT_MEASURED");
+    expect(row.achieved).toBeNull();
+    expect(row.target).toEqual({ p95_ms_max: 5000, alert_threshold_ms: 30000, unit: "ms (Outbox/queue delivery lag)" });
+    expect(row.reason).toMatch(/queueLag/);
+    expect(row.reason).toMatch(/no family matched/);
+    expect(row.evidence.matchedFamilies).toEqual([]);
+    // With the coverage run appended the report accounts for all 11 targets.
+    expect(targetCoverageFailures(scenarioTargets, [...runs, coverageRun])).toEqual([]);
+    // A complete report is not padded with an empty coverage run.
+    expect(buildCoverageRun({ targets: scenarioTargets, runs: [...runs, coverageRun], signals })).toBeNull();
+  });
+
+  it("refuses to write a report whose table is missing a target, and names the coverage line", async () => {
+    const reportModule = "../../tools/load-harness/lib/report.mjs";
+    const { writeReport, buildMarkdownReport } = await import(reportModule);
+    const base = {
+      scenario: { id: "ticket13-capacity-v1", version: "1.0.0", sourceOfTruth: "GH #91", card: "t_4fd8e4a7", mix: {}, burst: {}, targets: scenario.targets },
+      profile: { name: "smoke", claimsTarget: false, purpose: "plumbing" },
+      fingerprint: { candidate: { sha: "0d3b6cb1ce905387dd6822a29121bba70bddcf4a", branch: "feat/load-harness-ticket13", worktreeDirty: false } },
+      likeness: { productionLike: false, failures: ["cpu"] },
+      signals: [],
+      inventory: {},
+      assertions: null,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      finishedAt: "2026-01-01T00:00:01.000Z",
+      commands: [],
+    };
+    const outDir = mkdtempSync(path.join(tmpdir(), "load-coverage-"));
+    try {
+      // Missing target -> refuse to write.
+      expect(() => writeReport({ ...base, outDir, runs: [{ id: "member-sessions", measurements: {} }] })).toThrow(
+        /target coverage is incomplete/,
+      );
+
+      const coverageRun = {
+        id: "target-coverage",
+        name: "Ticket 13 targets with no measurement path in this harness",
+        measured: false,
+        envGated: false,
+        driver: "lib/coverage.mjs",
+        requested: { uncoveredTargets: ["critical_queue_lag"] },
+        notes: [],
+        samples: {},
+        measurements: {
+          critical_queue_lag: {
+            target: { p95_ms_max: 5000 },
+            achieved: null,
+            verdict: "NOT_MEASURED",
+            reason: "no driver measures `critical_queue_lag`; required family `queueLag` matched nothing",
+          },
+        },
+      };
+      const runs = [
+        { id: "settlement-capacity", measurements: Object.fromEntries(Object.keys(scenario.targets).filter((key) => key !== "critical_queue_lag").map((key) => [key, { target: {}, achieved: 1, verdict: "MEASURED" }])) },
+        coverageRun,
+      ];
+      const { jsonPath, mdPath } = writeReport({ ...base, outDir, runs });
+      const markdown = readFileSync(mdPath, "utf8");
+      const json = JSON.parse(readFileSync(jsonPath, "utf8"));
+      expect(markdown).toMatch(/\| critical_queue_lag \| target-coverage \| \{"p95_ms_max":5000\} \| - \| NOT_MEASURED \| no driver measures/);
+      expect(markdown).toMatch(/Ticket 13 target coverage: \*\*10\/11 driver-backed\*\*/);
+      expect(json.targetCoverage.declaredUnmeasured).toEqual(["critical_queue_lag"]);
+      expect(json.targetCoverage.driverBacked).toBe(10);
+      expect(json.targetCoverage.missing).toEqual([]);
+      expect(json.targetCoverage.totalTargets).toBe(11);
+      // The markdown view must stay renderable as a table with the reason column.
+      expect(buildMarkdownReport({ ...base, runs })).toContain("| Metric | Driver | Target | Achieved | Verdict | Note |");
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("prints reproduction commands that boot-api.sh actually accepts", async () => {
+    const { buildReproductionCommands, portFromBaseUrl, databaseSuffixFromUrl } = await import(reproductionModule);
+    const commands = buildReproductionCommands({
+      scenarioId: "ticket13-capacity-v1",
+      profileName: "smoke",
+      baseUrl: "http://127.0.0.1:19299",
+      manifestPath: path.join(repoRoot, ".hermes/evidence/release/w5-raw-load/load-manifest-smoke.json"),
+      repoRoot,
+      candidateSha: "0d3b6cb1ce905387dd6822a29121bba70bddcf4a",
+      databaseUrl: "postgresql://lottify:secret@127.0.0.1:5432/lottify_load_r4repro?schema=public",
+    });
+    expect(portFromBaseUrl("http://127.0.0.1:19299")).toBe("19299");
+    expect(portFromBaseUrl("https://load.example.com")).toBe("443");
+    const printed = commands.join("\n");
+    expect(printed).not.toMatch(/boot-api\.sh\s+--base-url/);
+    expect(printed).toContain("bash tools/load-harness/scripts/boot-api.sh --port 19299");
+    // The teardown must name the real load database, not a placeholder.
+    expect(databaseSuffixFromUrl("postgresql://lottify:secret@127.0.0.1:5432/lottify_load_r4repro?schema=public")).toBe("r4repro");
+    expect(databaseSuffixFromUrl("postgresql://lottify:secret@127.0.0.1:5432/lottify_dev?schema=public")).toBeNull();
+    expect(printed).toContain("LOAD_DB_SUFFIX=r4repro bash tools/load-harness/scripts/scratch-db.sh --drop");
+    // The block must create the database it later drops, or it is not a
+    // reproduction of the whole drill.
+    expect(printed).toContain("bash tools/load-harness/scripts/scratch-db.sh --suffix r4repro");
+    // The block references $LOAD_DATABASE_URL; it must never embed the URL itself
+    // (a manifest holds real tokens; a report is attachable evidence).
+    expect(printed).not.toContain("postgresql://");
+    expect(printed).not.toContain("secret");
+    // The printed boot-step arguments must be accepted by the real script. `--stop`
+    // on an unused port is a no-op, so nothing is started or killed here.
+    const scriptPath = path.join(repoRoot, "tools/load-harness/scripts/boot-api.sh");
+    const stopped = spawnSync("bash", [scriptPath, "--port", "19997", "--stop"], { encoding: "utf8" });
+    expect(stopped.status).toBe(0);
+    expect(stopped.stdout).toMatch(/no pid file|stopped API/);
+    const rejected = spawnSync("bash", [scriptPath, "--base-url", "http://127.0.0.1:19299"], { encoding: "utf8" });
+    expect(rejected.status).toBe(2);
+    expect(rejected.stderr).toMatch(/unknown argument: --base-url/);
   });
 });
 

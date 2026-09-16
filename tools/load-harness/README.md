@@ -25,6 +25,16 @@ database created for the run.
   a co-located client and a shared development database. `run.mjs` refuses to run
   the `target` profile here, and profiles that do not declare `claimsTarget: true`
   can only ever report `MEASURED`, never `PASS`.
+- **Every Ticket 13 target gets a row in §1, even when nothing can measure it.**
+  `lib/coverage.mjs` turns any target that no driver measured into an explicit
+  `NOT_MEASURED` row carrying its reason plus the observability evidence for that
+  reason; `writeReport()` refuses to write a report that is missing a target row,
+  and `scripts/assert-report.mjs` fails the CI check if one disappears. `critical_queue_lag`
+  is the current example (queue/outbox lag has no metric family yet — card
+  `t_79b28bfc`): it is reported as unmeasured, not omitted. The header line
+  `Ticket 13 target coverage: N/11 driver-backed` and the §1 table therefore always
+  account for all 11 targets, and the verdict counter can never understate the
+  unproven set.
 
 ## Scenario identity
 
@@ -77,7 +87,12 @@ pnpm load:run -- --profile smoke --base-url http://127.0.0.1:19199 \
   --manifest .hermes/evidence/release/w5-raw-load/load-manifest-smoke.json \
   --database-url "$LOAD_DATABASE_URL"
 
-# 6. stop the API and remove the fixtures / database
+# 6. verify the artifact names the candidate under test
+node tools/load-harness/scripts/assert-report.mjs \
+  "$(ls -t .hermes/evidence/release/load-harness-ticket13-capacity-v1-smoke-*.json | head -1)" \
+  "$(git rev-parse --short=12 origin/main)"
+
+# 7. stop the API and remove the fixtures / database
 bash tools/load-harness/scripts/boot-api.sh --port 19199 --stop
 pnpm load:seed -- --manifest .hermes/evidence/release/w5-raw-load/load-manifest-smoke.json \
   --database-url "$LOAD_DATABASE_URL" --cleanup

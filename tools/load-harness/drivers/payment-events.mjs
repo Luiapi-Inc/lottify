@@ -89,6 +89,10 @@ export async function runPaymentEvents({
           target: { min: target.min },
           achieved: null,
           verdict: "NOT_MEASURED",
+          reason:
+            "no inbound webhook/callback route exists in the candidate contract and no --webhook-path was supplied; " +
+            "the harness will not drive an unsigned ingress (Ticket 13 requires authenticated/validated webhooks), " +
+            "so no achieved events/s can be reported — see the ingress-discovery evidence in this run's samples",
         },
       },
     };
@@ -159,9 +163,17 @@ export async function runPaymentEvents({
       sampleErrors: statusErrors,
     },
     measurements: {
-      payment_webhook_events_per_second: evaluateMin(snapshot.achievedRps, target.min, {
-        claimsTarget: claimsTarget && Boolean(signatureHeader),
-      }),
+      payment_webhook_events_per_second: {
+        ...evaluateMin(snapshot.achievedRps, target.min, {
+          claimsTarget: claimsTarget && Boolean(signatureHeader),
+        }),
+        ...(signatureHeader
+          ? {}
+          : {
+              reason:
+                "driven without a signature header (--webhook-signature-header), so this run can report an observed rate but no capacity verdict",
+            }),
+      },
     },
   };
 }

@@ -81,9 +81,15 @@ Profile `smoke` (20 sessions, 20 s windows, 200 Bet Lines) on candidate
 `0d3b6cb1` in this sandbox — full report in
 `.hermes/evidence/release/load-harness-ticket13-capacity-v1-smoke-0d3b6cb1ce90.md`:
 
-- 16 measurements resolved; 1 remained `NOT_MEASURED` (payment/webhook throughput —
-  no ingress exists, §5) and 0 could be `PASS`/`FAIL` because the profile is not
-  target-scale.
+- 18 rows in §1 across the drivers; the table covers **11/11 Ticket 13
+  targets**, of which 10 are driver-backed and 2 are reported `NOT_MEASURED` with
+  their reason (payment/webhook throughput — no ingress exists, §5; and
+  `critical_queue_lag` — no queue/outbox lag metric family exists, §5 gap 2).
+  0 could be `PASS`/`FAIL` because the profile is not target-scale.
+- The report header line `Ticket 13 target coverage: N/11 driver-backed` is written
+  from `lib/coverage.mjs`; the same module makes a missing target row fatal
+  (`writeReport()` refuses, `scripts/assert-report.mjs` fails CI), so the verdict
+  counter can never understate the unproven set.
 - Both repeat runs are on record: settlement resumed with the same batch id, no
   Member-visible partial completion, and the SQL assertions found exactly one
   stake effect per confirmed Order and no Order paid twice.

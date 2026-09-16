@@ -26,6 +26,8 @@ import { loadScenario, resolveProfile } from "./lib/scenario.mjs";
 import { environmentFingerprint, assessProductionLikeness } from "./lib/environment.mjs";
 import { fetchMetrics, resolveRequiredSignals, metricInventory } from "./lib/metrics.mjs";
 import { writeReport, summariseVerdicts } from "./lib/report.mjs";
+import { buildCoverageRun } from "./lib/coverage.mjs";
+import { buildReproductionCommands } from "./lib/reproduction.mjs";
 import { HttpClient } from "./lib/http-client.mjs";
 import { runReadSessions } from "./drivers/read-sessions.mjs";
 import { runQuoteConfirm } from "./drivers/quote-confirm.mjs";
@@ -90,6 +92,7 @@ function reconcileSettlementWithAssertions({ runs, assertions, scenario, profile
   run.measurements.settlement_idempotent_resume = {
     target: { required: true },
     achieved: checks.settlementBatchCount === undefined ? null : resumeOk,
+    achievedMeaning: "the settlement batch resumed idempotently (true) or did not (false)",
     verdict: !run.measured
       ? "NOT_MEASURED"
       : checks.settlementBatchCount === undefined
@@ -122,6 +125,10 @@ function reconcileSettlementWithAssertions({ runs, assertions, scenario, profile
   run.measurements.duplicate_financial_effect_under_load = {
     target: { allowed: false },
     achieved: assertions.measured ? onceOnlyOk : null,
+    // The target constrains a property ("no duplicate financial effect is
+    // allowed"), so `achieved` must not be read as a quantity that was achieved:
+    // true = the once-only property HOLDS (no duplicate observed).
+    achievedMeaning: "the once-only financial-effect property holds — no duplicate stake/refund effect was observed (true) or one was (false)",
     duplicateEffectsFound,
     examinedPopulation,
     verdict: !assertions.measured ? "NOT_MEASURED" : profile.claimsTarget ? (onceOnlyOk ? "PASS" : "FAIL") : "MEASURED",
@@ -321,31 +328,61 @@ const finishedAt = new Date().toISOString();
 // count. Reconcile the two here so the report carries one number per target.
 reconcileSettlementWithAssertions({ runs, assertions, scenario, profile });
 
-const commands = [
-  `# 1. scratch database + fixtures (test-scoped seeding; never against production)`,
-  `pnpm load:seed --profile ${profile.name} --manifest ${path.relative(repoRoot, manifestPath ?? "…")} --database-url "$LOAD_DATABASE_URL"`,
-  `# 2. boot the candidate API against the load database`,
-  `bash tools/load-harness/scripts/boot-api.sh --base-url ${baseUrl}`,
-  `# 3. run the scenario`,
-  `node tools/load-harness/run.mjs --profile ${profile.name} --base-url ${baseUrl} --manifest ${path.relative(repoRoot, manifestPath ?? "…")}`,
-];
-
-const { jsonPath, mdPath } = writeReport({
-  outDir,
-  scenario,
-  profile,
-  fingerprint,
-  likeness,
+// Coverage runs last: it needs the final measurement set (including the
+// assertion-derived settlement rows) to know which Ticket 13 targets still have
+// no row, and it is what makes `critical_queue_lag` an explicit NOT_MEASURED row
+// instead of an invisible gap (review round 3 finding C1).
+const coverageRun = buildCoverageRun({
+  targets: scenario.targets,
+  scenarioId: scenario.id,
   runs,
   signals,
   inventory,
-  assertions,
-  startedAt,
-  finishedAt,
-  commands,
-  candidateSha,
-  harnessRevisionSha,
 });
+if (coverageRun) {
+  runs.push(coverageRun);
+  console.log(
+    `[harness] target coverage: ${coverageRun.requested.uncoveredTargets.length} target(s) with no measurement path reported as NOT_MEASURED: ${coverageRun.requested.uncoveredTargets.join(", ")}`,
+  );
+}
+
+const commands = buildReproductionCommands({
+  scenarioId: scenario.id,
+  profileName: profile.name,
+  baseUrl,
+  manifestPath,
+  repoRoot,
+  candidateSha,
+  // Lets the printed teardown name the real load-database suffix instead of a
+  // placeholder, so §6 is runnable verbatim.
+  databaseUrl: loadDatabaseUrl,
+});
+
+const { jsonPath, mdPath } = (() => {
+  try {
+    return writeReport({
+      outDir,
+      scenario,
+      profile,
+      fingerprint,
+      likeness,
+      runs,
+      signals,
+      inventory,
+      assertions,
+      startedAt,
+      finishedAt,
+      commands,
+      candidateSha,
+      harnessRevisionSha,
+    });
+  } catch (error) {
+    // writeReport refuses an incomplete target table (round-3 C1). Fail loudly
+    // rather than emitting a report whose §1 is missing a Ticket 13 target.
+    console.error(`[harness] refusing to write the report: ${error.message}`);
+    process.exit(4);
+  }
+})();
 
 const { counter, rows } = summariseVerdicts(runs);
 console.log("");

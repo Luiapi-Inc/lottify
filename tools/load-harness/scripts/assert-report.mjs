@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 
 import { summariseVerdicts, onceOnlyEvidenceFailures } from "../lib/report.mjs";
+import { targetCoverageFailures } from "../lib/coverage.mjs";
 
 const [jsonPath, expectedSha] = process.argv.slice(2);
 if (!jsonPath) {
@@ -48,11 +49,30 @@ if (!report?.environment?.candidate?.sha) {
 // from an assertion that examined an empty population.
 failures.push(...onceOnlyEvidenceFailures(report.runs ?? []));
 
+// Every Ticket 13 target must appear as a row (review round 3 finding C1): a
+// target with no row cannot be distinguished from a target nobody considered,
+// and the verdict counter then understates the unproven set.
+const scenarioTargets = report?.targets ?? {};
+if (Object.keys(scenarioTargets).length === 0) {
+  failures.push(`${jsonPath}: the report carries no scenario targets, so target coverage cannot be verified`);
+}
+failures.push(...targetCoverageFailures(scenarioTargets, report.runs ?? []));
+
+// The §6 reproduction block must be runnable as printed (review round 3 finding
+// C2): boot-api.sh accepts --port/--stop only, so a printed `--base-url` fails.
+if (/(^|\s)boot-api\.sh\s+--base-url/.test(markdown)) {
+  failures.push(`${mdPath}: the reproduction block boots the API with --base-url, which boot-api.sh rejects (it takes --port)`);
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`[assert-report] FAIL: ${failure}`);
   process.exit(1);
 }
 
 const { counter } = summariseVerdicts(report.runs ?? []);
+const coverage = report?.targetCoverage ?? null;
 console.log(`[assert-report] OK: report bound to candidate ${candidateSha} (harness revision ${harnessSha ?? "unknown"})`);
-console.log(`[assert-report] verdicts: ${JSON.stringify(counter)}`);
+console.log(
+  `[assert-report] verdicts: ${JSON.stringify(counter)} (${(report.runs ?? []).length} runs)` +
+    (coverage ? ` · target coverage: ${coverage.driverBacked}/${coverage.totalTargets} driver-backed, ${coverage.declaredUnmeasured.length} NOT_MEASURED (${coverage.declaredUnmeasured.join(", ") || "none"})` : ""),
+);

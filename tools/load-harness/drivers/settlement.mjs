@@ -231,6 +231,7 @@ export async function runSettlementCapacity({
       settlement_no_member_visible_partial_completion: {
         target: { required: true },
         achieved: firstOk ? !partialCompletionObserved : null,
+        achievedMeaning: "no Member-visible partial completion was observed (true) or one was (false)",
         verdict: !firstOk
           ? "NOT_MEASURED"
           : claimsTarget

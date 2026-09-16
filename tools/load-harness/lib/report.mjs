@@ -9,6 +9,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { round } from "./stats.mjs";
+import { coverageSummary, assertTargetCoverage } from "./coverage.mjs";
 
 export const VERDICT_PRIORITY = {
   FAIL: 0,
@@ -37,6 +38,13 @@ export function summariseVerdicts(runs) {
         target: JSON.stringify(result.target),
         achieved: result.achieved,
         verdict: result.verdict,
+        reason: result.reason ?? null,
+        // `achieved` is a boolean for the property-style targets (once-only
+        // financial effect, idempotent resume), where "true" means the target's
+        // required property HOLDS and "false" means it is violated. Without this
+        // label, `duplicate_financial_effect_under_load | target {"allowed":false}
+        // | achieved true` reads as if the run had achieved something it must not.
+        achievedMeaning: result.achievedMeaning ?? null,
       });
     }
   }
@@ -103,6 +111,19 @@ export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, 
   lines.push(
     `- Verdicts: PASS ${counter.PASS ?? 0} · FAIL ${counter.FAIL ?? 0} · MEASURED ${counter.MEASURED ?? 0} · NOT_MEASURED ${counter.NOT_MEASURED ?? 0} · ENV_GATED ${counter.ENV_GATED ?? 0}`,
   );
+  // Every key of scenario.targets must appear as a row. A target with no
+  // measurement path is a declared NOT_MEASURED row, never an absent one, so the
+  // headline counter can never understate the unproven set (review round 3 C1).
+  const coverage = coverageSummary(scenario.targets, runs);
+  lines.push(
+    `- Ticket 13 target coverage: **${coverage.driverBacked}/${coverage.totalTargets} driver-backed** rows` +
+      ` · ${coverage.declaredUnmeasured.length} of ${coverage.totalTargets} declared NOT_MEASURED with a reason` +
+      ` (${coverage.declaredUnmeasured.join(", ") || "none"}) · ${rows.length} rows in §1`,
+  );
+  // `missing` is only ever non-empty if the pre-write coverage guard was bypassed.
+  if (coverage.missing.length > 0) {
+    lines.push(`- \u26a0 targets with no row at all: ${coverage.missing.join(", ")}`);
+  }
   if (!profile.claimsTarget) {
     lines.push("");
     lines.push(
@@ -112,10 +133,28 @@ export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, 
   lines.push("");
   lines.push("## 1. Target-by-target result");
   lines.push("");
-  lines.push("| Metric | Driver | Target | Achieved | Verdict |");
-  lines.push("|---|---|---|---|---|");
+  lines.push("| Metric | Driver | Target | Achieved | Verdict | Note |");
+  lines.push("|---|---|---|---|---|---|");
   for (const row of rows) {
-    lines.push(`| ${row.metric} | ${row.driver} | ${row.target} | ${formatValue(row.achieved)} | ${row.verdict} |`);
+    lines.push(
+      `| ${row.metric} | ${row.driver} | ${row.target} | ${formatValue(row.achieved)} | ${row.verdict} | ${row.reason ?? "-"} |`,
+    );
+  }
+  lines.push("");
+  lines.push(
+    "`achieved` is a value for capacity/latency targets and a boolean for property targets " +
+      "(`settlement_idempotent_resume`, `settlement_no_member_visible_partial_completion`, " +
+      "`duplicate_financial_effect_under_load`), where `true` means the required property HOLDS " +
+      "and `false` means it is violated — e.g. `duplicate_financial_effect_under_load` has " +
+      "`target {\"allowed\":false}`, so `achieved true` means \"no duplicate was observed\", not \"a duplicate was achieved\".",
+  );
+  if (coverage.declaredUnmeasured.length > 0) {
+    lines.push("");
+    lines.push(
+      `Targets with no measurement path (${coverage.declaredUnmeasured.length}/${coverage.totalTargets}), reported as NOT_MEASURED rather than omitted: ` +
+        coverage.declaredUnmeasured.map((key) => `\`${key}\``).join(", ") +
+        ". Their reasons are in the Note column above; the metric-family inventory in §4 is the evidence of absence.",
+    );
   }
   lines.push("");
   lines.push("## 2. Environment fingerprint");
@@ -179,6 +218,11 @@ export function buildMarkdownReport({ scenario, profile, fingerprint, likeness, 
 }
 
 export function writeReport({ outDir, scenario, profile, fingerprint, likeness, runs, signals, inventory, assertions, startedAt, finishedAt, commands, candidateSha = null, harnessRevisionSha = null }) {
+  // Refuse to write a report that does not account for every Ticket 13 target:
+  // a missing row is the round-3 C1 defect (the headline counter then understates
+  // the unproven set). run.mjs appends the coverage run before this point.
+  assertTargetCoverage(scenario.targets, runs);
+  const coverage = coverageSummary(scenario.targets, runs);
   const sha = (candidateSha ?? fingerprint.candidate.sha ?? "unknown").slice(0, 12);
   const base = path.join(outDir, `load-harness-${scenario.id}-${profile.name}-${sha}`);
   mkdirSync(outDir, { recursive: true });
@@ -196,6 +240,7 @@ export function writeReport({ outDir, scenario, profile, fingerprint, likeness, 
     runs,
     requiredSignals: signals,
     metricInventory: inventory,
+    targetCoverage: coverage,
     financialAssertions: assertions ?? null,
     reproductionCommands: commands,
     phase: "draft",

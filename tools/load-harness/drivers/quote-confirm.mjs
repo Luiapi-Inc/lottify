@@ -190,6 +190,9 @@ export async function runQuoteConfirm({
     driver: "quote-confirm",
     requested: { quoteRps, confirmRps, workers, confirmEveryNthCycle, durationSeconds, burst: burst?.description ?? null },
     elapsedSeconds: (Date.now() - startedAt) / 1000,
+    notes: [
+      "critical_server_error_rate is computed from the Quote/Confirm critical path driven by this run (quote + confirm failures over quote + confirm requests) only. The read path's errors are a separate surface and are reported by the member-sessions driver as read_error_rate; the repo exposes no single combined critical-path error counter, so the two must be read together.",
+    ],
     samples: {
       quotes: {
         requests: quoteSnapshot.total,
