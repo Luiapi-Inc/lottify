@@ -14,7 +14,14 @@ import { FinancialLedgerService } from "../../src/contexts/wallet-ledger/applica
 import { MemberWalletService } from "../../src/contexts/wallet-ledger/application/member-wallet.service";
 import { PrismaFinancialLedgerRepository } from "../../src/contexts/wallet-ledger/infrastructure/prisma-financial-ledger.repository";
 import { DatabaseAccountingPeriodTransactionClock } from "../../src/contexts/wallet-ledger/infrastructure/accounting-period-runtime";
-import { resetEnvironmentForTests } from "../../src/platform/config/env";
+import {
+  DUAL_CONTROL_APPROVAL_EVIDENCE_REF,
+  DUAL_CONTROL_APPROVAL_REASON_CODE,
+} from "../../src/contexts/payments/domain/dual-control-approval";
+import {
+  getWithdrawalApprovalThresholdMinor,
+  resetEnvironmentForTests,
+} from "../../src/platform/config/env";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
@@ -593,6 +600,258 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
       fromState: "PAYOUT_PROCESSING",
       toState: "PAYOUT_PROCESSING",
       reason: "PAYOUT_IN_FLIGHT",
+    });
+  });
+
+  /**
+   * G2→G3 cutover decision D11: `WITHDRAWAL_APPROVAL_THRESHOLD_MINOR`
+   * (`src/platform/config/env.ts`, default 5,000,000 minor = 50,000.00 THB, the
+   * G2 `system_settings.withdrawal.dual_control_threshold` value) is a
+   * *creation-time* dual-control gate: an amount at or above it routes to
+   * `REVIEW_REQUIRED` (admin `APPROVAL` queue, `APPROVAL_THRESHOLD` signal,
+   * Reservation held) instead of fast-pathing to `APPROVED`.
+   *
+   * How the threshold reaches this integration context: the spec adds no
+   * configuration source. It reads the value the process environment resolves to
+   * through `getWithdrawalApprovalThresholdMinor()`, and the integration run
+   * exports the shared `.env` (`set -a && . ./.env && set +a`) which does not set
+   * the variable — so the built-in default (the G2 cutover value) applies. Every
+   * amount below is derived from the *resolved* threshold (exact / +1 / -1
+   * satang) rather than hard-coded, so the boundary evidence holds whether an
+   * operator sets the variable explicitly or leaves it unset.
+   *
+   * The unit suite (`tests/unit/withdrawal.service.spec.ts`) proves the pure
+   * comparison only; these cases are the deterministic PostgreSQL evidence
+   * Ticket 16 requires for the reservation/state invariants at the exact
+   * boundary.
+   */
+  describe("dual-control approval threshold at the exact boundary (D11)", () => {
+    // `decided_by_admin_id` is a uuid column, so the Admin identity used for a
+    // governed decision must be a real Admin identity shape.
+    const BOUNDARY_ADMIN_ID = "7d2f0c1a-9b6e-4a11-8f0d-0000000000d1";
+
+    function thresholdMinor(): bigint {
+      return getWithdrawalApprovalThresholdMinor();
+    }
+
+    it("resolves the threshold from configuration with no new config source", () => {
+      const configured = process.env.WITHDRAWAL_APPROVAL_THRESHOLD_MINOR;
+      expect(thresholdMinor()).toBe(configured ? BigInt(configured) : 5_000_000n);
+      expect(thresholdMinor()).toBeGreaterThan(0n);
+      if (!configured) {
+        // Unset in this environment: the G2 cutover value must survive.
+        expect(thresholdMinor()).toBe(50_000_00n);
+      }
+    });
+
+    it("holds an amount exactly at the threshold for dual control, then approves, pays out and finalizes once", async () => {
+      const amount = thresholdMinor();
+      const memberId = await fundedMember(amount);
+      const destinationId = await verifiedDestination(memberId);
+      const { service, provider } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "APPROVED" } });
+
+      const created = await service.createWithdrawal(
+        memberId,
+        { payoutDestinationId: destinationId, amountMinor: amount, currency: "THB", idempotencyKey: randomUUID() },
+        randomUUID(),
+      );
+      expect(created.state).toBe("REVIEWING");
+      expect(created.requiresApproval).toBe(true);
+      expect(created.eligibilityOutcome).toBe("REVIEW_REQUIRED");
+      expect(created.eligibilityReasonCodes).toContain(DUAL_CONTROL_APPROVAL_REASON_CODE);
+      expect(created.eligibilityEvidenceRefs).toContain(DUAL_CONTROL_APPROVAL_EVIDENCE_REF);
+      expect(created.reservationId).not.toBeNull();
+      // The Reservation is HELD: nothing is posted and the spendable balance is gone.
+      expect(await postedCash(memberId)).toBe(amount);
+      expect(await availableCash(memberId)).toBe(0n);
+      const held = await prisma.reservation.findUniqueOrThrow({
+        where: { id: created.reservationId! },
+        select: { purpose: true, amountMinor: true, releasedAt: true, consumedAt: true },
+      });
+      expect(held.purpose).toBe("WITHDRAWAL");
+      expect(BigInt(held.amountMinor)).toBe(amount);
+      expect(held.releasedAt).toBeNull();
+      expect(held.consumedAt).toBeNull();
+      expect(
+        (await withdrawals.list({ memberId, queue: "APPROVAL", limit: 50 })).items.map((item) => item.id),
+      ).toEqual([created.id]);
+
+      // Payout stays unreachable until the second control acts.
+      await expect(
+        service.requestPayout(created.id, { adminId: BOUNDARY_ADMIN_ID }, randomUUID()),
+      ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+
+      const approved = await service.approveWithdrawal(
+        created.id,
+        { adminId: BOUNDARY_ADMIN_ID, reason: "Dual-control approval at the threshold" },
+        randomUUID(),
+      );
+      expect(approved.state).toBe("APPROVED");
+      expect(approved.decidedByAdminId).toBe(BOUNDARY_ADMIN_ID);
+
+      const paid = await service.requestPayout(created.id, { adminId: BOUNDARY_ADMIN_ID }, randomUUID());
+      expect(paid.state).toBe("PAYOUT_CONFIRMED");
+      expect(paid.payoutEvidenceRef).not.toBeNull();
+      expect(await availableCash(memberId)).toBe(0n);
+
+      const completed = await service.finalizeWithdrawal(
+        created.id,
+        { adminId: BOUNDARY_ADMIN_ID },
+        randomUUID(),
+      );
+      expect(completed.state).toBe("COMPLETED");
+      expect(completed.completedAt).not.toBeNull();
+      ledgerTransactionIds.push(completed.ledgerTransactionId!);
+
+      // Exactly one authoritative WITHDRAWAL_FINALIZE consumed the hold, and the
+      // Wallet & Ledger projection agrees with the single effect.
+      expect(
+        await prisma.financialTransaction.count({
+          where: { businessTransactionId: created.id, operationType: "WITHDRAWAL_FINALIZE" },
+        }),
+      ).toBe(1);
+      const consumed = await prisma.reservation.findUniqueOrThrow({
+        where: { id: created.reservationId! },
+        select: { consumedAt: true, releasedAt: true },
+      });
+      expect(consumed.consumedAt).not.toBeNull();
+      expect(consumed.releasedAt).toBeNull();
+      expect(await postedCash(memberId)).toBe(0n);
+      expect(await availableCash(memberId)).toBe(0n);
+      expect(provider.initiateCallCount).toBe(1);
+    });
+
+    it("one satang above the threshold takes the same dual-control path (the boundary is >=)", async () => {
+      const amount = thresholdMinor() + 1n;
+      const memberId = await fundedMember(amount);
+      const destinationId = await verifiedDestination(memberId);
+      const { service, provider } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "APPROVED" } });
+
+      const created = await service.createWithdrawal(
+        memberId,
+        { payoutDestinationId: destinationId, amountMinor: amount, currency: "THB", idempotencyKey: randomUUID() },
+        randomUUID(),
+      );
+      expect(created.state).toBe("REVIEWING");
+      expect(created.requiresApproval).toBe(true);
+      expect(created.eligibilityOutcome).toBe("REVIEW_REQUIRED");
+      expect(created.eligibilityReasonCodes).toContain(DUAL_CONTROL_APPROVAL_REASON_CODE);
+      expect(created.eligibilityEvidenceRefs).toContain(DUAL_CONTROL_APPROVAL_EVIDENCE_REF);
+      expect(created.reservationId).not.toBeNull();
+      expect(await postedCash(memberId)).toBe(amount);
+      expect(await availableCash(memberId)).toBe(0n);
+
+      const approved = await service.approveWithdrawal(
+        created.id,
+        { adminId: BOUNDARY_ADMIN_ID, reason: "Dual-control approval one satang above the threshold" },
+        randomUUID(),
+      );
+      expect(approved.state).toBe("APPROVED");
+
+      const paid = await service.requestPayout(created.id, { adminId: BOUNDARY_ADMIN_ID }, randomUUID());
+      expect(paid.state).toBe("PAYOUT_CONFIRMED");
+
+      // Still only a hold: the Reservation is neither released nor consumed and no
+      // Ledger posting exists for this withdrawal before finalization.
+      const stillHeld = await prisma.reservation.findUniqueOrThrow({
+        where: { id: created.reservationId! },
+        select: { consumedAt: true, releasedAt: true },
+      });
+      expect(stillHeld.consumedAt).toBeNull();
+      expect(stillHeld.releasedAt).toBeNull();
+      expect(
+        await prisma.financialTransaction.count({ where: { businessTransactionId: created.id } }),
+      ).toBe(0);
+      expect(await availableCash(memberId)).toBe(0n);
+      expect(provider.initiateCallCount).toBe(1);
+    });
+
+    it("one satang below the threshold fast-paths to APPROVED with no approval signal and pays out without an Admin decision", async () => {
+      const amount = thresholdMinor() - 1n;
+      const memberId = await fundedMember(amount);
+      const destinationId = await verifiedDestination(memberId);
+      const { service } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "APPROVED" } });
+
+      const created = await service.createWithdrawal(
+        memberId,
+        { payoutDestinationId: destinationId, amountMinor: amount, currency: "THB", idempotencyKey: randomUUID() },
+        randomUUID(),
+      );
+      expect(created.state).toBe("APPROVED");
+      expect(created.requiresApproval).toBe(false);
+      expect(created.eligibilityOutcome).toBe("ALLOW");
+      expect(created.eligibilityReasonCodes).not.toContain(DUAL_CONTROL_APPROVAL_REASON_CODE);
+      expect(created.eligibilityEvidenceRefs).not.toContain(DUAL_CONTROL_APPROVAL_EVIDENCE_REF);
+      expect(created.reservationId).not.toBeNull();
+      expect(await postedCash(memberId)).toBe(amount);
+      expect(await availableCash(memberId)).toBe(0n);
+      // The approval path is not involved at all: the item is payout-eligible as created.
+      expect((await withdrawals.list({ memberId, queue: "APPROVAL", limit: 50 })).items).toEqual([]);
+      expect((await withdrawals.list({ memberId, queue: "REVIEW", limit: 50 })).items).toEqual([]);
+      expect(
+        (await withdrawals.list({ memberId, queue: "PAYOUT", limit: 50 })).items.map((item) => item.id),
+      ).toEqual([created.id]);
+
+      // No `approveWithdrawal` call is made anywhere in this case.
+      const paid = await service.requestPayout(created.id, { adminId: BOUNDARY_ADMIN_ID }, randomUUID());
+      expect(paid.state).toBe("PAYOUT_CONFIRMED");
+      expect(paid.decidedByAdminId).toBeNull();
+      expect(await availableCash(memberId)).toBe(0n);
+    });
+
+    it("releases the Reservation through the authoritative release path when an Admin rejects at the threshold", async () => {
+      const amount = thresholdMinor();
+      const memberId = await fundedMember(amount);
+      const destinationId = await verifiedDestination(memberId);
+      const { service, provider } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "APPROVED" } });
+
+      const created = await service.createWithdrawal(
+        memberId,
+        { payoutDestinationId: destinationId, amountMinor: amount, currency: "THB", idempotencyKey: randomUUID() },
+        randomUUID(),
+      );
+      expect(created.state).toBe("REVIEWING");
+      expect(await availableCash(memberId)).toBe(0n);
+
+      const rejected = await service.rejectWithdrawal(
+        created.id,
+        { adminId: BOUNDARY_ADMIN_ID, reason: "Boundary withdrawal rejected by review" },
+        randomUUID(),
+      );
+      expect(rejected.state).toBe("REJECTED");
+      expect(rejected.decidedByAdminId).toBe(BOUNDARY_ADMIN_ID);
+      expect(rejected.failureReason).toBe("REJECTED_BY_REVIEW");
+
+      // The Reservation is RELEASED, never consumed, and the hold stops reducing
+      // the available balance: the restoration is the Ledger projection's, not a
+      // Payments-side balance edit.
+      const released = await prisma.reservation.findUniqueOrThrow({
+        where: { id: created.reservationId! },
+        select: { releasedAt: true, consumedAt: true, amountMinor: true },
+      });
+      expect(released.releasedAt).not.toBeNull();
+      expect(released.consumedAt).toBeNull();
+      expect(BigInt(released.amountMinor)).toBe(amount);
+      expect(await availableCash(memberId)).toBe(amount);
+      expect(await postedCash(memberId)).toBe(amount);
+      // A release is not a posting: no WITHDRAWAL_FINALIZE or other Ledger effect
+      // was fabricated for the rejected withdrawal.
+      expect(
+        await prisma.financialTransaction.count({ where: { businessTransactionId: created.id } }),
+      ).toBe(0);
+      await expect(
+        service.requestPayout(created.id, { adminId: BOUNDARY_ADMIN_ID }, randomUUID()),
+      ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+      expect(provider.initiateCallCount).toBe(0);
+
+      // The restored balance is genuinely spendable again.
+      const retried = await service.createWithdrawal(
+        memberId,
+        { payoutDestinationId: destinationId, amountMinor: amount, currency: "THB", idempotencyKey: randomUUID() },
+        randomUUID(),
+      );
+      expect(retried.state).toBe("REVIEWING");
+      expect(await availableCash(memberId)).toBe(0n);
     });
   });
 });
