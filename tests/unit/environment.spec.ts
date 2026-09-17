@@ -30,8 +30,23 @@ describe("environment validation", () => {
         ...valid,
         APP_ENV: "staging",
         ADMIN_MFA_ENCRYPTION_KEY: "abcdefghijklmnopqrstuvwxyz012345",
+        OPS_AUTH_TOKEN: "w5-ops-token",
       }).APP_ENV,
     ).toBe("staging");
+  });
+
+  it("requires OPS_AUTH_TOKEN in staging/production so the ops surface is never open (W5-F4)", () => {
+    const staged = {
+      ...valid,
+      APP_ENV: "production",
+      ADMIN_MFA_ENCRYPTION_KEY: "abcdefghijklmnopqrstuvwxyz012345",
+    };
+    expect(() => parseEnvironment(staged)).toThrow();
+    expect(parseEnvironment({ ...staged, OPS_AUTH_TOKEN: "w5-ops-token" }).OPS_AUTH_TOKEN).toBe(
+      "w5-ops-token",
+    );
+    // test (container-smoke) may boot without a token.
+    expect(parseEnvironment({ ...valid, APP_ENV: "test" }).OPS_AUTH_TOKEN).toBe("");
   });
 
   it("defaults the withdrawal dual-control threshold to the G2 cutover value", () => {

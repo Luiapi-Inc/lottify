@@ -1,0 +1,90 @@
+# Lottify operational alert families — single source of truth (GH #92 / Ticket 13).
+#
+# Each of the seven Ticket 13 alert families is enumerated with its alert
+# code(s), severity, triggering condition, source signal, and default route.
+# Routes are delivered by the worker alert pipeline
+# (apps/workers/src/operational-alert.sink.ts) through the configured sinks:
+#   - Sentry (when SENTRY_DSN is set)
+#   - webhook(s) (when OPERATIONAL_ALERT_WEBHOOK_URLS is set)
+# and mirrored as Prometheus alert rules in prometheus/alerts.yml for the
+# metric-backed families.
+#
+# Detection status: FAMILY 1 has an in-code detector
+# (apps/workers/src/ledger-wallet-reconciliation-freshness.worker.ts). Families
+# 2-7 are defined here with their Prometheus rules; code-level detectors and
+# the backing metrics are tracked per family in the `detector_status` field.
+
+version: 1
+families:
+  - id: F1
+    name: reconciliation_discrepancy
+    codes:
+      - LEDGER_WALLET_MISMATCH
+      - RECONCILIATION_MONETARY_DISCREPANCY_STALE
+      - RECONCILIATION_CRITICAL_DISCREPANCY
+    severity: [ERROR, CRITICAL]
+    condition: Ledger-vs-wallet projection mismatch, or monetary discrepancy stale > 15m, or critical discrepancy
+    source_signal: ledger-wallet reconciliation worker + prometheus metric lottify_reconciliation_discrepancies
+    default_route: sentry + webhook
+    detector_status: in_code
+
+  - id: F2
+    name: confirm_error_failure_spike
+    codes:
+      - CONFIRM_ERROR_RATE_SPIKE
+      - CONFIRM_FAILURE_BURST
+    severity: ERROR
+    condition: Confirm transaction error rate or failure burst exceeds threshold over a window
+    source_signal: prometheus counter lottify_confirm_errors_total / lottify_confirm_failures_total
+    default_route: webhook
+    detector_status: rule_only
+
+  - id: F3
+    name: payment_webhook_failure
+    codes:
+      - PAYMENT_WEBHOOK_FAILURE
+    severity: ERROR
+    condition: Inbound payment webhook handler errors or signature-rejections exceed threshold
+    source_signal: prometheus counter lottify_payment_webhook_failures_total
+    default_route: webhook
+    detector_status: rule_only
+
+  - id: F4
+    name: withdrawal_stuck_reconciling
+    codes:
+      - WITHDRAWAL_STUCK_RECONCILING
+    severity: ERROR
+    condition: A withdrawal remains in a reconciling/processing state beyond the SLO age
+    source_signal: prometheus gauge lottify_withdrawals_stuck_reconciling
+    default_route: webhook
+    detector_status: rule_only
+
+  - id: F5
+    name: settlement_failure
+    codes:
+      - SETTLEMENT_FAILURE
+    severity: CRITICAL
+    condition: Settlement batch execution failures exceed threshold
+    source_signal: prometheus counter lottify_settlement_failures_total
+    default_route: sentry + webhook
+    detector_status: rule_only
+
+  - id: F6
+    name: queue_dlq_lag
+    codes:
+      - QUEUE_DLQ_LAG
+    severity: ERROR
+    condition: Outbox/queue depth or dead-letter queue age exceeds threshold
+    source_signal: prometheus gauge lottify_queue_dlq_lag / lottify_outbox_lag
+    default_route: webhook
+    detector_status: rule_only
+
+  - id: F7
+    name: provider_health_degradation
+    codes:
+      - PROVIDER_HEALTH_DEGRADED
+    severity: ERROR
+    condition: An upstream provider (payment/SMS/kyc) reports sustained health degradation
+    source_signal: prometheus gauge lottify_provider_health
+    default_route: webhook
+    detector_status: rule_only

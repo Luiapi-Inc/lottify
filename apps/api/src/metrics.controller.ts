@@ -1,8 +1,10 @@
-import { Controller, Get, Header } from "@nestjs/common";
+import { Controller, Get, Header, UseGuards } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
 import { register } from "prom-client";
+import { OpsAuthGuard } from "./ops-auth.guard";
 
 @ApiExcludeController()
+@UseGuards(OpsAuthGuard)
 @Controller("metrics")
 export class MetricsController {
   @Get()

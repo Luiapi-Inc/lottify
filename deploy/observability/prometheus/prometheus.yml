@@ -1,0 +1,27 @@
+# Prometheus scrape configuration for the Lottify API ops surface (GH #92 / W5-F4).
+#
+# The ops endpoints (/metrics) are protected by a bearer token when
+# OPS_AUTH_TOKEN is set (see apps/api/src/ops-auth.guard.ts). This scrape config
+# supplies that token so a Prometheus server can pull metrics from a separate
+# scrape path while public traffic never reaches the token-gated surface.
+#
+# Usage:
+#   prometheus --config.file=deploy/observability/prometheus/prometheus.yml
+#   with the alert rules at alerts.yml mounted (rule_files) and the value of
+#   the API process's OPS_AUTH_TOKEN substituted for ${OPS_AUTH_TOKEN}.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: lottify-api
+    metrics_path: /metrics
+    bearer_token: ${OPS_AUTH_TOKEN}
+    static_configs:
+      - targets:
+          - api:3000
+        labels:
+          service: lottify-api
