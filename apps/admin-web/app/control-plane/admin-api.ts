@@ -1,5 +1,7 @@
 "use client";
 
+import { randomUUID } from "../lib/random-uuid";
+
 export class ApiFailure extends Error {
   constructor(
     public code: string,
@@ -57,7 +59,7 @@ export class AdminApi {
   async request<T>(path: string, body?: unknown, command = false): Promise<T> {
     const identity = `${path}:${JSON.stringify(body ?? null)}`;
     if (command && !this.keys.has(identity)) {
-      this.keys.set(identity, crypto.randomUUID());
+      this.keys.set(identity, randomUUID());
     }
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (command) headers["Idempotency-Key"] = this.keys.get(identity)!;
