@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "../components/auth-shell";
 import { MemberApiFailure, memberApi } from "../lib/member-api";
+import { loginLandingTarget } from "../lib/login-landing";
 import { MEMBER_PASSWORD_MIN_LENGTH } from "../lib/password-policy";
 
 function describeLoginError(failure: MemberApiFailure): { message: string; route?: string } | null {
@@ -55,8 +56,14 @@ export default function LoginPage() {
       // Return the member to the member area they were denied by the session
       // guard (`/login?next=…`); anything that is not an in-app path falls back
       // to the home area.
-      const requested = new URLSearchParams(window.location.search).get("next");
-      router.push(requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/");
+      //
+      // This MUST be a real document request, not `router.push`: while the
+      // visitor was logged out the client router cached the guard's `307` for
+      // the member areas (the auth shell prefetches `/`), so a client-side
+      // navigation would replay that cached redirect — zero requests on the
+      // wire, the session cookie login just issued never consulted, and the
+      // member stranded on `/login?next=%2F`.
+      window.location.assign(loginLandingTarget(window.location.search));
     } catch (requestError) {
       const mapped = requestError instanceof MemberApiFailure ? describeLoginError(requestError) : null;
       if (mapped?.route) {
