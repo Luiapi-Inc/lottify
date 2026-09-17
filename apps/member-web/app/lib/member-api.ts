@@ -2,9 +2,13 @@ import type { components } from "@lottify/contracts";
 
 type Schema<Name extends keyof components["schemas"]> = components["schemas"][Name];
 
-export type MemberAuthPurpose = "LOGIN" | "REGISTER";
+export type MemberAuthPurpose = "REGISTER" | "PASSWORD_ENROLL";
 export type OtpRequestResponse = Schema<"OtpRequestResponse">;
 export type MemberSessionResponse = Schema<"MemberSessionResponse">;
+export type PasswordEnrollResponse = Schema<"PasswordEnrollResponse">;
+export type MemberLoginResponse = Schema<"MemberLoginResponse">;
+export type PasswordResetResponse = Schema<"PasswordResetResponse">;
+export type RecoveryOtpRequestResponse = Schema<"RecoveryOtpRequestResponse">;
 export type MemberRefreshResponse = Schema<"MemberRefreshResponse">;
 export type RequiredTerms = Schema<"RequiredTermsBody">;
 export type MemberTermsResponse = Schema<"MemberTermsBody">;
@@ -34,6 +38,7 @@ export class MemberApiFailure extends Error {
     message: string,
     public correlationId?: string,
     public status?: number,
+    public details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -54,7 +59,7 @@ class MemberApiClient {
   requestOtp(purpose: MemberAuthPurpose, phone: string): Promise<OtpRequestResponse> {
     return this.publicRequest<OtpRequestResponse>("auth/otp/request", {
       purpose,
-      phone,
+      phone: normalizePhone(phone),
     });
   }
 
@@ -62,15 +67,44 @@ class MemberApiClient {
     purpose: MemberAuthPurpose,
     phone: string,
     code: string,
-  ): Promise<MemberSessionResponse> {
-    const session = await this.publicRequest<MemberSessionResponse>("auth/otp/verify", {
+    password: string,
+  ): Promise<MemberSessionResponse | PasswordEnrollResponse> {
+    const result = await this.publicRequest<MemberSessionResponse | PasswordEnrollResponse>("auth/otp/verify", {
       purpose,
-      phone,
+      phone: normalizePhone(phone),
       deviceName: "Lottify Member Web",
       code,
+      password,
     });
-    this.acceptSession(session.accessToken);
-    return session;
+    // Only REGISTER issues a session; PASSWORD_ENROLL returns a credential
+    // result with no access token and the Member must log in afterwards.
+    if (result.purpose === "REGISTER") this.acceptSession(result.accessToken);
+    return result;
+  }
+
+  login(phone: string, password: string): Promise<MemberLoginResponse> {
+    return this.publicRequest<MemberLoginResponse>("auth/login", {
+      phone: normalizePhone(phone),
+      password,
+      deviceName: "Lottify Member Web",
+    }).then((session) => {
+      this.acceptSession(session.accessToken);
+      return session;
+    });
+  }
+
+  requestRecoveryOtp(phone: string): Promise<RecoveryOtpRequestResponse> {
+    return this.publicRequest<RecoveryOtpRequestResponse>("auth/recovery/otp/request", {
+      phone: normalizePhone(phone),
+    });
+  }
+
+  resetPassword(phone: string, code: string, password: string): Promise<PasswordResetResponse> {
+    return this.publicRequest<PasswordResetResponse>("auth/password/reset", {
+      phone: normalizePhone(phone),
+      code,
+      password,
+    });
   }
 
   getTerms(): Promise<MemberTermsResponse> {
@@ -218,6 +252,7 @@ class MemberApiClient {
       code?: unknown;
       message?: unknown;
       correlationId?: unknown;
+      details?: unknown;
     };
     if (!response.ok) {
       const code = typeof body.code === "string"
@@ -233,10 +268,22 @@ class MemberApiClient {
         message,
         typeof body.correlationId === "string" ? body.correlationId : undefined,
         response.status,
+        typeof body.details === "object" && body.details !== null
+          ? (body.details as Record<string, unknown>)
+          : undefined,
       );
     }
     return body as T;
   }
+}
+
+/** Normalize a Member phone entered in a local Thai format (08X-XXX-XXXX,
+ *  08XXXXXXXX, 66XXXXXXXXX) to its wire form by removing separators. The API
+ *  owns any remaining format conversion; this layer only strips the display
+ *  characters the user may type. Single normalization point per the operator
+ *  decision 2026-09-17 — pages never normalize independently. */
+export function normalizePhone(phone: string): string {
+  return phone.replace(/[\s-]/g, "");
 }
 
 export function createIdempotencyKey(): string {

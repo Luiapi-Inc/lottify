@@ -4,12 +4,38 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "../components/auth-shell";
-import { saveAuthFlow } from "../lib/auth-flow";
-import { memberApi } from "../lib/member-api";
+import { MemberApiFailure, memberApi } from "../lib/member-api";
+import { MEMBER_PASSWORD_MIN_LENGTH } from "../lib/password-policy";
+
+function describeLoginError(failure: MemberApiFailure): { message: string; route?: string } | null {
+  switch (failure.code) {
+    case "MEMBER_CREDENTIALS_INVALID":
+      return { message: "เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง" };
+    case "PHONE_INVALID":
+      return { message: "กรอกเบอร์โทรศัพท์ให้ถูกต้อง" };
+    case "PASSWORD_ENROLLMENT_REQUIRED":
+      return { message: "บัญชีนี้ยังไม่มีรหัสผ่าน กรุณาตั้งรหัสผ่านก่อนเข้าใช้งาน", route: "/enroll" };
+    case "MEMBER_LOGIN_LOCKED": {
+      const seconds = typeof failure.details?.retryAfterSeconds === "number"
+        ? failure.details.retryAfterSeconds
+        : undefined;
+      return {
+        message: seconds
+          ? `พยายามเข้าสู่ระบบผิดพลาดหลายครั้ง กรุณาลองใหม่ในอีกประมาณ ${seconds} วินาที`
+          : "พยายามเข้าสู่ระบบผิดพลาดหลายครั้ง กรุณาลองใหม่ภายหลัง",
+      };
+    }
+    case "ACCOUNT_DISABLED":
+      return { message: "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าหน้าที่" };
+    default:
+      return null;
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async (event: FormEvent) => {
@@ -18,24 +44,27 @@ export default function LoginPage() {
       setError("กรอกเบอร์โทรศัพท์ให้ถูกต้อง");
       return;
     }
+    if (password.length < MEMBER_PASSWORD_MIN_LENGTH) {
+      setError(`รหัสผ่านต้องมีอย่างน้อย ${MEMBER_PASSWORD_MIN_LENGTH} ตัวอักษร`);
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
-      const result = await memberApi.requestOtp("LOGIN", phone.trim());
-      saveAuthFlow({
-        purpose: "LOGIN",
-        phone: phone.trim(),
-        deliveredTo: result.deliveredTo,
-        retryAfterSeconds: result.retryAfterSeconds,
-      });
-      router.push("/otp");
+      await memberApi.login(phone, password);
+      router.push("/");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "ไม่สามารถขอรหัส OTP ได้");
+      const mapped = requestError instanceof MemberApiFailure ? describeLoginError(requestError) : null;
+      if (mapped?.route) {
+        router.push(mapped.route);
+        return;
+      }
+      setError(mapped?.message ?? (requestError instanceof Error ? requestError.message : "ไม่สามารถเข้าสู่ระบบได้"));
     } finally {
       setSubmitting(false);
     }
   };
   return <AuthShell title={<>ทุกโพย<br />ตรวจสอบได้ทุกขั้นตอน</>} copy="เข้าถึงการซื้อหวย กระเป๋า ใบรับรายการ โปรโมชั่น และความปลอดภัยจากบัญชีเดียว" foot="Lottify Member">
-    <form className="auth-card" onSubmit={submit}><h2>เข้าสู่ระบบ</h2><p>กรอกเบอร์โทรศัพท์ที่ใช้กับ Lottify เพื่อรับรหัส OTP</p><div className="field"><label htmlFor="phone">เบอร์โทรศัพท์</label><input id="phone" className="input" inputMode="tel" autoComplete="tel" placeholder="08X-XXX-XXXX" value={phone} onChange={(event) => { setPhone(event.target.value); setError(""); }} /></div><div className="field-error">{error}</div><button className={`button lime block ${submitting ? "disabled" : ""}`} type="submit" disabled={submitting} style={{ marginTop: 16 }}>{submitting ? "กำลังส่งรหัส…" : "รับรหัส OTP →"}</button><div className="divider">หรือ</div><Link className="button secondary block" href="/register">สร้างบัญชีใหม่</Link><p className="small muted" style={{ marginTop: 18, textAlign: "center" }}>การเข้าสู่ระบบจะตรวจเงื่อนไขที่มีผลกับบัญชีอีกครั้งเมื่อใช้บริการสำคัญ</p></form>
+    <form className="auth-card" onSubmit={submit}><h2>เข้าสู่ระบบ</h2><p>กรอกเบอร์โทรศัพท์และรหัสผ่านที่ใช้กับ Lottify</p><div className="field"><label htmlFor="phone">เบอร์โทรศัพท์</label><input id="phone" className="input" inputMode="tel" autoComplete="tel" placeholder="08X-XXX-XXXX" value={phone} onChange={(event) => { setPhone(event.target.value); setError(""); }} /></div><div className="field" style={{ marginTop: 14 }}><label htmlFor="password">รหัสผ่าน</label><input id="password" className="input" type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} /></div><div className="field-error">{error}</div><button className={`button lime block ${submitting ? "disabled" : ""}`} type="submit" disabled={submitting} style={{ marginTop: 16 }}>{submitting ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ →"}</button><div className="divider">หรือ</div><Link className="button secondary block" href="/register">สร้างบัญชีใหม่</Link><p className="small muted" style={{ marginTop: 16, textAlign: "center" }}><Link className="text-link" href="/forgot-password">ลืมรหัสผ่าน?</Link></p></form>
   </AuthShell>;
 }

@@ -2,13 +2,21 @@ import type { MemberAuthPurpose } from "./member-api";
 
 const AUTH_FLOW_KEY = "lottify-member-auth-flow";
 
+export type AuthFlowPurpose = MemberAuthPurpose | "RECOVERY";
+
 export interface PendingAuthFlow {
-  purpose: MemberAuthPurpose;
+  purpose: AuthFlowPurpose;
   phone: string;
   ref?: string;
   deliveredTo: string;
   retryAfterSeconds: number | null;
+  /** Password set on the registration page and carried into the REGISTER OTP
+   *  verify step. Only populated for the REGISTER flow; PASSWORD_ENROLL and
+   *  RECOVERY collect a fresh password on the verify page. */
+  password?: string;
 }
+
+const FLOW_PURPOSES: readonly AuthFlowPurpose[] = ["REGISTER", "PASSWORD_ENROLL", "RECOVERY"];
 
 export function saveAuthFlow(flow: PendingAuthFlow): void {
   window.sessionStorage.setItem(AUTH_FLOW_KEY, JSON.stringify(flow));
@@ -17,14 +25,15 @@ export function saveAuthFlow(flow: PendingAuthFlow): void {
 export function readAuthFlow(): PendingAuthFlow | null {
   try {
     const value = JSON.parse(window.sessionStorage.getItem(AUTH_FLOW_KEY) ?? "null") as Partial<PendingAuthFlow> | null;
-    if (!value || (value.purpose !== "LOGIN" && value.purpose !== "REGISTER")) return null;
+    if (!value || typeof value.purpose !== "string" || !FLOW_PURPOSES.includes(value.purpose as AuthFlowPurpose)) return null;
     if (typeof value.phone !== "string" || typeof value.deliveredTo !== "string") return null;
     return {
-      purpose: value.purpose,
+      purpose: value.purpose as AuthFlowPurpose,
       phone: value.phone,
       deliveredTo: value.deliveredTo,
       retryAfterSeconds: typeof value.retryAfterSeconds === "number" ? value.retryAfterSeconds : null,
       ref: typeof value.ref === "string" ? value.ref : undefined,
+      password: typeof value.password === "string" ? value.password : undefined,
     };
   } catch {
     return null;
