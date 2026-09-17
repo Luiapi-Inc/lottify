@@ -1,7 +1,8 @@
 # Ticket 13 load harness: scenario identity, target environment and open decisions
 
-Status: **DRAFT — the target-environment specification below requires Lead/owner
-sign-off before a `target`-profile run can be accepted as capacity evidence.**
+Status: **SPEC APPROVED by Lead 2026-09-17 (§3 decision block) — the environment
+itself is NOT yet provisioned; a `target`-profile run stays blocked until the
+owner provisions the named environment (see §3 decision, item 2).**
 The harness itself (scenario, drivers, seeding, assertions) is implemented and
 re-runnable; only the environment the acceptance run must happen on is undecided,
 and the card that requested this work says that decision belongs to the Lead.
@@ -63,6 +64,15 @@ misleading FAIL, and every report states the assessment verbatim.
 
 ## 3. PROPOSED production-like environment specification (needs sign-off)
 
+> ### LEAD DECISION — 2026-09-17 (card `t_539d4392`, owner: Luiapi via Lead default profile)
+>
+> **Sign-off: APPROVED with the named-environment and scope clarifications below.**
+> The §3 table above is accepted verbatim as the minimum requirement for a
+> `target`-profile run to be accepted as Ticket 13 capacity evidence.
+> `run.mjs` continues to mechanically enforce `productionLike` — no verbal
+> override exists.
+
+
 | Item | Proposed requirement | Why this number |
 |---|---|---|
 | API nodes | ≥3 stateless API instances behind one L7 load balancer, ≥4 vCPU each, no co-located load driver | 5,000 sessions + 300 Quote rps + 150 Confirm rps must survive the loss of one node; the driver must be a separate host so driver cost is excluded |
@@ -117,13 +127,31 @@ worked around inside the harness.
 
 ## 6. Open questions for the Lead
 
-1. Approve or amend §3, and name the environment (cluster/account) the `target`
-   profile must run on.
-2. Decide whether the payment/webhook ingress (gap 1) is in v1 scope; if it is, it
-   needs an owner, a signature contract and an event simulator.
-3. Decide whether settlement gets a queue/worker execution path (gap 2) or whether
-   "configured worker pool" is formally defined as the API process, in which case
-   Ticket 13 wording and the release gate should say so.
-4. Confirm the CI expectation: a `load-harness-smoke` job proves the harness on
-   every PR (plumbing only); the capacity run stays a release-candidate step on the
-   approved environment.
+> ### ANSWERS — Lead decision 2026-09-17 (recorded on `t_539d4392`; this section is closed)
+>
+> **1. §3 approved as-is; named environment:** the `target` profile must run on a
+> **dedicated load environment inside the production VPC (AWS account of
+> `lottify-prod`, region ap-southeast-1)** provisioned to the §3 minimum
+> (3× API nodes ≥4 vCPU, 2× load generators ≥8 vCPU, dedicated PostgreSQL 18
+> ≥4 vCPU/16 GiB, dedicated Redis, worker pool, OTLP telemetry). The environment
+> does **not** exist today. Owner (Luiapi) provisions it on an explicit per-run
+> order — the Lead/AI agents are forbidden from touching cloud resources without
+> that order (standing rule). Runner: `quality-gate-agent` executes the run;
+> Lead schedules and accepts.
+>
+> **2. Payment/webhook ingress (gap 1): NOT in v1 capacity scope.** The ≥200
+> events/s target stays `NOT_MEASURED` (environment-gated) until card
+> `t_1743d785` delivers an authenticated ingress with provider-manual signature
+> verification plus an event simulator. No v1 release gate may claim it.
+>
+> **3. Settlement "configured worker pool" (gap 2): formally defined, for Ticket 13
+> v1, as the API-process execution path** (inline settlement via
+> `POST /api/v1/admin/draws/:drawId/settlement`) — the harness measures the path
+> that actually ships. A queue/worker settlement execution path is out of v1
+> scope; if it is built later, the target must be re-baselined and re-run.
+> Ticket 13 wording and the release gate should cite this definition.
+>
+> **4. CI expectation confirmed:** `load-harness-smoke` runs per-PR as plumbing
+> proof only; capacity (`target`) runs are release-candidate steps executed on
+> the approved environment above and are never part of routine CI.
+
