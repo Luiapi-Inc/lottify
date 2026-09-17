@@ -5,12 +5,11 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { MobileNavigation, Navigation } from "./navigation";
 import { Topbar } from "./topbar";
-
-const authPaths = ["/login", "/register", "/otp", "/terms", "/profile", "/eligibility"];
+import { isAuthPath } from "../lib/auth-paths";
 
 export function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isAuth = authPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  const isAuth = isAuthPath(pathname);
 
   if (isAuth) return <>{children}</>;
 
