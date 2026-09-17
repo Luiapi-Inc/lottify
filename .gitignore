@@ -15,9 +15,8 @@ __pycache__/
 *.pyc
 
 # Hermes-local orchestration state and local policy (not project source).
-# NOTE: entries are inert while the files remain tracked; untracking is pending
-# explicit owner confirmation.
-.hermes/lottify-orchestration.yaml
-.hermes/plans/
-.hermes/status/
+# Owner-approved untrack 2026-09-18: these files stay on each host's disk and are
+# no longer versioned. A specific artifact can still be committed deliberately
+# with `git add -f` (e.g. a chosen report under .hermes/evidence/release/).
+.hermes/
 .serena/
