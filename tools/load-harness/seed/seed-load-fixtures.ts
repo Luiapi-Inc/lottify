@@ -233,7 +233,7 @@ async function main(): Promise<void> {
     await prisma.member.create({
       data: {
         id: memberId,
-        phone: `+669${String(index).padStart(8, "0")}`,
+        phone: `09${String(index).padStart(8, "0")}`,
         status: "ACTIVE",
       },
     });

@@ -1,4 +1,5 @@
 import type { MemberOtpDeliveryPort } from "./application/member-otp-delivery.port";
+import { toSmsProviderMsisdn } from "./domain/identity-phone";
 
 /**
  * ThaiBulkSMS standard SMS API (developer.thaibulksms.com — POST /sms,
@@ -10,8 +11,11 @@ import type { MemberOtpDeliveryPort } from "./application/member-otp-delivery.po
 const THAIBULKSMS_SMS_ENDPOINT = "https://api-v2.thaibulksms.com/sms";
 
 const PURPOSE_LABELS_TH: Record<string, string> = {
+  // Retained only so a message built from a historical challenge still renders;
+  // CR #141 retired LOGIN as an issuable purpose, so no new LOGIN code is sent.
   LOGIN: "เข้าสู่ระบบ",
   REGISTER: "สมัครสมาชิก",
+  PASSWORD_ENROLL: "ตั้งรหัสผ่าน",
   REAUTH: "ยืนยันตัวตนอีกครั้ง",
   RECOVERY: "กู้คืนบัญชี",
 };
@@ -55,9 +59,9 @@ export class ThaiBulkSmsMemberOtpDelivery implements MemberOtpDeliveryPort {
   ) {}
 
   async deliver(input: { phone: string; purpose: string; code: string }): Promise<void> {
-    // normalizePhone yields E.164 (`+66...`); ThaiBulkSMS accepts `+66...`,
-    // `66...` and Thai mobile formats in the `msisdn` form field.
-    const msisdn = input.phone.replace(/^\+/, "");
+    // The platform stores/returns the local Thai form (`0XXXXXXXXX`); the
+    // provider request is the one place that carries the country code.
+    const msisdn = toSmsProviderMsisdn(input.phone);
     const purposeLabel = PURPOSE_LABELS_TH[input.purpose] ?? input.purpose;
     const message = `รหัส OTP Lottify สำหรับ${purposeLabel}: ${input.code} (ใช้ได้ 5 นาที ห้ามบอกผู้อื่น)`;
     const form = new URLSearchParams({

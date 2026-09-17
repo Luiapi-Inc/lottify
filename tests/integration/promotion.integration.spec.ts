@@ -19,7 +19,7 @@ import type {
 import { validTerms } from "../support/promotion-fixtures";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
-const phonePrefix = "+6697"; // promotion integration namespace
+const phonePrefix = "097"; // promotion integration namespace
 
 /**
  * Member facts fixture. Promotion consumes the port; the identity-access wiring
@@ -166,7 +166,7 @@ describe.runIf(runIntegration)("Member API — Promotion vertical integration", 
   });
 
   async function createMember(status = "ACTIVE"): Promise<string> {
-    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
     const member = await prisma.member.create({ data: { phone, status } });
     memberIds.push(member.id);
     return member.id;

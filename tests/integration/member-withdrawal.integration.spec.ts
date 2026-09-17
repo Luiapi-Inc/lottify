@@ -25,7 +25,7 @@ import {
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
-const phonePrefix = "+6699"; // withdrawal integration namespace
+const phonePrefix = "099"; // withdrawal integration namespace
 const PAYOUT_PROVIDER_ID = "payout-rail";
 // `decided_by_admin_id` is an opaque UUID column, so the reviewer identity used
 // in this suite must be a real Admin identity shape.
@@ -134,7 +134,7 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
   });
 
   async function createMember(): Promise<string> {
-    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
     const member = await prisma.member.create({ data: { phone } });
     memberIds.push(member.id);
     return member.id;

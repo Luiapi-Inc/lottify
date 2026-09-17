@@ -25,7 +25,7 @@ import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 const emailPrefix = "member-terms-integration+";
-const phonePrefix = "+6694";
+const phonePrefix = "094";
 
 /**
  * Member Terms acceptance + Member profile over the real HTTP boundary and a
@@ -141,7 +141,7 @@ describe.runIf(runIntegration)("Member Terms acceptance + profile vertical", () 
   });
 
   async function createMember(status: string): Promise<string> {
-    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
     const member = await prisma.member.create({ data: { phone, status } });
     return member.id;
   }

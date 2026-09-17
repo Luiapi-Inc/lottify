@@ -50,7 +50,7 @@ describe("ThaiBulkSmsMemberOtpDelivery", () => {
       return { status: 201 };
     });
 
-    await delivery.deliver({ phone: "+66812345678", purpose: "LOGIN", code: "123456" });
+    await delivery.deliver({ phone: "0812345678", purpose: "LOGIN", code: "123456" });
 
     expect(calls).toHaveLength(1);
     const call = calls[0];
@@ -75,8 +75,8 @@ describe("ThaiBulkSmsMemberOtpDelivery", () => {
       return { status: 201 };
     });
 
-    await delivery.deliver({ phone: "+66812345678", purpose: "RECOVERY", code: "654321" });
-    await delivery.deliver({ phone: "+66812345678", purpose: "REGISTER", code: "111111" });
+    await delivery.deliver({ phone: "0812345678", purpose: "RECOVERY", code: "654321" });
+    await delivery.deliver({ phone: "0812345678", purpose: "REGISTER", code: "111111" });
 
     expect(new URLSearchParams(bodies[0]).get("message")).toContain("กู้คืนบัญชี");
     expect(new URLSearchParams(bodies[1]).get("message")).toContain("สมัครสมาชิก");
@@ -86,7 +86,7 @@ describe("ThaiBulkSmsMemberOtpDelivery", () => {
     const delivery = new ThaiBulkSmsMemberOtpDelivery(config, async () => ({ status: 400 }));
 
     await expect(
-      delivery.deliver({ phone: "+66812345678", purpose: "LOGIN", code: "123456" }),
+      delivery.deliver({ phone: "0812345678", purpose: "LOGIN", code: "123456" }),
     ).rejects.toBeInstanceOf(ThaiBulkSmsDeliveryError);
   });
 
@@ -100,7 +100,7 @@ describe("ThaiBulkSmsMemberOtpDelivery", () => {
       },
     );
 
-    await delivery.deliver({ phone: "+66812345678", purpose: "LOGIN", code: "123456" });
+    await delivery.deliver({ phone: "0812345678", purpose: "LOGIN", code: "123456" });
 
     expect(capturedForce).toBe("corporate");
   });

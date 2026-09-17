@@ -1,8 +1,34 @@
 import { randomInt } from "node:crypto";
 import { createHash, randomBytes } from "node:crypto";
 
-export const MEMBER_OTP_PURPOSES = ["LOGIN", "REGISTER", "REAUTH", "RECOVERY"] as const;
+/**
+ * Purpose-scoped OTP purposes. `LOGIN` was removed by CR #141: OTP is no longer
+ * a login channel for Members. OTP now exists for phone-ownership proof on
+ * registration (`REGISTER`), one-time password enrollment for Members that have
+ * no credential yet (`PASSWORD_ENROLL`), recovery/reset possession evidence
+ * (`RECOVERY`) and the reserved sensitive-action purpose (`REAUTH`).
+ */
+export const MEMBER_OTP_PURPOSES = [
+  "REGISTER",
+  "PASSWORD_ENROLL",
+  "REAUTH",
+  "RECOVERY",
+] as const;
 export type MemberOtpPurpose = (typeof MEMBER_OTP_PURPOSES)[number];
+
+/** Purposes the public `otp/request` + `otp/verify` channel accepts. */
+export const MEMBER_OTP_SELF_SERVICE_PURPOSES = [
+  "REGISTER",
+  "PASSWORD_ENROLL",
+] as const;
+export type MemberOtpSelfServicePurpose =
+  (typeof MEMBER_OTP_SELF_SERVICE_PURPOSES)[number];
+
+export function isMemberOtpSelfServicePurpose(
+  value: string,
+): value is MemberOtpSelfServicePurpose {
+  return (MEMBER_OTP_SELF_SERVICE_PURPOSES as readonly string[]).includes(value);
+}
 
 export function isMemberOtpPurpose(value: string): value is MemberOtpPurpose {
   return (MEMBER_OTP_PURPOSES as readonly string[]).includes(value);
