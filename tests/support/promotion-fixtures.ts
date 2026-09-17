@@ -15,7 +15,11 @@ export function validTerms(overrides: Partial<PromotionCampaignTerms> = {}): Pro
       minPayoutRef: null,
     },
     turnoverMultiplierBps: 30_000,
-    fundingSource: "welcome-2026",
+    // Per-process default: suites run in parallel against one shared database and
+    // ensureSystemAccount() is idempotent on systemCode, so a constant value made
+    // every suite share one promotion-funding account — whichever suite cleaned up
+    // first tripped ledger_postings_account_id_fkey on the others' postings.
+    fundingSource: `welcome-2026-${process.pid}`,
     winningsDestination: "BONUS",
     proportionalWinningsBps: null,
     expiryDaysAfterGrant: 30,
