@@ -9,6 +9,8 @@ import {
   decideOtpVerify,
   hashOtpCode,
   isMemberOtpPurpose,
+  isMemberOtpSelfServicePurpose,
+  MEMBER_OTP_SELF_SERVICE_PURPOSES,
 } from "../../src/contexts/identity-access/domain/identity-otp-policy";
 
 describe("member phone normalization", () => {
@@ -27,12 +29,24 @@ describe("member phone normalization", () => {
 
 describe("member OTP purpose", () => {
   it("recognizes the scoped purposes and rejects unknown values", () => {
-    expect(isMemberOtpPurpose("LOGIN")).toBe(true);
     expect(isMemberOtpPurpose("REGISTER")).toBe(true);
+    expect(isMemberOtpPurpose("PASSWORD_ENROLL")).toBe(true);
     expect(isMemberOtpPurpose("REAUTH")).toBe(true);
     expect(isMemberOtpPurpose("RECOVERY")).toBe(true);
+    // CR #141: OTP is no longer a Member login channel, so LOGIN must not be a
+    // supported purpose any more.
+    expect(isMemberOtpPurpose("LOGIN")).toBe(false);
     expect(isMemberOtpPurpose("PASSWORD_RESET")).toBe(false);
     expect(isMemberOtpPurpose("")).toBe(false);
+  });
+
+  it("only exposes non-authenticating purposes to the public OTP channel", () => {
+    expect(MEMBER_OTP_SELF_SERVICE_PURPOSES).toEqual(["REGISTER", "PASSWORD_ENROLL"]);
+    expect(isMemberOtpSelfServicePurpose("REGISTER")).toBe(true);
+    expect(isMemberOtpSelfServicePurpose("PASSWORD_ENROLL")).toBe(true);
+    expect(isMemberOtpSelfServicePurpose("LOGIN")).toBe(false);
+    expect(isMemberOtpSelfServicePurpose("RECOVERY")).toBe(false);
+    expect(isMemberOtpSelfServicePurpose("REAUTH")).toBe(false);
   });
 
   it("applies the same configured controls to the RECOVERY purpose", () => {
@@ -59,7 +73,7 @@ describe("member OTP purpose", () => {
 
 describe("member OTP policy binding", () => {
   it("binds the configured control values without allowing a bad purpose", () => {
-    const policy = buildMemberOtpPolicy("LOGIN", {
+    const policy = buildMemberOtpPolicy("PASSWORD_ENROLL", {
       codeLength: 6,
       ttlSeconds: 300,
       maxAttempts: 10,
@@ -67,14 +81,14 @@ describe("member OTP policy binding", () => {
       requestWindowSeconds: 900,
       requestMaxPerWindow: 5,
     });
-    expect(policy.purpose).toBe("LOGIN");
+    expect(policy.purpose).toBe("PASSWORD_ENROLL");
     expect(policy.policyVersion).toBe("member-otp-v1");
     expect(policy.requestMaxPerWindow).toBe(5);
   });
 });
 
 describe("member OTP request gate (anti-enumeration + rate limit)", () => {
-  const policy = buildMemberOtpPolicy("LOGIN", {
+  const policy = buildMemberOtpPolicy("PASSWORD_ENROLL", {
     codeLength: 6,
     ttlSeconds: 300,
     maxAttempts: 10,
@@ -85,9 +99,9 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
   const now = new Date("2026-09-09T00:00:00.000Z");
 
   it("issues when the request window is not full", () => {
-    const decision = decideOtpRequest("LOGIN", {
+    const decision = decideOtpRequest("PASSWORD_ENROLL", {
       phone: "+66812345678",
-      purpose: "LOGIN",
+      purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 3,
       windowStartsAt: new Date(now.getTime() - 60_000),
@@ -97,9 +111,9 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
   });
 
   it("rate limits when the window is full regardless of account state", () => {
-    const decision = decideOtpRequest("LOGIN", {
+    const decision = decideOtpRequest("PASSWORD_ENROLL", {
       phone: "+66812345678",
-      purpose: "LOGIN",
+      purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 5,
       windowStartsAt: new Date(now.getTime() - 60_000),
@@ -114,9 +128,9 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
 
   it("denies a resend before the documented cooldown elapses", () => {
     const cooldownUntil = new Date(now.getTime() + 45_000);
-    const decision = decideOtpRequest("LOGIN", {
+    const decision = decideOtpRequest("PASSWORD_ENROLL", {
       phone: "+668****5678",
-      purpose: "LOGIN",
+      purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 1,
       windowStartsAt: new Date(now.getTime() - 60_000),
@@ -130,9 +144,9 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
   });
 
   it("issues again once the resend cooldown has elapsed", () => {
-    const decision = decideOtpRequest("LOGIN", {
+    const decision = decideOtpRequest("PASSWORD_ENROLL", {
       phone: "+668****5678",
-      purpose: "LOGIN",
+      purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 1,
       windowStartsAt: new Date(now.getTime() - 60_000),
@@ -143,7 +157,7 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
 });
 
 describe("member OTP verify gate", () => {
-  const policy = buildMemberOtpPolicy("LOGIN", {
+  const policy = buildMemberOtpPolicy("PASSWORD_ENROLL", {
     codeLength: 6,
     ttlSeconds: 300,
     maxAttempts: 3,
@@ -157,7 +171,7 @@ describe("member OTP verify gate", () => {
 
   it("accepts a matching, unexpired code", () => {
     const decision = decideOtpVerify({
-      purpose: "LOGIN",
+      purpose: "PASSWORD_ENROLL",
       policy,
       challenge: {
         codeHash: hashOtpCode(correct),
@@ -173,7 +187,7 @@ describe("member OTP verify gate", () => {
 
   it("rejects an expired, exhausted, consumed, or wrong challenge without enumerating a Member", () => {
     const base = {
-      purpose: "LOGIN" as const,
+      purpose: "PASSWORD_ENROLL" as const,
       policy,
       submittedHash: hashOtpCode(wrong),
       now,

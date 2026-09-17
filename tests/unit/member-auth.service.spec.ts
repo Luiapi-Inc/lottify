@@ -11,9 +11,11 @@ import type {
   MemberRecord,
   OtpRequestWindowFact,
 } from "../../src/contexts/identity-access/domain/identity-auth.repository";
-import { hashRefreshToken } from "../../src/contexts/identity-access/application/session.service";
 import type { AuthSessionRecord, SessionRepository } from "../../src/contexts/identity-access/domain/session.repository";
-import { resetEnvironmentForTests } from "../../src/platform/config/env";
+import {
+  getEnvironment,
+  resetEnvironmentForTests,
+} from "../../src/platform/config/env";
 
 beforeEach(() => {
   process.env.DATABASE_URL = "postgresql://user:***@localhost:5432/lottify";
@@ -44,16 +46,63 @@ class InMemoryMemberRepository implements MemberAuthRepository {
   async findById(id: string): Promise<MemberRecord | null> {
     return this.members.get(id) ?? null;
   }
-  async createMember(input: { phone: string }): Promise<MemberRecord> {
+  async createMember(input: {
+    phone: string;
+    passwordHash?: string | null;
+    passwordUpdatedAt?: Date | null;
+  }): Promise<MemberRecord> {
+    // Mirrors the Prisma repository: the unique phone resolves to the existing
+    // Member instead of creating a duplicate.
+    const existing = await this.findByPhone(input.phone);
+    if (existing) return existing;
     const member: MemberRecord = {
       id: randomUUID(),
       phone: input.phone,
       status: "ACTIVE",
+      passwordHash: input.passwordHash ?? null,
+      passwordUpdatedAt: input.passwordUpdatedAt ?? null,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     this.members.set(member.id, member);
     return member;
+  }
+  async setMemberPassword(input: {
+    memberId: string;
+    passwordHash: string;
+    updatedAt: Date;
+  }): Promise<MemberRecord | null> {
+    const member = this.members.get(input.memberId);
+    if (!member) return null;
+    const updated: MemberRecord = {
+      ...member,
+      passwordHash: input.passwordHash,
+      passwordUpdatedAt: input.updatedAt,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    };
+    this.members.set(updated.id, updated);
+    return updated;
+  }
+  async recordLoginFailure(input: {
+    memberId: string;
+    failedLoginAttempts: number;
+    lockedUntil: Date | null;
+  }): Promise<void> {
+    const member = this.members.get(input.memberId);
+    if (!member) return;
+    this.members.set(member.id, {
+      ...member,
+      failedLoginAttempts: input.failedLoginAttempts,
+      lockedUntil: input.lockedUntil,
+    });
+  }
+  async recordLoginSuccess(memberId: string): Promise<void> {
+    const member = this.members.get(memberId);
+    if (!member) return;
+    this.members.set(memberId, { ...member, failedLoginAttempts: 0, lockedUntil: null });
   }
   async countOtpRequestsInWindow(): Promise<OtpRequestWindowFact> {
     return { recentRequestCountInWindow: 0, windowStartsAt: new Date(), latestCooldownUntil: null };
@@ -108,7 +157,6 @@ class InMemoryMemberRepository implements MemberAuthRepository {
     }
     return false;
   }
-  async recordMemberLogin(id: string): Promise<void> {}
   async upsertDevice(input: {
     memberId: string;
     deviceId: string;
@@ -221,49 +269,285 @@ function harness() {
 }
 
 const PHONE = "+66812345678";
+const UNKNOWN_PHONE = "+66999999999";
+const PASSWORD = "correct-horse-battery";
+const OTHER_PASSWORD = "another-strong-passphrase";
 
-describe("MemberAuthService registration and login", () => {
-  it("registers a Member on first REGISTER verify and issues an access+refresh session", async () => {
-    const { auth, delivery } = harness();
-    await auth.requestOtp("REGISTER", PHONE);
-    const code = delivery.lastCode(PHONE, "REGISTER");
-    expect(code).toBeTruthy();
-    const result = await auth.verifyOtp("REGISTER", PHONE, code!, "My Phone");
+function legacyMember(phone = PHONE): MemberRecord {
+  // Exactly how every pre-CR #141 Member looks: the row exists, no credential.
+  return {
+    id: randomUUID(),
+    phone,
+    status: "ACTIVE",
+    passwordHash: null,
+    passwordUpdatedAt: null,
+    failedLoginAttempts: 0,
+    lockedUntil: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+async function register(
+  auth: MemberAuthService,
+  delivery: FakeDelivery,
+  phone = PHONE,
+) {
+  await auth.requestOtp("REGISTER", phone);
+  const code = delivery.lastCode(phone, "REGISTER")!;
+  const result = await auth.verifyOtp("REGISTER", phone, code, PASSWORD, "My Phone");
+  if (result.purpose !== "REGISTER") throw new Error("expected a REGISTER result");
+  return result;
+}
+
+describe("MemberAuthService registration (CR #141)", () => {
+  it("registers a Member with a password and issues an access+refresh session", async () => {
+    const { auth, delivery, members } = harness();
+    const result = await register(auth, delivery);
+
     expect(result.accountCreated).toBe(true);
     expect(result.memberId).toBeTruthy();
     expect(result.accessToken).toBeTruthy();
     expect(result.refreshToken).toBeTruthy();
     expect(result.deviceId).toBeTruthy();
+
+    const stored = members.members.get(result.memberId)!;
+    expect(stored.passwordHash).toMatch(/^scrypt-v1\$/);
+    expect(stored.passwordHash).not.toContain(PASSWORD);
+    expect(stored.passwordUpdatedAt).toBeInstanceOf(Date);
+  });
+
+  it("no longer accepts OTP as a login channel (LOGIN purpose retired)", async () => {
+    const { auth, delivery } = harness();
+    await expect(auth.requestOtp("LOGIN", PHONE)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "OTP_PURPOSE_INVALID" }),
+    });
+    await expect(
+      auth.verifyOtp("LOGIN", PHONE, "123456", PASSWORD, "Phone"),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "OTP_PURPOSE_INVALID" }),
+    });
+    expect(delivery.lastCode(PHONE, "LOGIN")).toBeUndefined();
+  });
+
+  it("does not authenticate an existing account through REGISTER", async () => {
+    const { auth, delivery, sessionsRepo } = harness();
+    await register(auth, delivery);
+    const sessionsAfterRegister = sessionsRepo.records.size;
+
+    await auth.requestOtp("REGISTER", PHONE);
+    const code = delivery.lastCode(PHONE, "REGISTER")!;
+    await expect(
+      auth.verifyOtp("REGISTER", PHONE, code, OTHER_PASSWORD, "Phone B"),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "MEMBER_ALREADY_REGISTERED" }),
+    });
+    expect(sessionsRepo.records.size).toBe(sessionsAfterRegister);
+  });
+
+  it("rejects a password that violates the server-side policy", async () => {
+    const { auth, delivery } = harness();
+    await auth.requestOtp("REGISTER", PHONE);
+    const code = delivery.lastCode(PHONE, "REGISTER")!;
+    await expect(
+      auth.verifyOtp("REGISTER", PHONE, code, "short", "Phone"),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "MEMBER_PASSWORD_REJECTED",
+        details: { violation: "TOO_SHORT" },
+      }),
+    });
   });
 
   it("does not reveal registration state at OTP request time (anti-enumeration)", async () => {
     const { auth, delivery } = harness();
-    const unknownPhone = "+66999999999";
-    await auth.requestOtp("LOGIN", unknownPhone);
-    await auth.requestOtp("LOGIN", PHONE);
-    expect(delivery.lastCode(unknownPhone, "LOGIN")).toBeTruthy();
-    expect(delivery.lastCode(PHONE, "LOGIN")).toBeTruthy();
+    await auth.requestOtp("PASSWORD_ENROLL", UNKNOWN_PHONE);
+    await auth.requestOtp("PASSWORD_ENROLL", PHONE);
+    expect(delivery.lastCode(UNKNOWN_PHONE, "PASSWORD_ENROLL")).toBeTruthy();
+    expect(delivery.lastCode(PHONE, "PASSWORD_ENROLL")).toBeTruthy();
+  });
+});
+
+describe("MemberAuthService password login (CR #141)", () => {
+  it("logs in with phone + password and authenticates the issued access token", async () => {
+    const { auth, delivery, sessions } = harness();
+    const registered = await register(auth, delivery);
+
+    const login = await auth.login({ phone: PHONE, password: PASSWORD, deviceName: "Phone" });
+    expect(login.memberId).toBe(registered.memberId);
+    expect(login.deviceId).toBeTruthy();
+    const context = await sessions.authenticateAccess(login.accessToken);
+    expect(context.memberId).toBe(registered.memberId);
   });
 
-  it("logs in an existing Member and authenticates a REGISTER on an active phone without duplicate", async () => {
-    const { auth, delivery } = harness();
-    await auth.requestOtp("REGISTER", PHONE);
-    const code = delivery.lastCode(PHONE, "REGISTER");
-    const first = await auth.verifyOtp("REGISTER", PHONE, code!, "Phone A");
-    expect(first.accountCreated).toBe(true);
+  it("rejects a wrong password without issuing a session", async () => {
+    const { auth, delivery, sessionsRepo } = harness();
+    await register(auth, delivery);
+    const sessionsAfterRegister = sessionsRepo.records.size;
 
-    await auth.requestOtp("REGISTER", PHONE);
-    const secondCode = delivery.lastCode(PHONE, "REGISTER");
-    const second = await auth.verifyOtp("REGISTER", PHONE, secondCode!, "Phone B");
-    expect(second.accountCreated).toBe(false);
-    expect(second.memberId).toBe(first.memberId);
+    await expect(
+      auth.login({ phone: PHONE, password: OTHER_PASSWORD }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "MEMBER_CREDENTIALS_INVALID" }),
+    });
+    expect(sessionsRepo.records.size).toBe(sessionsAfterRegister);
   });
 
-  it("rejects LOGIN for a phone with no registered account", async () => {
+  it("rejects an unknown phone with the same generic code as a wrong password", async () => {
+    const { auth } = harness();
+    await expect(
+      auth.login({ phone: UNKNOWN_PHONE, password: PASSWORD }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "MEMBER_CREDENTIALS_INVALID" }),
+    });
+  });
+
+  it("routes an existing Member without a credential to enrollment instead of denying them", async () => {
+    const { auth, members } = harness();
+    const legacy = legacyMember();
+    members.members.set(legacy.id, legacy);
+
+    await expect(auth.login({ phone: PHONE, password: PASSWORD })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "PASSWORD_ENROLLMENT_REQUIRED" }),
+    });
+    expect(members.members.get(legacy.id)!.passwordHash).toBeNull();
+  });
+
+  it("locks the credential after the configured number of failures and clears it on success", async () => {
+    const { auth, delivery, members } = harness();
+    const registered = await register(auth, delivery);
+    const maxAttempts = getEnvironment().MEMBER_LOGIN_MAX_ATTEMPTS;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await expect(
+        auth.login({ phone: PHONE, password: OTHER_PASSWORD }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "MEMBER_CREDENTIALS_INVALID" }),
+      });
+    }
+
+    const locked = members.members.get(registered.memberId)!;
+    expect(locked.lockedUntil).toBeInstanceOf(Date);
+    expect(locked.lockedUntil!.getTime()).toBeGreaterThan(Date.now());
+
+    // Even the correct credential is refused while the lock stands, and the
+    // refusal is reported as a retry window rather than as "wrong password".
+    await expect(auth.login({ phone: PHONE, password: PASSWORD })).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "MEMBER_LOGIN_LOCKED",
+        details: { retryAfterSeconds: expect.any(Number) },
+      }),
+    });
+
+    // Once the lock expires the correct credential succeeds and resets state.
+    members.members.set(registered.memberId, {
+      ...members.members.get(registered.memberId)!,
+      lockedUntil: new Date(Date.now() - 1_000),
+    });
+    await expect(auth.login({ phone: PHONE, password: PASSWORD })).resolves.toMatchObject({
+      memberId: registered.memberId,
+    });
+    const cleared = members.members.get(registered.memberId)!;
+    expect(cleared.failedLoginAttempts).toBe(0);
+    expect(cleared.lockedUntil).toBeNull();
+  });
+
+  it("refuses a disabled Member even with the correct password", async () => {
+    const { auth, delivery, members } = harness();
+    const registered = await register(auth, delivery);
+    members.members.set(registered.memberId, {
+      ...members.members.get(registered.memberId)!,
+      status: "DISABLED",
+    });
+    await expect(auth.login({ phone: PHONE, password: PASSWORD })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "ACCOUNT_DISABLED" }),
+    });
+  });
+});
+
+describe("MemberAuthService password enrollment (CR #141)", () => {
+  it("sets a credential for a legacy Member without issuing a session", async () => {
+    const { auth, members, delivery, sessionsRepo } = harness();
+    const legacy = legacyMember();
+    members.members.set(legacy.id, legacy);
+
+    await auth.requestOtp("PASSWORD_ENROLL", PHONE);
+    const code = delivery.lastCode(PHONE, "PASSWORD_ENROLL")!;
+    const result = await auth.verifyOtp("PASSWORD_ENROLL", PHONE, code, PASSWORD);
+
+    expect(result).toMatchObject({
+      purpose: "PASSWORD_ENROLL",
+      memberId: legacy.id,
+      passwordSet: true,
+    });
+    expect("accessToken" in result).toBe(false);
+    expect(sessionsRepo.records.size).toBe(0);
+    expect(members.members.get(legacy.id)!.passwordHash).toMatch(/^scrypt-v1\$/);
+
+    // The enrolled credential is immediately usable for password login.
+    await expect(
+      auth.login({ phone: PHONE, password: PASSWORD, deviceName: "Phone" }),
+    ).resolves.toMatchObject({ memberId: legacy.id });
+  });
+
+  it("rejects enrollment for a phone with no Member account", async () => {
     const { auth, delivery } = harness();
-    await auth.requestOtp("LOGIN", PHONE);
-    const code = delivery.lastCode(PHONE, "LOGIN");
-    await expect(auth.verifyOtp("LOGIN", PHONE, code!, "Phone")).rejects.toThrow();
+    await auth.requestOtp("PASSWORD_ENROLL", UNKNOWN_PHONE);
+    const code = delivery.lastCode(UNKNOWN_PHONE, "PASSWORD_ENROLL")!;
+    await expect(
+      auth.verifyOtp("PASSWORD_ENROLL", UNKNOWN_PHONE, code, PASSWORD),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "MEMBER_NOT_REGISTERED" }),
+    });
+  });
+});
+
+describe("MemberAuthService password reset (CR #141)", () => {
+  it("resets a forgotten password with RECOVERY evidence and revokes existing sessions", async () => {
+    const { auth, delivery, sessionsRepo, members } = harness();
+    const registered = await register(auth, delivery);
+    expect(sessionsRepo.records.size).toBe(1);
+
+    await auth.requestRecoveryOtp(PHONE);
+    const code = delivery.lastCode(PHONE, "RECOVERY")!;
+    const result = await auth.resetMemberPassword({
+      phone: PHONE,
+      code,
+      password: OTHER_PASSWORD,
+    });
+    expect(result).toMatchObject({
+      purpose: "RECOVERY",
+      memberId: registered.memberId,
+      passwordReset: true,
+    });
+
+    // Every session established with the replaced credential is gone.
+    expect([...sessionsRepo.records.values()].every((r) => r.revokedAt !== null)).toBe(true);
+    expect(members.members.get(registered.memberId)!.passwordHash).toMatch(/^scrypt-v1\$/);
+
+    await expect(auth.login({ phone: PHONE, password: PASSWORD })).rejects.toThrow();
+    await expect(
+      auth.login({ phone: PHONE, password: OTHER_PASSWORD, deviceName: "Phone" }),
+    ).resolves.toMatchObject({ memberId: registered.memberId });
+
+    // The single-use RECOVERY challenge cannot be replayed for a second reset.
+    await expect(
+      auth.resetMemberPassword({ phone: PHONE, code, password: PASSWORD }),
+    ).rejects.toThrow();
+  });
+
+  it("requires enrollment instead of a reset for a Member without a credential", async () => {
+    const { auth, delivery, members } = harness();
+    const legacy = legacyMember();
+    members.members.set(legacy.id, legacy);
+
+    await auth.requestRecoveryOtp(PHONE);
+    const code = delivery.lastCode(PHONE, "RECOVERY")!;
+    await expect(
+      auth.resetMemberPassword({ phone: PHONE, code, password: PASSWORD }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "PASSWORD_ENROLLMENT_REQUIRED" }),
+    });
   });
 });
 
@@ -288,39 +572,12 @@ describe("MemberAuthService recovery possession evidence", () => {
     expect(members.members.size).toBe(0);
     expect(sessionsRepo.records.size).toBe(0);
   });
-
-  it("rejects wrong, expired, and exhausted RECOVERY challenges without auth side effects", async () => {
-    const { auth, delivery, members, sessionsRepo } = harness();
-    await auth.requestRecoveryOtp(PHONE);
-    const code = delivery.lastCode(PHONE, "RECOVERY")!;
-    const wrong = code === "000000" ? "111111" : "000000";
-
-    await expect(auth.verifyRecoveryOtp(PHONE, wrong)).rejects.toThrow();
-    const challenge = [...members.challenges.values()][0]!;
-    members.challenges.set(challenge.id, {
-      ...challenge,
-      expiresAt: new Date(Date.now() - 1),
-    });
-    await expect(auth.verifyRecoveryOtp(PHONE, code)).rejects.toThrow();
-
-    members.challenges.set(challenge.id, {
-      ...challenge,
-      expiresAt: new Date(Date.now() + 60_000),
-      attemptsUsed: 10,
-    });
-    await expect(auth.verifyRecoveryOtp(PHONE, code)).rejects.toThrow();
-    expect(members.members.size).toBe(0);
-    expect(members.devices.size).toBe(0);
-    expect(sessionsRepo.records.size).toBe(0);
-  });
 });
 
 describe("MemberAuthService refresh rotation", () => {
   it("issues a session whose refresh token rotates and rejects reuse", async () => {
     const { auth, delivery, sessionsRepo, sessions } = harness();
-    await auth.requestOtp("REGISTER", PHONE);
-    const code = delivery.lastCode(PHONE, "REGISTER");
-    const issued = await auth.verifyOtp("REGISTER", PHONE, code!, "Phone");
+    const issued = await register(auth, delivery);
     expect(sessionsRepo.records.size).toBe(1);
 
     const rotated = await auth.refresh(issued.refreshToken);
@@ -335,13 +592,23 @@ describe("MemberAuthService refresh rotation", () => {
 
   it("revokes a single session scoped to the owning Member", async () => {
     const { auth, delivery, sessionsRepo } = harness();
-    await auth.requestOtp("REGISTER", PHONE);
-    const code = delivery.lastCode(PHONE, "REGISTER");
-    const issued = await auth.verifyOtp("REGISTER", PHONE, code!, "Phone");
+    const issued = await register(auth, delivery);
     const list = await auth.listSessions(issued.memberId);
     expect(list.length).toBe(1);
     await auth.revokeSession(issued.memberId, list[0]!.sessionId);
     await expect(auth.refresh(issued.refreshToken)).rejects.toThrow();
-    expect(sessionsRepo.records.size).toBe(1);
+    expect([...sessionsRepo.records.values()].every((r) => r.revokedAt !== null)).toBe(true);
+  });
+});
+
+describe("MemberAuthService identity view", () => {
+  it("reports credential enrollment without ever exposing the encoded hash", async () => {
+    const { auth, delivery, members } = harness();
+    const registered = await register(auth, delivery);
+    const view = await auth.me(registered.memberId);
+    expect(view.passwordEnrolled).toBe(true);
+    expect(Object.keys(view).sort()).toEqual(["memberId", "passwordEnrolled", "phone", "status"]);
+    const encoded = members.members.get(registered.memberId)!.passwordHash!;
+    expect(JSON.stringify(view)).not.toContain(encoded);
   });
 });

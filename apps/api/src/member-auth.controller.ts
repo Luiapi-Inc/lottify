@@ -15,10 +15,12 @@ import {
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
   ApiProperty,
   ApiTags,
+  getSchemaPath,
 } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import { z, type ZodType } from "zod";
@@ -32,15 +34,32 @@ import {
 const MEMBER_REFRESH_COOKIE = "lottify_member_refresh";
 const MEMBER_REFRESH_COOKIE_PATH = "/api/v1/member";
 
+// CR #141: `LOGIN` is gone. OTP now only proves phone possession for account
+// creation (REGISTER) and one-time credential enrollment (PASSWORD_ENROLL).
+const OTP_SELF_SERVICE_PURPOSES = ["REGISTER", "PASSWORD_ENROLL"] as const;
+
 const otpRequestSchema = z.object({
-  purpose: z.enum(["LOGIN", "REGISTER"]),
+  purpose: z.enum(OTP_SELF_SERVICE_PURPOSES),
   phone: z.string().trim().min(1),
 });
 const otpVerifySchema = z.object({
-  purpose: z.enum(["LOGIN", "REGISTER"]),
+  purpose: z.enum(OTP_SELF_SERVICE_PURPOSES),
   phone: z.string().trim().min(1),
   code: z.string().regex(/^\d{4,8}$/),
+  password: z.string().min(1).max(256),
   deviceName: z.string().trim().max(200).optional(),
+});
+const loginSchema = z.object({
+  // The API contract keeps the E.164 rule (CR #141 owner note): the phone format
+  // is normalized by the client, never loosened server-side.
+  phone: z.string().trim().min(1),
+  password: z.string().min(1).max(256),
+  deviceName: z.string().trim().max(200).optional(),
+});
+const passwordResetSchema = z.object({
+  phone: z.string().trim().min(1),
+  code: z.string().regex(/^\d{4,8}$/),
+  password: z.string().min(1).max(256),
 });
 const recoveryOtpRequestSchema = z.object({
   phone: z.string().trim().min(1),
@@ -51,30 +70,38 @@ const recoveryOtpVerifySchema = z.object({
 });
 
 class OtpRequestBody {
-  @ApiProperty({ enum: ["LOGIN", "REGISTER"] })
-  purpose!: "LOGIN" | "REGISTER";
+  @ApiProperty({ enum: [...OTP_SELF_SERVICE_PURPOSES] })
+  purpose!: (typeof OTP_SELF_SERVICE_PURPOSES)[number];
 
-  @ApiProperty({ type: String, example: "+66812345678" })
+  @ApiProperty({ type: String, example: "+668****5678" })
   phone!: string;
 }
 
 class OtpVerifyBody {
-  @ApiProperty({ enum: ["LOGIN", "REGISTER"] })
-  purpose!: "LOGIN" | "REGISTER";
+  @ApiProperty({ enum: [...OTP_SELF_SERVICE_PURPOSES] })
+  purpose!: (typeof OTP_SELF_SERVICE_PURPOSES)[number];
 
-  @ApiProperty({ type: String, example: "+66812345678" })
+  @ApiProperty({ type: String, example: "+668****5678" })
   phone!: string;
 
   @ApiProperty({ type: String, pattern: "^[0-9]{4,8}$", example: "123456" })
   code!: string;
+
+  @ApiProperty({
+    type: String,
+    format: "password",
+    description:
+      "Member password. Required for both purposes: REGISTER stores it as the new account credential, PASSWORD_ENROLL sets it for an existing Member.",
+  })
+  password!: string;
 
   @ApiProperty({ type: String, required: false, example: "My Phone" })
   deviceName?: string;
 }
 
 class OtpRequestResponse {
-  @ApiProperty({ enum: ["LOGIN", "REGISTER"] })
-  purpose!: "LOGIN" | "REGISTER";
+  @ApiProperty({ enum: [...OTP_SELF_SERVICE_PURPOSES] })
+  purpose!: (typeof OTP_SELF_SERVICE_PURPOSES)[number];
 
   @ApiProperty({ type: String, description: "Masked delivery target" })
   deliveredTo!: string;
@@ -84,17 +111,83 @@ class OtpRequestResponse {
 }
 
 class MemberSessionResponse {
+  @ApiProperty({ enum: ["REGISTER"] })
+  purpose!: "REGISTER";
+
   @ApiProperty({ type: String })
   accessToken!: string;
 
   @ApiProperty({ type: String })
   memberId!: string;
 
-  @ApiProperty({ type: Boolean })
+  @ApiProperty({ type: Boolean, example: true })
   accountCreated!: boolean;
 
   @ApiProperty({ type: String, nullable: true })
   deviceId!: string | null;
+}
+
+class PasswordEnrollResponse {
+  @ApiProperty({ enum: ["PASSWORD_ENROLL"] })
+  purpose!: "PASSWORD_ENROLL";
+
+  @ApiProperty({ type: String })
+  memberId!: string;
+
+  @ApiProperty({ type: Boolean, example: true })
+  passwordSet!: true;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  passwordUpdatedAt!: Date;
+}
+
+class MemberLoginBody {
+  @ApiProperty({ type: String, example: "+668****5678" })
+  phone!: string;
+
+  @ApiProperty({ type: String, format: "password" })
+  password!: string;
+
+  @ApiProperty({ type: String, required: false, example: "My Phone" })
+  deviceName?: string;
+}
+
+// Login returns the rotating refresh credential as an httpOnly cookie, so the
+// JSON body carries only the short-lived access token plus the resolved identity.
+class MemberLoginResponse {
+  @ApiProperty({ type: String })
+  accessToken!: string;
+
+  @ApiProperty({ type: String })
+  memberId!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  deviceId!: string | null;
+}
+
+class PasswordResetBody {
+  @ApiProperty({ type: String, example: "+668****5678" })
+  phone!: string;
+
+  @ApiProperty({ type: String, pattern: "^[0-9]{4,8}$", example: "123456" })
+  code!: string;
+
+  @ApiProperty({ type: String, format: "password" })
+  password!: string;
+}
+
+class PasswordResetResponse {
+  @ApiProperty({ enum: ["RECOVERY"] })
+  purpose!: "RECOVERY";
+
+  @ApiProperty({ type: String })
+  memberId!: string;
+
+  @ApiProperty({ type: Boolean, example: true })
+  passwordReset!: true;
+
+  @ApiProperty({ type: String, format: "date-time" })
+  passwordUpdatedAt!: Date;
 }
 
 class RecoveryOtpRequestBody {
@@ -154,9 +247,17 @@ class MemberMeResponse {
 
   @ApiProperty({ enum: ["ACTIVE", "DISABLED"] })
   status!: string;
+
+  @ApiProperty({
+    type: Boolean,
+    description:
+      "False when this Member still has to complete password enrollment (every pre-CR #141 account).",
+  })
+  passwordEnrolled!: boolean;
 }
 
 @ApiTags("Member Auth")
+@ApiExtraModels(MemberSessionResponse, PasswordEnrollResponse)
 @Controller("api/v1/member/auth")
 export class MemberAuthController {
   constructor(
@@ -176,9 +277,19 @@ export class MemberAuthController {
 
   @Post("otp/verify")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Verify an OTP and establish a Member session" })
+  @ApiOperation({
+    summary:
+      "Verify an OTP: REGISTER creates the account with the supplied password and authenticates, PASSWORD_ENROLL sets a credential without a session",
+  })
   @ApiBody({ type: OtpVerifyBody })
-  @ApiOkResponse({ type: MemberSessionResponse })
+  @ApiOkResponse({
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(MemberSessionResponse) },
+        { $ref: getSchemaPath(PasswordEnrollResponse) },
+      ],
+    },
+  })
   async verifyOtp(
     @Body() body: OtpVerifyBody,
     @Res({ passthrough: true }) response: Response,
@@ -188,15 +299,55 @@ export class MemberAuthController {
       input.purpose,
       input.phone,
       input.code,
+      input.password,
       input.deviceName,
     );
+    if (result.purpose === "PASSWORD_ENROLL") return result;
     this.setRefreshCookie(response, result.refreshToken);
     return {
+      purpose: result.purpose,
       accessToken: result.accessToken,
       memberId: result.memberId,
       accountCreated: result.accountCreated,
       deviceId: result.deviceId,
     };
+  }
+
+  @Post("login")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Authenticate a Member with phone + password and establish a session",
+  })
+  @ApiBody({ type: MemberLoginBody })
+  @ApiOkResponse({ type: MemberLoginResponse })
+  async login(
+    @Body() body: MemberLoginBody,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<MemberLoginResponse> {
+    const input = parseBody(loginSchema, body);
+    const result = await this.memberAuth.login({
+      phone: input.phone,
+      password: input.password,
+      ...(input.deviceName ? { deviceName: input.deviceName } : {}),
+    });
+    this.setRefreshCookie(response, result.refreshToken);
+    return {
+      accessToken: result.accessToken,
+      memberId: result.memberId,
+      deviceId: result.deviceId,
+    };
+  }
+
+  @Post("password/reset")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Reset a forgotten Member password using RECOVERY OTP possession evidence",
+  })
+  @ApiBody({ type: PasswordResetBody })
+  @ApiOkResponse({ type: PasswordResetResponse })
+  resetPassword(@Body() body: PasswordResetBody): Promise<PasswordResetResponse> {
+    const input = parseBody(passwordResetSchema, body);
+    return this.memberAuth.resetMemberPassword(input);
   }
 
   @Post("recovery/otp/request")

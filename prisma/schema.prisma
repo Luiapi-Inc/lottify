@@ -45,6 +45,21 @@ model Member {
   dateOfBirth     DateTime? @map("date_of_birth") @db.Date
   province        String?
   profileUpdatedAt DateTime? @map("profile_updated_at")
+  /// Member login credential (CR #141: phone + password replaced phone + OTP as
+  /// the login channel). Encoded as the shared `scrypt-v1$<salt>$<key>` format
+  /// used by Admin credentials — plaintext is never stored. NULL for a Member
+  /// that has not enrolled a password yet (every pre-CR Member, plus Members
+  /// created without one by the cutover ETL); such a Member is routed to the
+  /// PASSWORD_ENROLL OTP flow instead of being locked out.
+  passwordHash      String?   @map("password_hash")
+  passwordUpdatedAt DateTime? @map("password_updated_at")
+  /// Bounded brute-force defence for the password login channel (CR #141). The
+  /// OTP channel had per-purpose attempt limits; the password channel must not
+  /// be a cheaper oracle, so consecutive failures lock the credential for
+  /// `MEMBER_LOGIN_LOCKOUT_SECONDS` exactly like the Admin login path. A lock
+  /// never disables the account: it expires on its own.
+  failedLoginAttempts Int      @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt @map("updated_at")
   devices   MemberDevice[]

@@ -10,8 +10,11 @@ import type { MemberOtpDeliveryPort } from "./application/member-otp-delivery.po
 const THAIBULKSMS_SMS_ENDPOINT = "https://api-v2.thaibulksms.com/sms";
 
 const PURPOSE_LABELS_TH: Record<string, string> = {
+  // Retained only so a message built from a historical challenge still renders;
+  // CR #141 retired LOGIN as an issuable purpose, so no new LOGIN code is sent.
   LOGIN: "เข้าสู่ระบบ",
   REGISTER: "สมัครสมาชิก",
+  PASSWORD_ENROLL: "ตั้งรหัสผ่าน",
   REAUTH: "ยืนยันตัวตนอีกครั้ง",
   RECOVERY: "กู้คืนบัญชี",
 };
