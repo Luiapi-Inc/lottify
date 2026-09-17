@@ -65,6 +65,11 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
   const promotionCampaignIds: string[] = [];
   const promotionCampaignVersionIds: string[] = [];
   const promotionEntitlementIds: string[] = [];
+  // Funding system codes this suite asks the ledger to create. Scoped by exact
+  // code, never by prefix: a prefix sweep here deletes the promotion suites'
+  // accounts and violates ledger_postings_account_id_fkey when the files run in
+  // parallel against the shared test database.
+  const ownedFundingSystemCodes: string[] = [];
 
   const actor = () => ({ adminId, sessionId, role: "ADMIN" as const });
 
@@ -128,7 +133,7 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
             { systemCode: "betting-settlement" },
             { systemCode: { startsWith: "settlement-test-funding" } },
             { systemCode: { startsWith: "order-test-funding" } },
-            { systemCode: { startsWith: "promotion-funding:" } },
+            { systemCode: { in: ownedFundingSystemCodes } },
           ],
         },
         select: { id: true },
@@ -149,7 +154,12 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
         await tx.$executeRawUnsafe('ALTER TABLE "lottery_bet_type_versions" DISABLE TRIGGER "lottery_bet_type_versions_published_immutable"');
 
         await tx.settlementOrder.deleteMany({ where: { memberId: { in: memberIds } } });
-        await tx.settlementBatch.deleteMany({ where: { id: { in: settlementBatchIds } } });
+        // A code path the test does not track can still create a batch for this
+        // test's draws (e.g. a FAILED batch); leaving it behind makes the
+        // resultRevision delete below hit settlement_batches_result_revision_id_fkey.
+        await tx.settlementBatch.deleteMany({
+          where: { OR: [{ id: { in: settlementBatchIds } }, { drawId: { in: drawIds } }] },
+        });
         await tx.resultRevision.deleteMany({ where: { drawId: { in: drawIds } } });
         await tx.betReceipt.deleteMany({ where: { memberId: { in: memberIds } } });
         await tx.betOrderLine.deleteMany({ where: { order: { memberId: { in: memberIds } } } });
@@ -315,6 +325,10 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
     promotionCampaignVersionIds.push(campaignVersionId);
     promotionEntitlementIds.push(entitlementId);
     const terms = validTerms({
+      // Per-run funding source: the shared fixture default ("welcome-2026") makes
+      // every suite share one ledger account, so whichever suite cleans up first
+      // trips ledger_postings_account_id_fkey on the other suites' postings.
+      fundingSource: `settlement-${campaignId}`,
       rewardAmountMinor: input.amountMinor.toString(),
       scope: {
         eligibleProductIds: [input.productId],
@@ -341,10 +355,9 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
       },
     });
     const bonusAccountId = await ledger.ensureMemberAccount(input.memberId, "BONUS", "THB");
-    const fundingAccountId = await ledger.ensureSystemAccount(
-      `promotion-funding:${terms.fundingSource}`,
-      "THB",
-    );
+    const fundingSystemCode = `promotion-funding:${terms.fundingSource}`;
+    ownedFundingSystemCodes.push(fundingSystemCode);
+    const fundingAccountId = await ledger.ensureSystemAccount(fundingSystemCode, "THB");
     const grantLedgerTransactionId = await ledger.post({
       businessTransactionId: `promotion-grant:${entitlementId}`,
       operationType: "PROMOTION_BONUS_GRANT",

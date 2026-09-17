@@ -117,6 +117,17 @@ describe.runIf(runIntegration)("Member API — Promotion vertical integration", 
         where: { id: { in: ledgerTransactionIds } },
         select: { id: true, accountingPeriodId: true },
       });
+      // Accounts this suite's own postings touched. Its flow can cause system
+      // accounts (promotion-funding:*) to be created; those must be deleted by id,
+      // not by system-code prefix, or the delete sweeps other suites' rows and
+      // violates ledger_postings_account_id_fkey under parallel execution.
+      const ownAccountIds = (
+        await prisma.ledgerPosting.findMany({
+          where: { transactionId: { in: transactions.map((row) => row.id) } },
+          select: { accountId: true },
+          distinct: ["accountId"],
+        })
+      ).map((row) => row.accountId);
       await prisma.ledgerPosting.deleteMany({
         where: { transactionId: { in: transactions.map((row) => row.id) } },
       });
@@ -125,15 +136,26 @@ describe.runIf(runIntegration)("Member API — Promotion vertical integration", 
       });
       await prisma.ledgerAccount.deleteMany({
         where: {
-          OR: [
-            { memberId: { in: memberIds } },
-            { systemCode: { startsWith: "promotion-funding:" } },
-          ],
+          OR: [{ memberId: { in: memberIds } }, { id: { in: ownAccountIds } }],
         },
       });
-      await prisma.accountingPeriod.deleteMany({
-        where: { id: { in: [...new Set(transactions.map((row) => row.accountingPeriodId))] } },
-      });
+      // Accounting periods are auto-created and shared across suites, so only the
+      // ones no transaction references any more may be removed — deleting a period
+      // another suite still uses violates its foreign key.
+      const periodIds = [...new Set(transactions.map((row) => row.accountingPeriodId))];
+      const stillReferencedPeriodIds = new Set(
+        (
+          await prisma.financialTransaction.findMany({
+            where: { accountingPeriodId: { in: periodIds } },
+            select: { accountingPeriodId: true },
+            distinct: ["accountingPeriodId"],
+          })
+        ).map((row) => row.accountingPeriodId),
+      );
+      const deletablePeriodIds = periodIds.filter((id) => !stillReferencedPeriodIds.has(id));
+      if (deletablePeriodIds.length > 0) {
+        await prisma.accountingPeriod.deleteMany({ where: { id: { in: deletablePeriodIds } } });
+      }
 
       await prisma.idempotencyRecord.deleteMany({ where: { scope: { startsWith: "PROMOTION" } } });
       await prisma.idempotencyRecord.deleteMany({ where: { scope: { contains: ":promotion:" } } });
