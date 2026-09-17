@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BellIcon } from "./navigation";
+import { describeMemberStatus, formatMemberPhone, useMemberSession } from "../lib/member-session-client";
 
 const titles: Record<string, [string, string]> = {
   "/": ["สวัสดีครับ", "ขอให้วันนี้เป็นวันที่ดี"],
@@ -14,6 +15,7 @@ const titles: Record<string, [string, string]> = {
 
 export function Topbar() {
   const pathname = usePathname();
+  const session = useMemberSession();
   const base = Object.keys(titles).find((key) => key !== "/" && pathname.startsWith(key)) ?? "/";
   const [title, subtitle] = titles[base] ?? titles["/"]!;
   return <header className="topbar">
@@ -21,7 +23,13 @@ export function Topbar() {
     <div className="topbar-actions">
       <input className="search" aria-label="ค้นหา" placeholder="ค้นหาหวย งวด หรือเมนู..." />
       <Link className="icon-btn" href="/#alerts" aria-label="การแจ้งเตือน"><BellIcon /><i className="notification-dot" /></Link>
-      <Link className="member-chip" href="/account"><span className="avatar">ล</span><div><strong>คุณสมาชิก</strong><small>ระดับทั่วไป</small></div></Link>
+      {/* The chip reflects the server-authoritative session: a visitor whose
+          session is gone gets a login entry, never a member identity. */}
+      {session.status === "authenticated"
+        ? <Link className="member-chip" href="/account"><span className="avatar">ล</span><div><strong>{formatMemberPhone(session.session.phone)}</strong><small>{describeMemberStatus(session.session.status).label}</small></div></Link>
+        : session.status === "loading"
+          ? <span className="member-chip" aria-busy="true"><span className="avatar">…</span><div><strong>กำลังตรวจสอบเซสชัน</strong><small>กรุณารอสักครู่</small></div></span>
+          : <Link className="button secondary" href="/login">เข้าสู่ระบบ</Link>}
     </div>
   </header>;
 }

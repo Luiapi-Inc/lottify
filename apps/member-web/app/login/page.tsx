@@ -52,7 +52,11 @@ export default function LoginPage() {
     setError("");
     try {
       await memberApi.login(phone, password);
-      router.push("/");
+      // Return the member to the member area they were denied by the session
+      // guard (`/login?next=…`); anything that is not an in-app path falls back
+      // to the home area.
+      const requested = new URLSearchParams(window.location.search).get("next");
+      router.push(requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/");
     } catch (requestError) {
       const mapped = requestError instanceof MemberApiFailure ? describeLoginError(requestError) : null;
       if (mapped?.route) {
