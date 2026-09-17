@@ -12,7 +12,7 @@ import { resetEnvironmentForTests } from "../../src/platform/config/env";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
-const phonePrefix = "+6698"; // wallet/deposit integration namespace
+const phonePrefix = "098"; // wallet/deposit integration namespace
 
 describe.runIf(runIntegration)("Member Wallet + Deposit vertical integration", () => {
   let prisma: PrismaService;
@@ -80,7 +80,7 @@ describe.runIf(runIntegration)("Member Wallet + Deposit vertical integration", (
   }
 
   async function createMember(): Promise<string> {
-    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
     const member = await prisma.member.create({ data: { phone } });
     memberIds.push(member.id);
     return member.id;

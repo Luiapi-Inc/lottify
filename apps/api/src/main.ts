@@ -1,9 +1,12 @@
 import "reflect-metadata";
-import { ConsoleLogger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { Request } from "express";
 import pinoHttp from "pino-http";
 import { getEnvironment } from "../../../src/platform/config/env";
+import {
+  RedactingConsoleLogger,
+  httpAccessLoggerOptions,
+} from "../../../src/platform/observability/log-redaction";
 import { initObservability, shutdownObservability } from "../../../src/platform/observability/observability";
 import { ApiModule } from "./app.module";
 import { configureApp } from "./configure-app";
@@ -18,11 +21,14 @@ async function bootstrap(): Promise<void> {
   initObservability(env.OTEL_SERVICE_NAME);
 
   const app = await NestFactory.create(ApiModule, {
-    logger: new ConsoleLogger({ json: true }),
+    logger: new RedactingConsoleLogger({ json: true }),
   });
   app.use(
     pinoHttp({
-      level: env.LOG_LEVEL,
+      // Redaction paths/censor are owned by the platform log-redaction module
+      // (Ticket 13 security gate: no Bearer tokens, cookies, OTP codes or the
+      // Member phone identity in access logs).
+      ...httpAccessLoggerOptions(env.LOG_LEVEL),
       // Use the correlation id as the log request id so access logs are joinable
       // to the transaction id (GH #92 / W5-F3). Same rule as CorrelationMiddleware.
       genReqId: (req) => {

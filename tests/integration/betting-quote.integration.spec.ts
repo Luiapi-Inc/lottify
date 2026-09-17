@@ -182,7 +182,7 @@ describe.runIf(runIntegration)("Betting Quote resolver + persistence", () => {
     const id = randomUUID();
     memberIds.push(id);
     await prisma.member.create({
-      data: { id, phone: `+66${id.replaceAll("-", "").slice(0, 10)}` },
+      data: { id, phone: `09${id.replace(/\D/g, "").padEnd(8, "0").slice(0, 8)}` },
     });
     return id;
   }

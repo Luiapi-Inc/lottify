@@ -2,7 +2,7 @@
 
 Generated deterministically from the authoritative OpenAPI contract at `apps/api/openapi/openapi.json`.
 
-**116 paths · 126 operations · 146 schemas**
+**118 paths · 128 operations · 151 schemas**
 
 Source: `apps/api/openapi/openapi.json` · regenerate with `pnpm openapi:generate`.
 
@@ -51,6 +51,15 @@ Source: `apps/api/openapi/openapi.json` · regenerate with `pnpm openapi:generat
 <a id="member-auth"></a>
 ### `/member/auth`
 
+#### `POST /api/v1/member/auth/login`
+
+*Authenticate a Member with phone + password and establish a session*
+
+- **Request** `application/json`: `MemberLoginBody`
+
+- **Responses:**
+  - `200` → `MemberLoginResponse`
+
 #### `POST /api/v1/member/auth/logout`
 
 *Revoke the current Member refresh session*
@@ -76,12 +85,21 @@ Source: `apps/api/openapi/openapi.json` · regenerate with `pnpm openapi:generat
 
 #### `POST /api/v1/member/auth/otp/verify`
 
-*Verify an OTP and establish a Member session*
+*Verify an OTP: REGISTER creates the account with the supplied password and authenticates, PASSWORD_ENROLL sets a credential without a session*
 
 - **Request** `application/json`: `OtpVerifyBody`
 
 - **Responses:**
-  - `200` → `MemberSessionResponse`
+  - `200` → `MemberSessionResponse` | `PasswordEnrollResponse`
+
+#### `POST /api/v1/member/auth/password/reset`
+
+*Reset a forgotten Member password using RECOVERY OTP possession evidence*
+
+- **Request** `application/json`: `PasswordResetBody`
+
+- **Responses:**
+  - `200` → `PasswordResetResponse`
 
 #### `POST /api/v1/member/auth/recovery/otp/request`
 
@@ -2397,6 +2415,22 @@ Maker-checker: the publishing Admin must differ from the author. A published ver
 | `items` | array<`MemberDrawDetailBody`> | yes |
 | `nextCursor` | `string` | yes |
 
+### `MemberLoginBody`
+
+| property | type | required |
+|---|---|---|
+| `phone` | `string` | yes |
+| `password` | `string (password)` | yes |
+| `deviceName` | `string` | no |
+
+### `MemberLoginResponse`
+
+| property | type | required |
+|---|---|---|
+| `accessToken` | `string` | yes |
+| `memberId` | `string` | yes |
+| `deviceId` | `string` | yes |
+
 ### `MemberMeResponse`
 
 | property | type | required |
@@ -2404,6 +2438,7 @@ Maker-checker: the publishing Admin must differ from the author. A published ver
 | `memberId` | `string` | yes |
 | `phone` | `string` | yes |
 | `status` | `string` | yes |
+| `passwordEnrolled` | `boolean` | yes |
 
 ### `MemberProductDetailBody`
 
@@ -2485,6 +2520,7 @@ Maker-checker: the publishing Admin must differ from the author. A published ver
 
 | property | type | required |
 |---|---|---|
+| `purpose` | `string` | yes |
 | `accessToken` | `string` | yes |
 | `memberId` | `string` | yes |
 | `accountCreated` | `boolean` | yes |
@@ -2572,6 +2608,7 @@ Maker-checker: the publishing Admin must differ from the author. A published ver
 | `purpose` | `string` | yes |
 | `phone` | `string` | yes |
 | `code` | `string` | yes |
+| `password` | `string (password)` | yes |
 | `deviceName` | `string` | no |
 
 ### `OverrideBody`
@@ -2583,6 +2620,32 @@ Maker-checker: the publishing Admin must differ from the author. A published ver
 | `changes` | `object` | yes |
 | `approvalEvidenceRef` | `string` | yes |
 | `auditEvidenceRef` | `string` | yes |
+
+### `PasswordEnrollResponse`
+
+| property | type | required |
+|---|---|---|
+| `purpose` | `string` | yes |
+| `memberId` | `string` | yes |
+| `passwordSet` | `boolean` | yes |
+| `passwordUpdatedAt` | `string (date-time)` | yes |
+
+### `PasswordResetBody`
+
+| property | type | required |
+|---|---|---|
+| `phone` | `string` | yes |
+| `code` | `string` | yes |
+| `password` | `string (password)` | yes |
+
+### `PasswordResetResponse`
+
+| property | type | required |
+|---|---|---|
+| `purpose` | `string` | yes |
+| `memberId` | `string` | yes |
+| `passwordReset` | `boolean` | yes |
+| `passwordUpdatedAt` | `string (date-time)` | yes |
 
 ### `PayoutDestinationBody`
 

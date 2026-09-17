@@ -6,6 +6,20 @@ export interface MemberRecord {
   id: string;
   phone: string;
   status: MemberStatus;
+  /**
+   * Encoded credential hash (CR #141) or `null` for a Member that has not
+   * enrolled a password yet. A null value is the enrollment signal: such a
+   * Member cannot use the password login channel until they set one.
+   * Never returned by the API and never logged.
+   */
+  passwordHash: string | null;
+  passwordUpdatedAt: Date | null;
+  /**
+   * Bounded brute-force state for the password login channel. A lock is not an
+   * account status change; it expires by itself and never disables the Member.
+   */
+  failedLoginAttempts: number;
+  lockedUntil: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,7 +54,29 @@ export interface OtpRequestWindowFact {
 export interface MemberAuthRepository {
   findByPhone(phone: string): Promise<MemberRecord | null>;
   findById(id: string): Promise<MemberRecord | null>;
-  createMember(input: { phone: string }): Promise<MemberRecord>;
+  createMember(input: {
+    phone: string;
+    passwordHash?: string | null;
+    passwordUpdatedAt?: Date | null;
+  }): Promise<MemberRecord>;
+  /**
+   * Sets/replaces the Member credential (CR #141). Returns the updated Member,
+   * or `null` when the Member no longer exists — the caller must treat that as
+   * a failed credential change rather than assuming a write happened.
+   */
+  setMemberPassword(input: {
+    memberId: string;
+    passwordHash: string;
+    updatedAt: Date;
+  }): Promise<MemberRecord | null>;
+  /** Records a failed password login and the resulting lock state. */
+  recordLoginFailure(input: {
+    memberId: string;
+    failedLoginAttempts: number;
+    lockedUntil: Date | null;
+  }): Promise<void>;
+  /** Records a successful authentication and clears the failure counter. */
+  recordLoginSuccess(memberId: string, at: Date): Promise<void>;
   countOtpRequestsInWindow(input: {
     phone: string;
     purpose: MemberOtpPurpose;
@@ -63,7 +99,6 @@ export interface MemberAuthRepository {
   // Atomically marks a challenge consumed only if it is still unconsumed.
   // Returns true when this caller won the single-use claim.
   consumeChallenge(id: string, memberId: string | null, consumedAt: Date): Promise<boolean>;
-  recordMemberLogin(id: string, at: Date): Promise<void>;
   upsertDevice(input: {
     memberId: string;
     deviceId: string;
