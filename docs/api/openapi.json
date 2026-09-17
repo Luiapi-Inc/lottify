@@ -2495,13 +2495,84 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberSessionResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MemberSessionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PasswordEnrollResponse"
+                    }
+                  ]
                 }
               }
             }
           }
         },
-        "summary": "Verify an OTP and establish a Member session",
+        "summary": "Verify an OTP: REGISTER creates the account with the supplied password and authenticates, PASSWORD_ENROLL sets a credential without a session",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/login": {
+      "post": {
+        "operationId": "MemberAuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberLoginBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberLoginResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Authenticate a Member with phone + password and establish a session",
+        "tags": [
+          "Member Auth"
+        ]
+      }
+    },
+    "/api/v1/member/auth/password/reset": {
+      "post": {
+        "operationId": "MemberAuthController_resetPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reset a forgotten Member password using RECOVERY OTP possession evidence",
         "tags": [
           "Member Auth"
         ]
@@ -7519,19 +7590,79 @@
           "expiresAt"
         ]
       },
+      "MemberSessionResponse": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "REGISTER"
+            ]
+          },
+          "accessToken": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "accountCreated": {
+            "type": "boolean",
+            "example": true
+          },
+          "deviceId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "purpose",
+          "accessToken",
+          "memberId",
+          "accountCreated",
+          "deviceId"
+        ]
+      },
+      "PasswordEnrollResponse": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "PASSWORD_ENROLL"
+            ]
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "passwordSet": {
+            "type": "boolean",
+            "example": true
+          },
+          "passwordUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "purpose",
+          "memberId",
+          "passwordSet",
+          "passwordUpdatedAt"
+        ]
+      },
       "OtpRequestBody": {
         "type": "object",
         "properties": {
           "purpose": {
             "type": "string",
             "enum": [
-              "LOGIN",
-              "REGISTER"
+              "REGISTER",
+              "PASSWORD_ENROLL"
             ]
           },
           "phone": {
             "type": "string",
-            "example": "+66812345678"
+            "example": "0812345678"
           }
         },
         "required": [
@@ -7545,8 +7676,8 @@
           "purpose": {
             "type": "string",
             "enum": [
-              "LOGIN",
-              "REGISTER"
+              "REGISTER",
+              "PASSWORD_ENROLL"
             ]
           },
           "deliveredTo": {
@@ -7570,18 +7701,23 @@
           "purpose": {
             "type": "string",
             "enum": [
-              "LOGIN",
-              "REGISTER"
+              "REGISTER",
+              "PASSWORD_ENROLL"
             ]
           },
           "phone": {
             "type": "string",
-            "example": "+66812345678"
+            "example": "0812345678"
           },
           "code": {
             "type": "string",
             "pattern": "^[0-9]{4,8}$",
             "example": "123456"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "description": "Member password. Required for both purposes: REGISTER stores it as the new account credential, PASSWORD_ENROLL sets it for an existing Member."
           },
           "deviceName": {
             "type": "string",
@@ -7591,10 +7727,32 @@
         "required": [
           "purpose",
           "phone",
-          "code"
+          "code",
+          "password"
         ]
       },
-      "MemberSessionResponse": {
+      "MemberLoginBody": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "0812345678"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          },
+          "deviceName": {
+            "type": "string",
+            "example": "My Phone"
+          }
+        },
+        "required": [
+          "phone",
+          "password"
+        ]
+      },
+      "MemberLoginResponse": {
         "type": "object",
         "properties": {
           "accessToken": {
@@ -7602,9 +7760,6 @@
           },
           "memberId": {
             "type": "string"
-          },
-          "accountCreated": {
-            "type": "boolean"
           },
           "deviceId": {
             "type": "string",
@@ -7614,8 +7769,58 @@
         "required": [
           "accessToken",
           "memberId",
-          "accountCreated",
           "deviceId"
+        ]
+      },
+      "PasswordResetBody": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "0812345678"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{4,8}$",
+            "example": "123456"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        },
+        "required": [
+          "phone",
+          "code",
+          "password"
+        ]
+      },
+      "PasswordResetResponse": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "RECOVERY"
+            ]
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "passwordReset": {
+            "type": "boolean",
+            "example": true
+          },
+          "passwordUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "purpose",
+          "memberId",
+          "passwordReset",
+          "passwordUpdatedAt"
         ]
       },
       "RecoveryOtpRequestBody": {
@@ -7623,7 +7828,7 @@
         "properties": {
           "phone": {
             "type": "string",
-            "example": "+66812345678"
+            "example": "0812345678"
           }
         },
         "required": [
@@ -7659,7 +7864,7 @@
         "properties": {
           "phone": {
             "type": "string",
-            "example": "+66812345678"
+            "example": "0812345678"
           },
           "code": {
             "type": "string",
@@ -7734,12 +7939,17 @@
               "ACTIVE",
               "DISABLED"
             ]
+          },
+          "passwordEnrolled": {
+            "type": "boolean",
+            "description": "False when this Member still has to complete password enrollment (every pre-CR #141 account)."
           }
         },
         "required": [
           "memberId",
           "phone",
-          "status"
+          "status",
+          "passwordEnrolled"
         ]
       },
       "CatalogVersionBody": {

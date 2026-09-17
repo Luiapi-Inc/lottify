@@ -78,4 +78,55 @@ describe("Member API contract", () => {
     );
     expect(leaked).toEqual([]);
   });
+
+  it("publishes the CR #141 password login, enrollment and reset contract", () => {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("test").setVersion("1").addBearerAuth().build(),
+    );
+
+    const login = document.paths["/api/v1/member/auth/login"]?.post;
+    expect(login).toBeDefined();
+    expect(document.paths["/api/v1/member/auth/password/reset"]?.post).toBeDefined();
+    expect(login!.responses["200"]).toMatchObject({
+      content: {
+        "application/json": { schema: { $ref: expect.stringContaining("MemberLoginResponse") } },
+      },
+    });
+
+    const schemas = document.components?.schemas ?? {};
+    const loginBody = schemas.MemberLoginBody as
+      | { properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
+    expect(Object.keys(loginBody?.properties ?? {}).sort()).toEqual([
+      "deviceName",
+      "password",
+      "phone",
+    ]);
+
+    // CR #141 retires LOGIN as an OTP purpose and requires a password for the
+    // remaining purposes: registering creates the credential, enrolling sets one.
+    const verifyBody = schemas.OtpVerifyBody as
+      | { properties?: { purpose?: { enum?: string[] } }; required?: string[] }
+      | undefined;
+    expect(verifyBody?.properties?.purpose?.enum).toEqual(["REGISTER", "PASSWORD_ENROLL"]);
+    expect(Object.keys(verifyBody?.properties ?? {})).toContain("password");
+    expect(verifyBody?.required ?? []).toContain("password");
+
+    // The enrollment answer carries no session: OTP is not a login channel.
+    const enroll = schemas.PasswordEnrollResponse as
+      | { properties?: Record<string, unknown> }
+      | undefined;
+    expect(Object.keys(enroll?.properties ?? {})).toEqual(
+      expect.arrayContaining(["purpose", "memberId", "passwordSet", "passwordUpdatedAt"]),
+    );
+    for (const forbidden of ["accessToken", "refreshToken", "deviceId"]) {
+      expect(Object.keys(enroll?.properties ?? {})).not.toContain(forbidden);
+    }
+
+    // No encoded credential field is ever part of the published contract.
+    const published = JSON.stringify(document).toLowerCase();
+    expect(published).not.toContain("passwordhash");
+    expect(published).not.toContain("scrypt");
+  });
 });

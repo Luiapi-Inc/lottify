@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -8,7 +9,11 @@ import {
 import { randomUUID } from "node:crypto";
 import { getEnvironment } from "../../../platform/config/env";
 import { SessionService } from "./session.service";
-import { MEMBER_AUTH_REPOSITORY, type MemberAuthRepository } from "../domain/identity-auth.repository";
+import {
+  MEMBER_AUTH_REPOSITORY,
+  type MemberAuthRepository,
+  type MemberRecord,
+} from "../domain/identity-auth.repository";
 import { normalizePhone, PhoneValidationError } from "../domain/identity-phone";
 import {
   buildMemberOtpPolicy,
@@ -16,9 +21,13 @@ import {
   decideOtpVerify,
   generateOtpCode,
   hashOtpCode,
+  isMemberOtpSelfServicePurpose,
   type MemberOtpPolicy,
   type MemberOtpPurpose,
+  type MemberOtpSelfServicePurpose,
 } from "../domain/identity-otp-policy";
+import { memberPasswordViolation } from "../domain/identity-password-policy";
+import { burnPasswordHashCost, hashPassword, verifyPassword } from "../domain/password-hash";
 import type { MemberOtpChallengeRecord } from "../domain/identity-auth.repository";
 import { MEMBER_OTP_DELIVERY_PORT, type MemberOtpDeliveryPort } from "./member-otp-delivery.port";
 
@@ -34,12 +43,42 @@ export interface RequestMemberOtpResult<Purpose extends MemberOtpPurpose = Membe
   retryAfterSeconds: number | null;
 }
 
-export interface VerifyMemberOtpResult {
+/** Result of a REGISTER verify: the account exists and is now authenticated. */
+export interface RegisterMemberResult {
+  purpose: "REGISTER";
   accessToken: string;
   refreshToken: string;
   memberId: string;
   accountCreated: boolean;
   deviceId: string | null;
+}
+
+/**
+ * Result of a PASSWORD_ENROLL verify: the Member has a credential now, but no
+ * session is issued. CR #141 removes OTP as a login channel, so proving phone
+ * possession may set a credential and must not authenticate on its own.
+ */
+export interface EnrollMemberPasswordResult {
+  purpose: "PASSWORD_ENROLL";
+  memberId: string;
+  passwordSet: true;
+  passwordUpdatedAt: Date;
+}
+
+export type VerifyMemberOtpResult = RegisterMemberResult | EnrollMemberPasswordResult;
+
+export interface MemberLoginResult {
+  accessToken: string;
+  refreshToken: string;
+  memberId: string;
+  deviceId: string | null;
+}
+
+export interface ResetMemberPasswordResult {
+  purpose: "RECOVERY";
+  memberId: string;
+  passwordReset: true;
+  passwordUpdatedAt: Date;
 }
 
 export interface VerifyRecoveryOtpResult {
@@ -62,14 +101,17 @@ export class MemberAuthService {
     private readonly sessions: SessionService,
   ) {}
 
-  // Purpose-scoped OTP request. The endpoint does not reveal whether the phone
-  // is registered: issuance and validation are identical for LOGIN and REGISTER
-  // so request-time account enumeration is not possible.
+  // Purpose-scoped OTP request. CR #141 removed `LOGIN`: OTP is no longer a
+  // login channel, so only purposes that prove phone possession for a
+  // non-authenticating action are accepted here (REGISTER, PASSWORD_ENROLL).
+  // The endpoint does not reveal whether the phone is registered: issuance and
+  // validation are identical for every accepted purpose so request-time account
+  // enumeration is not possible.
   async requestOtp(
     purposeRaw: string,
     phoneRaw: string,
-  ): Promise<RequestMemberOtpResult> {
-    if (purposeRaw !== "LOGIN" && purposeRaw !== "REGISTER") {
+  ): Promise<RequestMemberOtpResult<MemberOtpSelfServicePurpose>> {
+    if (!isMemberOtpSelfServicePurpose(purposeRaw)) {
       throw new UnauthorizedException({
         code: "OTP_PURPOSE_INVALID",
         message: "OTP purpose is not supported",
@@ -137,17 +179,26 @@ export class MemberAuthService {
     return { purpose, deliveredTo: phone, retryAfterSeconds: null };
   }
 
-  // Purpose-scoped OTP verify. A successful verify issues a short-lived access
-  // token plus a rotating refresh session (server-enforced). REGISTER creates
-  // the Member on first verified use; phone is the login identity so a REGISTER
-  // on an already-active phone authenticates rather than creating a duplicate.
+  /**
+   * Purpose-scoped OTP verify.
+   *
+   *  - `REGISTER` creates the Member with the supplied password — the phone is
+   *    the login identity, so the account is created and authenticated in one
+   *    step. A REGISTER for a phone that already has a Member is rejected: it
+   *    must never authenticate an existing account, because that is exactly the
+   *    OTP-as-login channel CR #141 removes.
+   *  - `PASSWORD_ENROLL` sets/replaces the credential of an existing Member
+   *    (legacy Members created before CR #141 have no credential) and
+   *    deliberately issues no session.
+   */
   async verifyOtp(
     purposeRaw: string,
     phoneRaw: string,
     code: string,
+    password: string,
     deviceName?: string,
   ): Promise<VerifyMemberOtpResult> {
-    if (purposeRaw !== "LOGIN" && purposeRaw !== "REGISTER") {
+    if (purposeRaw !== "REGISTER" && purposeRaw !== "PASSWORD_ENROLL") {
       throw new UnauthorizedException({
         code: "OTP_PURPOSE_INVALID",
         message: "OTP purpose is not supported",
@@ -155,30 +206,130 @@ export class MemberAuthService {
       });
     }
     const purpose = purposeRaw;
+    assertMemberPassword(password);
     const { phone, challenge, verifiedAt: now } = await this.verifyChallenge(
       purpose,
       phoneRaw,
       code,
     );
+    const passwordHash = await hashPassword(password);
 
-    const existing = await this.members.findByPhone(phone);
-    let member = existing;
-    let accountCreated = false;
-    if (purpose === "REGISTER") {
+    if (purpose === "PASSWORD_ENROLL") {
+      const member = await this.members.findByPhone(phone);
       if (!member) {
-        member = await this.members.createMember({ phone });
-        // Under a concurrent REGISTER the unique phone resolves to an existing
-        // Member; the caller still authenticates rather than being double-counted.
-        accountCreated = true;
+        throw new ConflictException({
+          code: "MEMBER_NOT_REGISTERED",
+          message: "No Member is registered for this phone",
+          details: {},
+        });
       }
-    } else if (!member) {
-      // LOGIN on a phone with no account: a verified OTP proves possession, so
-      // it is safe to route the Member to registration (no account is created).
-      throw new UnauthorizedException({
-        code: "MEMBER_NOT_REGISTERED",
-        message: "No Member is registered for this phone",
+      await this.claimChallenge(challenge, member.id, now);
+      const updated = await this.members.setMemberPassword({
+        memberId: member.id,
+        passwordHash,
+        updatedAt: now,
+      });
+      if (!updated) throw new NotFoundException("Member not found");
+      return {
+        purpose: "PASSWORD_ENROLL",
+        memberId: updated.id,
+        passwordSet: true,
+        passwordUpdatedAt: updated.passwordUpdatedAt ?? now,
+      };
+    }
+
+    if (await this.members.findByPhone(phone)) {
+      throw new ConflictException({
+        code: "MEMBER_ALREADY_REGISTERED",
+        message: "A Member already exists for this phone; log in or enroll a password",
         details: {},
       });
+    }
+    const member = await this.members.createMember({
+      phone,
+      passwordHash,
+      passwordUpdatedAt: now,
+    });
+    // Under a concurrent REGISTER the unique phone resolves to the winning
+    // Member. This caller must neither overwrite that credential nor
+    // authenticate as it, so a lost race is reported instead of accepted.
+    if (member.passwordHash !== passwordHash) {
+      throw new ConflictException({
+        code: "MEMBER_ALREADY_REGISTERED",
+        message: "A Member already exists for this phone; log in or enroll a password",
+        details: {},
+      });
+    }
+    await this.claimChallenge(challenge, member.id, now);
+    await this.members.recordLoginSuccess(member.id, now);
+
+    const device = await this.members.upsertDevice({
+      memberId: member.id,
+      deviceId: randomUUID(),
+      name: deviceName?.trim() || null,
+    });
+    const issued = await this.sessions.issue(member.id, device.id);
+    return {
+      purpose: "REGISTER",
+      accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      memberId: member.id,
+      accountCreated: true,
+      deviceId: device.id,
+    };
+  }
+
+  /**
+   * Phone + password login (CR #141). The credential is verified with the
+   * shared constant-time verifier, unknown phones burn the same KDF cost so
+   * response timing does not disclose registration state, and repeated failures
+   * lock the credential for a bounded window instead of allowing an unbounded
+   * password oracle.
+   */
+  async login(input: {
+    phone: string;
+    password: string;
+    deviceName?: string;
+  }): Promise<MemberLoginResult> {
+    const env = getEnvironment();
+    const phone = parsePhone(input.phone);
+    const now = new Date();
+    const member = await this.members.findByPhone(phone);
+
+    if (!member) {
+      await burnPasswordHashCost(input.password);
+      throw memberCredentialsInvalid();
+    }
+    if (member.lockedUntil && member.lockedUntil.getTime() > now.getTime()) {
+      // Lock state is disclosed as an actionable retry window rather than a
+      // misleading "wrong password": the endpoint already distinguishes the
+      // no-credential case for the same phone, so this adds no new
+      // account-existence signal.
+      throw new UnauthorizedException({
+        code: "MEMBER_LOGIN_LOCKED",
+        message: "Too many failed login attempts. Try again later.",
+        details: {
+          retryAfterSeconds: Math.max(
+            1,
+            Math.ceil((member.lockedUntil.getTime() - now.getTime()) / 1_000),
+          ),
+        },
+      });
+    }
+    if (!member.passwordHash) {
+      // Every pre-CR Member lands here. The Member is routed to one-time
+      // enrollment instead of being locked out of the platform.
+      throw new ConflictException({
+        code: "PASSWORD_ENROLLMENT_REQUIRED",
+        message: "This account has no password yet; enroll one with an OTP",
+        details: {},
+      });
+    }
+
+    const passwordValid = await verifyPassword(member.passwordHash, input.password);
+    if (!passwordValid) {
+      await this.recordLoginFailure(member, env, now);
+      throw memberCredentialsInvalid();
     }
     if (member.status !== "ACTIVE") {
       throw new UnauthorizedException({
@@ -188,31 +339,67 @@ export class MemberAuthService {
       });
     }
 
-    // A verified challenge is single-use: only the caller that atomically wins
-    // the claim proceeds; a concurrent replay of the same code is denied.
-    const claimed = await this.members.consumeChallenge(challenge.id, member.id, now);
-    if (!claimed) {
-      throw new UnauthorizedException({
-        code: "OTP_ALREADY_USED",
-        message: "This OTP has already been used",
-        details: {},
-      });
-    }
-    await this.members.recordMemberLogin(member.id, now);
-
+    await this.members.recordLoginSuccess(member.id, now);
     const device = await this.members.upsertDevice({
       memberId: member.id,
       deviceId: randomUUID(),
-      name: deviceName?.trim() || null,
+      name: input.deviceName?.trim() || null,
     });
-
     const issued = await this.sessions.issue(member.id, device.id);
     return {
       accessToken: issued.accessToken,
       refreshToken: issued.refreshToken,
       memberId: member.id,
-      accountCreated,
       deviceId: device.id,
+    };
+  }
+
+  /**
+   * Forgot-password reset (CR #141 keeps `recovery/otp/*` as the reset
+   * channel). The RECOVERY challenge is possession evidence only; the reset
+   * completes here with a new credential. A successful reset revokes every
+   * existing session, because a credential reset is also the recovery path for
+   * a suspected compromise.
+   */
+  async resetMemberPassword(input: {
+    phone: string;
+    code: string;
+    password: string;
+  }): Promise<ResetMemberPasswordResult> {
+    assertMemberPassword(input.password);
+    const { phone, challenge, verifiedAt: now } = await this.verifyChallenge(
+      "RECOVERY",
+      input.phone,
+      input.code,
+    );
+    const member = await this.members.findByPhone(phone);
+    if (!member) {
+      throw new ConflictException({
+        code: "MEMBER_NOT_REGISTERED",
+        message: "No Member is registered for this phone",
+        details: {},
+      });
+    }
+    if (!member.passwordHash) {
+      throw new ConflictException({
+        code: "PASSWORD_ENROLLMENT_REQUIRED",
+        message: "This account has no password yet; enroll one with an OTP",
+        details: {},
+      });
+    }
+    await this.claimChallenge(challenge, member.id, now);
+    const updated = await this.members.setMemberPassword({
+      memberId: member.id,
+      passwordHash: await hashPassword(input.password),
+      updatedAt: now,
+    });
+    if (!updated) throw new NotFoundException("Member not found");
+    await this.sessions.revokeAllForMember(member.id);
+    return {
+      purpose: "RECOVERY",
+      memberId: updated.id,
+      passwordReset: true,
+      passwordUpdatedAt: updated.passwordUpdatedAt ?? now,
     };
   }
 
@@ -225,10 +412,43 @@ export class MemberAuthService {
       phoneRaw,
       code,
     );
+    await this.claimChallenge(challenge, null, verifiedAt);
+    return {
+      purpose: "RECOVERY",
+      verified: true,
+      evidenceRef: `otp-challenge:${challenge.id}`,
+    };
+  }
+
+  private async recordLoginFailure(
+    member: MemberRecord,
+    env: ReturnType<typeof getEnvironment>,
+    now: Date,
+  ): Promise<void> {
+    const attempts = member.failedLoginAttempts + 1;
+    const locked = attempts >= env.MEMBER_LOGIN_MAX_ATTEMPTS;
+    await this.members.recordLoginFailure({
+      memberId: member.id,
+      // A locked credential starts a fresh count so the lock cannot be extended
+      // indefinitely by continued guessing.
+      failedLoginAttempts: locked ? 0 : attempts,
+      lockedUntil: locked
+        ? new Date(now.getTime() + env.MEMBER_LOGIN_LOCKOUT_SECONDS * 1_000)
+        : null,
+    });
+  }
+
+  // A verified challenge is single-use: only the caller that atomically wins
+  // the claim proceeds; a concurrent replay of the same code is denied.
+  private async claimChallenge(
+    challenge: MemberOtpChallengeRecord,
+    memberId: string | null,
+    consumedAt: Date,
+  ): Promise<void> {
     const claimed = await this.members.consumeChallenge(
       challenge.id,
-      null,
-      verifiedAt,
+      memberId,
+      consumedAt,
     );
     if (!claimed) {
       throw new UnauthorizedException({
@@ -237,11 +457,6 @@ export class MemberAuthService {
         details: {},
       });
     }
-    return {
-      purpose: "RECOVERY",
-      verified: true,
-      evidenceRef: `otp-challenge:${challenge.id}`,
-    };
   }
 
   private async verifyChallenge(
@@ -349,13 +564,18 @@ export class MemberAuthService {
     memberId: string;
     phone: string;
     status: string;
+    passwordEnrolled: boolean;
   }> {
     const member = await this.members.findById(memberId);
     if (!member) throw new NotFoundException("Member not found");
+    // `passwordEnrolled` is the only credential fact the API exposes: whether
+    // the Member still has to complete enrollment. The encoded hash never
+    // leaves this service.
     return {
       memberId: member.id,
       phone: member.phone,
       status: member.status,
+      passwordEnrolled: member.passwordHash !== null,
     };
   }
 }
@@ -373,6 +593,29 @@ function parsePhone(raw: string): string {
     }
     throw error;
   }
+}
+
+/**
+ * Server-authoritative credential policy check. The submitted password is never
+ * echoed back: only the violation class is reported.
+ */
+function assertMemberPassword(password: string): void {
+  const violation = memberPasswordViolation(password);
+  if (violation) {
+    throw new BadRequestException({
+      code: "MEMBER_PASSWORD_REJECTED",
+      message: "The supplied password does not satisfy the Member password policy",
+      details: { violation },
+    });
+  }
+}
+
+function memberCredentialsInvalid(): UnauthorizedException {
+  return new UnauthorizedException({
+    code: "MEMBER_CREDENTIALS_INVALID",
+    message: "Invalid phone or password",
+    details: {},
+  });
 }
 
 function memberOtpPolicyFor(

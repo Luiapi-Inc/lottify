@@ -24,10 +24,18 @@ export class PrismaMemberAuthRepository implements MemberAuthRepository {
     return member ? toMemberRecord(member) : null;
   }
 
-  async createMember(input: { phone: string }): Promise<MemberRecord> {
+  async createMember(input: {
+    phone: string;
+    passwordHash?: string | null;
+    passwordUpdatedAt?: Date | null;
+  }): Promise<MemberRecord> {
     try {
       const member = await this.prisma.member.create({
-        data: { phone: input.phone },
+        data: {
+          phone: input.phone,
+          passwordHash: input.passwordHash ?? null,
+          passwordUpdatedAt: input.passwordUpdatedAt ?? null,
+        },
       });
       return toMemberRecord(member);
     } catch (error) {
@@ -44,6 +52,54 @@ export class PrismaMemberAuthRepository implements MemberAuthRepository {
       }
       throw error;
     }
+  }
+
+  // A credential change is a single guarded update: it writes only when the
+  // Member row still exists, so a caller that reads `null` knows nothing was
+  // persisted instead of assuming success.
+  async setMemberPassword(input: {
+    memberId: string;
+    passwordHash: string;
+    updatedAt: Date;
+  }): Promise<MemberRecord | null> {
+    const updated = await this.prisma.member.updateMany({
+      where: { id: input.memberId },
+      data: {
+        passwordHash: input.passwordHash,
+        passwordUpdatedAt: input.updatedAt,
+        // A credential change clears any standing lockout state: the new
+        // credential is not the one that accumulated failures.
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+    if (updated.count !== 1) return null;
+    return this.findById(input.memberId);
+  }
+
+  async recordLoginFailure(input: {
+    memberId: string;
+    failedLoginAttempts: number;
+    lockedUntil: Date | null;
+  }): Promise<void> {
+    await this.prisma.member.updateMany({
+      where: { id: input.memberId },
+      data: {
+        failedLoginAttempts: input.failedLoginAttempts,
+        lockedUntil: input.lockedUntil,
+      },
+    });
+  }
+
+  async recordLoginSuccess(memberId: string, _at: Date): Promise<void> {
+    await this.prisma.member.updateMany({
+      where: { id: memberId },
+      data: {
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        updatedAt: new Date(),
+      },
+    });
   }
 
   async countOtpRequestsInWindow(input: {
@@ -147,13 +203,6 @@ export class PrismaMemberAuthRepository implements MemberAuthRepository {
     return result.count === 1;
   }
 
-  async recordMemberLogin(id: string, _at: Date): Promise<void> {
-    await this.prisma.member.update({
-      where: { id },
-      data: { updatedAt: new Date() },
-    });
-  }
-
   async upsertDevice(input: {
     memberId: string;
     deviceId: string;
@@ -192,6 +241,10 @@ type PrismaMember = {
   id: string;
   phone: string;
   status: string;
+  passwordHash: string | null;
+  passwordUpdatedAt: Date | null;
+  failedLoginAttempts: number;
+  lockedUntil: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -204,6 +257,13 @@ function toMemberRecord(member: PrismaMember): MemberRecord {
     id: member.id,
     phone: member.phone,
     status: member.status,
+    // The encoded credential stays inside the persistence boundary: it is
+    // returned here so the auth service can verify it, and it is never mapped
+    // into an API response or a log record.
+    passwordHash: member.passwordHash,
+    passwordUpdatedAt: member.passwordUpdatedAt,
+    failedLoginAttempts: member.failedLoginAttempts,
+    lockedUntil: member.lockedUntil,
     createdAt: member.createdAt,
     updatedAt: member.updatedAt,
   };

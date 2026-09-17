@@ -23,6 +23,15 @@ Do not replace an existing plan, contract, invariant, or ownership decision with
 - Serialize shared financial schema/invariants, authoritative API/event contracts, race-sensitive transaction semantics, and migration ordering while unstable.
 - The Lead owns source alignment, merge order, diff review, and the final acceptance claim.
 
+## Dual-tracker alignment (GitHub Issues ↔ kanban) — standing duty
+
+The repo's durable acceptance record is GitHub Issues; project execution is the Hermes kanban board `lottify`. The two must never drift:
+
+- The same turn a kanban card completes, its GitHub issue gets an evidence comment (Requirement → Plan → Implementation → Test → Actual Result with concrete artifacts) and is closed — unless the issue legitimately stays open.
+- If a card closes only part of an issue, post a progress evidence comment on the issue and leave it open with the remaining scope named.
+- If a card ends blocked on a human decision, relabel the issue `ready-for-human` and record the decision options in the issue comment.
+- The Lead sweeps for drift: list done cards that reference still-open issues (`GH #N` in card titles) and reconcile every one — close with evidence, relabel, or leave open with a status comment. An issue with zero comments while its kanban card is `done` is a defect.
+
 ## Verification
 
 - Trace Requirement -> Plan -> Implementation -> Test -> Actual Result.

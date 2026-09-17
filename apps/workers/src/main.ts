@@ -1,7 +1,7 @@
 import "reflect-metadata";
-import { ConsoleLogger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { getEnvironment } from "../../../src/platform/config/env";
+import { RedactingConsoleLogger } from "../../../src/platform/observability/log-redaction";
 import { initObservability, shutdownObservability } from "../../../src/platform/observability/observability";
 import { PrismaService } from "../../../src/platform/persistence/prisma.service";
 import { AccountingPeriodScheduler } from "./accounting-period-scheduler";
@@ -20,7 +20,7 @@ async function bootstrap(): Promise<void> {
   // the same OPERATIONAL_ALERT_SINK sinks as the in-worker detectors (F1).
   configureOperationalAlertsFromEnvironment();
   const app = await NestFactory.createApplicationContext(WorkerModule, {
-    logger: new ConsoleLogger({ json: true }),
+    logger: new RedactingConsoleLogger({ json: true }),
   });
   const health = startWorkerHealthServer(app.get(PrismaService), env.WORKER_HEALTH_PORT);
   const dispatcher = app.get(OutboxDispatcher);
