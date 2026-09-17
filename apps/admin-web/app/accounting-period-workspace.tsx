@@ -4,6 +4,7 @@ import type { components } from "@lottify/contracts";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { accountingPeriodCancellationUi } from "./accounting-period-cancellation-ui";
 import { AdminApi, ApiFailure } from "./control-plane/admin-api";
+import { randomUUID } from "./lib/random-uuid";
 
 type AccountingPeriod = components["schemas"]["AccountingPeriodResponse"];
 type AccountingPeriodCommand = components["schemas"]["AccountingPeriodCommandResponse"];
@@ -770,7 +771,7 @@ function idempotencyKey(
   const fingerprint = `${operation}:${JSON.stringify(payload)}`;
   const existing = keys.get(fingerprint);
   if (existing) return existing;
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   keys.set(fingerprint, key);
   return key;
 }
