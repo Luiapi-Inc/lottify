@@ -10,7 +10,11 @@
 // Settlement -> Wallet & Ledger
 // ---------------------------------------------------------------------------
 
-export type SettlementWalletErrorCode = "INSUFFICIENT_FUNDS" | "WALLET_RESTRICTED";
+export type SettlementWalletErrorCode =
+  | "INSUFFICIENT_FUNDS"
+  | "WALLET_RESTRICTED"
+  | "SOURCE_ALLOCATION_INVALID"
+  | "PAYOUT_POLICY_UNSUPPORTED";
 
 export class SettlementWalletError extends Error {
   readonly code: SettlementWalletErrorCode;
@@ -31,9 +35,10 @@ export const SETTLEMENT_WALLET_PORT = Symbol("SETTLEMENT_WALLET_PORT");
 
 export interface SettlementWalletPort {
   /**
-   * Posts the winning payout for an Order: credit the Member's CASH bucket,
-   * debit the Betting Settlement system account. Idempotent per Order, so a
-   * replay of a crashed batch can never pay a winner twice.
+   * Posts the winning payout for an Order from the Betting Settlement system
+   * account into the Member bucket(s) dictated by the accepted Bet Confirm
+   * source-allocation snapshot. Idempotent per Order, so a replay of a crashed
+   * batch can never pay a winner twice.
    */
   postSettlementPayout(input: {
     readonly orderId: string;
