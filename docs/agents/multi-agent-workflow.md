@@ -85,7 +85,7 @@ If any answer is no, serialize the work.
 
 - Writers branch from the Lead-recorded base commit.
 - Preferred branch naming: `codex/<capability>`.
-- Preferred worktree naming: `/home/ubuntu/lottify-<capability>`.
+- Preferred worktree naming: `<repo-parent>/lottify-<capability>` (a sibling of the integration checkout, whatever that host calls it).
 - A Writer must not absorb pre-existing dirty files from `main`.
 - Read-only guards may inspect the integration checkout and do not need a worktree.
 - Before handing off, a Writer runs `git status`, `git diff --check`, and lists the exact committed paths.
