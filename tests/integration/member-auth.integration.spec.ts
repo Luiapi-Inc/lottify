@@ -13,7 +13,7 @@ import {
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
-const phonePrefix = "+6699"; // guaranteed-unregistered Thai mobile integration namespace
+const phonePrefix = "099"; // guaranteed-unregistered Thai mobile integration namespace
 
 const PASSWORD = "integration-strong-passphrase";
 const OTHER_PASSWORD = "second-strong-passphrase";
@@ -55,7 +55,7 @@ describe.runIf(runIntegration)("Member auth integration", () => {
   });
 
   function freshPhone(): string {
-    return `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    return `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
   }
 
   /** Creates the persisted row exactly as a pre-CR #141 Member looks. */
@@ -236,6 +236,33 @@ describe.runIf(runIntegration)("Member auth integration", () => {
     await expect(
       auth.resetMemberPassword({ phone, code, password: PASSWORD }),
     ).rejects.toThrow();
+  });
+
+  it("keeps the phone in the local Thai format in storage and in every response", async () => {
+    const phone = freshPhone();
+    const otp = await auth.requestOtp("REGISTER", phone);
+    expect(otp.deliveredTo).toBe(phone);
+    expect(phone).toMatch(/^0[2-9]\d{8}$/);
+
+    const code = delivery.lastCode(phone, "REGISTER")!;
+    const registered = await auth.verifyOtp("REGISTER", phone, code, PASSWORD, "Integration Phone");
+
+    const persisted = await prisma.member.findUniqueOrThrow({ where: { phone } });
+    expect(persisted.phone).toBe(phone);
+    expect(persisted.phone.startsWith("+")).toBe(false);
+    expect(persisted.phone.startsWith("66")).toBe(false);
+
+    const me = await auth.me(registered.memberId);
+    expect(me.phone).toBe(phone);
+
+    // An international spelling is still accepted on input and is converted to
+    // the stored local form rather than being stored as given.
+    const login = await auth.login({
+      phone: `+66${phone.slice(1)}`,
+      password: PASSWORD,
+      deviceName: "Integration Phone",
+    });
+    expect(login.memberId).toBe(registered.memberId);
   });
 
   it("rejects the retired LOGIN purpose for both OTP request and verify", async () => {

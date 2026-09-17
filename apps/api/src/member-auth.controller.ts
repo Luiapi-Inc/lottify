@@ -73,7 +73,7 @@ class OtpRequestBody {
   @ApiProperty({ enum: [...OTP_SELF_SERVICE_PURPOSES] })
   purpose!: (typeof OTP_SELF_SERVICE_PURPOSES)[number];
 
-  @ApiProperty({ type: String, example: "+668****5678" })
+  @ApiProperty({ type: String, example: "0812345678" })
   phone!: string;
 }
 
@@ -81,7 +81,7 @@ class OtpVerifyBody {
   @ApiProperty({ enum: [...OTP_SELF_SERVICE_PURPOSES] })
   purpose!: (typeof OTP_SELF_SERVICE_PURPOSES)[number];
 
-  @ApiProperty({ type: String, example: "+668****5678" })
+  @ApiProperty({ type: String, example: "0812345678" })
   phone!: string;
 
   @ApiProperty({ type: String, pattern: "^[0-9]{4,8}$", example: "123456" })
@@ -142,7 +142,7 @@ class PasswordEnrollResponse {
 }
 
 class MemberLoginBody {
-  @ApiProperty({ type: String, example: "+668****5678" })
+  @ApiProperty({ type: String, example: "0812345678" })
   phone!: string;
 
   @ApiProperty({ type: String, format: "password" })
@@ -166,7 +166,7 @@ class MemberLoginResponse {
 }
 
 class PasswordResetBody {
-  @ApiProperty({ type: String, example: "+668****5678" })
+  @ApiProperty({ type: String, example: "0812345678" })
   phone!: string;
 
   @ApiProperty({ type: String, pattern: "^[0-9]{4,8}$", example: "123456" })
@@ -191,12 +191,12 @@ class PasswordResetResponse {
 }
 
 class RecoveryOtpRequestBody {
-  @ApiProperty({ type: String, example: "+66812345678" })
+  @ApiProperty({ type: String, example: "0812345678" })
   phone!: string;
 }
 
 class RecoveryOtpVerifyBody {
-  @ApiProperty({ type: String, example: "+66812345678" })
+  @ApiProperty({ type: String, example: "0812345678" })
   phone!: string;
 
   @ApiProperty({ type: String, pattern: "^[0-9]{4,8}$", example: "123456" })

@@ -34,7 +34,7 @@ import { validTerms } from "../support/promotion-fixtures";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 const emailPrefix = "promotion-api-integration+";
-const phonePrefix = "+6696";
+const phonePrefix = "096";
 
 describe.runIf(runIntegration)("Promotion API HTTP boundary", () => {
   let app: INestApplication;
@@ -161,7 +161,7 @@ describe.runIf(runIntegration)("Promotion API HTTP boundary", () => {
   });
 
   async function createMember(): Promise<string> {
-    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
     const member = await prisma.member.create({ data: { phone } });
     return member.id;
   }

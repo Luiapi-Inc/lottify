@@ -27,6 +27,9 @@ const REFRESH_TOKEN = "refresh-token-2d8b5e0a31-ticket13-never-logged";
 const API_KEY = "api-key-9a4c6f2e80-ticket13-never-logged";
 const OTP_CODE = "otp-4h7k2m-ticket13-never-logged";
 const MEMBER_PHONE = "+66891234567";
+// Operator decision 2026-09-17: the Member phone is stored and returned in the
+// local Thai form (`0XXXXXXXXX`), so redaction must cover that spelling too.
+const MEMBER_PHONE_LOCAL = "0812345678";
 
 interface CapturedAccessLog {
   records: string[];
@@ -207,6 +210,8 @@ describe("credential redaction in operational logs (Ticket 13)", () => {
       phone: MEMBER_PHONE,
       member: { phoneNumber: MEMBER_PHONE, memberId: "member-1" },
       note: `delivered to ${MEMBER_PHONE}`,
+      deliveredTo: MEMBER_PHONE_LOCAL,
+      localNote: `enrolled by ${MEMBER_PHONE_LOCAL}`,
     });
 
     const output = writes.join("");
@@ -215,7 +220,13 @@ describe("credential redaction in operational logs (Ticket 13)", () => {
     expect(output).toContain("session_refresh");
     expect(output).toContain("member-1");
 
-    for (const secret of [ACCESS_TOKEN, REFRESH_TOKEN, OTP_CODE, MEMBER_PHONE]) {
+    for (const secret of [
+      ACCESS_TOKEN,
+      REFRESH_TOKEN,
+      OTP_CODE,
+      MEMBER_PHONE,
+      MEMBER_PHONE_LOCAL,
+    ]) {
       expect(output).not.toContain(secret);
     }
     expect(output).toContain(REDACTED_VALUE);

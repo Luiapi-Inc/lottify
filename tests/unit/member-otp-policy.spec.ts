@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizePhone,
   PhoneValidationError,
+  toSmsProviderMsisdn,
 } from "../../src/contexts/identity-access/domain/identity-phone";
 import {
   buildMemberOtpPolicy,
@@ -14,16 +15,29 @@ import {
 } from "../../src/contexts/identity-access/domain/identity-otp-policy";
 
 describe("member phone normalization", () => {
-  it("canonicalizes the phone as the Member login identity", () => {
-    expect(normalizePhone("+66812345678")).toBe("+66812345678");
-    expect(normalizePhone("+66 81 234 5678")).toBe("+66812345678");
-    expect(normalizePhone("(+66)81-234-5678")).toBe("+66812345678");
+  it("canonicalizes the phone as the local Thai Member login identity", () => {
+    // Operator decision 2026-09-17: `0XXXXXXXXX`, no country code anywhere.
+    expect(normalizePhone("0812345678")).toBe("0812345678");
+    expect(normalizePhone("081-234-5678")).toBe("0812345678");
+    expect(normalizePhone("08 1 234 5678")).toBe("0812345678");
+    // International spellings are converted on input, never stored.
+    expect(normalizePhone("+66812345678")).toBe("0812345678");
+    expect(normalizePhone("66812345678")).toBe("0812345678");
+    expect(normalizePhone("(+66)81-234-5678")).toBe("0812345678");
   });
 
-  it("rejects empty or clearly invalid phones", () => {
+  it("rejects empty, non-Thai and malformed phones", () => {
     expect(() => normalizePhone("")).toThrow(PhoneValidationError);
     expect(() => normalizePhone("   ")).toThrow(PhoneValidationError);
     expect(() => normalizePhone("not-a-phone")).toThrow(PhoneValidationError);
+    expect(() => normalizePhone("+14155550123")).toThrow(PhoneValidationError);
+    expect(() => normalizePhone("071234567")).toThrow(PhoneValidationError);
+    expect(() => normalizePhone("0123456789")).toThrow(PhoneValidationError);
+  });
+
+  it("converts to the provider spelling only for the SMS request", () => {
+    expect(toSmsProviderMsisdn("0812345678")).toBe("66812345678");
+    expect(() => toSmsProviderMsisdn("+66812345678")).toThrow(PhoneValidationError);
   });
 });
 
@@ -100,7 +114,7 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
 
   it("issues when the request window is not full", () => {
     const decision = decideOtpRequest("PASSWORD_ENROLL", {
-      phone: "+66812345678",
+      phone: "0812345678",
       purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 3,
@@ -112,7 +126,7 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
 
   it("rate limits when the window is full regardless of account state", () => {
     const decision = decideOtpRequest("PASSWORD_ENROLL", {
-      phone: "+66812345678",
+      phone: "0812345678",
       purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 5,
@@ -129,7 +143,7 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
   it("denies a resend before the documented cooldown elapses", () => {
     const cooldownUntil = new Date(now.getTime() + 45_000);
     const decision = decideOtpRequest("PASSWORD_ENROLL", {
-      phone: "+668****5678",
+      phone: "0812345678",
       purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 1,
@@ -145,7 +159,7 @@ describe("member OTP request gate (anti-enumeration + rate limit)", () => {
 
   it("issues again once the resend cooldown has elapsed", () => {
     const decision = decideOtpRequest("PASSWORD_ENROLL", {
-      phone: "+668****5678",
+      phone: "0812345678",
       purpose: "PASSWORD_ENROLL",
       now,
       recentRequestCountInWindow: 1,

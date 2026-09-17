@@ -268,8 +268,8 @@ function harness() {
   return { members, sessionsRepo, delivery, sessions, auth };
 }
 
-const PHONE = "+66812345678";
-const UNKNOWN_PHONE = "+66999999999";
+const PHONE = "0812345678";
+const UNKNOWN_PHONE = "0999999999";
 const PASSWORD = "correct-horse-battery";
 const OTHER_PASSWORD = "another-strong-passphrase";
 

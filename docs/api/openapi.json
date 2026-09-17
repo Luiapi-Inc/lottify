@@ -7662,7 +7662,7 @@
           },
           "phone": {
             "type": "string",
-            "example": "+668****5678"
+            "example": "0812345678"
           }
         },
         "required": [
@@ -7707,7 +7707,7 @@
           },
           "phone": {
             "type": "string",
-            "example": "+668****5678"
+            "example": "0812345678"
           },
           "code": {
             "type": "string",
@@ -7736,7 +7736,7 @@
         "properties": {
           "phone": {
             "type": "string",
-            "example": "+668****5678"
+            "example": "0812345678"
           },
           "password": {
             "type": "string",
@@ -7777,7 +7777,7 @@
         "properties": {
           "phone": {
             "type": "string",
-            "example": "+668****5678"
+            "example": "0812345678"
           },
           "code": {
             "type": "string",
@@ -7828,7 +7828,7 @@
         "properties": {
           "phone": {
             "type": "string",
-            "example": "+66812345678"
+            "example": "0812345678"
           }
         },
         "required": [
@@ -7864,7 +7864,7 @@
         "properties": {
           "phone": {
             "type": "string",
-            "example": "+66812345678"
+            "example": "0812345678"
           },
           "code": {
             "type": "string",
