@@ -10,6 +10,8 @@ export type MemberLoginResponse = Schema<"MemberLoginResponse">;
 export type PasswordResetResponse = Schema<"PasswordResetResponse">;
 export type RecoveryOtpRequestResponse = Schema<"RecoveryOtpRequestResponse">;
 export type MemberRefreshResponse = Schema<"MemberRefreshResponse">;
+export type MemberSessionIdentity = Schema<"MemberMeResponse">;
+export type MemberRevokedResponse = Schema<"MemberRevokedResponse">;
 export type RequiredTerms = Schema<"RequiredTermsBody">;
 export type MemberTermsResponse = Schema<"MemberTermsBody">;
 export type AcceptTermsResponse = Schema<"AcceptTermsBody">;
@@ -54,6 +56,25 @@ class MemberApiClient {
 
   clearSession(): void {
     this.accessToken = null;
+  }
+
+  /**
+   * Server-authoritative identity for the durable session.
+   *
+   * Called after a navigation/reload, when the in-memory access token is gone:
+   * `request()` then refreshes from the session cookie first, so a 200 here
+   * proves the session survived the navigation (and a `SESSION_REQUIRED`
+   * failure means the browser has no valid session at all).
+   */
+  getSession(): Promise<MemberSessionIdentity> {
+    return this.request<MemberSessionIdentity>("auth/me");
+  }
+
+  /** Revoke the current session (API clears the refresh credential, the web
+   *  tier clears the browser's session cookie) and drop the in-memory token. */
+  logout(): Promise<MemberRevokedResponse> {
+    return this.publicRequest<MemberRevokedResponse>("auth/logout", {})
+      .finally(() => this.clearSession());
   }
 
   requestOtp(purpose: MemberAuthPurpose, phone: string): Promise<OtpRequestResponse> {
