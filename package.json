@@ -28,7 +28,9 @@
     "openapi:client": "openapi-typescript apps/api/openapi/openapi.json -o packages/contracts/src/generated/api.ts",
     "openapi:docs": "node apps/api/scripts/generate-api-docs.mjs",
     "openapi:generate": "pnpm openapi:spec && pnpm openapi:client && pnpm openapi:docs",
-    "check": "pnpm prisma:generate && pnpm openapi:generate && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm prisma:generate && pnpm openapi:generate && pnpm typecheck && pnpm test && pnpm build",
+    "test:e2e": "playwright test --config=playwright.config.ts",
+    "test:e2e:admin-lottery": "playwright test tests/e2e/admin-lottery.e2e.ts --config=playwright.config.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.3",
@@ -57,8 +59,9 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
+    "@playwright/test": "^1.63.0",
     "@types/express": "5.0.3",
+    "@types/node": "24.10.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "openapi-typescript": "7.13.0",

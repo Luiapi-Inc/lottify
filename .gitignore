@@ -13,3 +13,7 @@ packages/contracts/src/generated/api.ts
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Playwright evidence
+artifacts/playwright/
+artifacts/playwright-report/

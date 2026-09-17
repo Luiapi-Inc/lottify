@@ -29,7 +29,7 @@ export default function LotteryWorkspace() {
   const [approval,setApproval]=useState(false);const [mfa,setMfa]=useState('');const epoch=useRef(0);
   const can=(action:string)=>admin?.capabilities.includes(`lottery-configuration.${action}` as Admin['capabilities'][number])??false;
   function report(e:unknown) {setError(e instanceof ApiFailure?`${e.message} (${e.code})${e.correlationId?` · อ้างอิง ${e.correlationId}`:''}`:e instanceof Error?e.message:'เชื่อมต่อไม่สำเร็จ กรุณาลองอีกครั้ง');}
-  async function initialize() { const me=await client.request<Admin>('auth/me',{});setAdmin(me); }
+  async function initialize() { const me=await client.request<Admin>('auth/me');setAdmin(me); }
   useEffect(()=>{void initialize().catch(()=>{}).finally(()=>setBoot(false));},[client]); // Refresh is single-flight, including StrictMode.
   async function load(next?:string) {
     const generation=++epoch.current;setBusy(true);setError('');
