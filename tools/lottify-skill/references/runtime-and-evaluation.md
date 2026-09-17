@@ -12,7 +12,7 @@ For executable model/provider routing, agent dependencies and priority selection
 
 ## Invocation contract
 
-The Lead sends the fields in [delegation-packet-template.md](delegation-packet-template.md) through the host's available delegation interface. Include an immutable base SHA, task-specific source IDs, prerequisites, disjoint allowed paths, forbidden shared boundaries, verification, merge order and stop conditions. A Writer uses an isolated worktree/branch per [docs/agents/multi-agent-workflow.md](/home/ubuntu/lottify/docs/agents/multi-agent-workflow.md). Read-only reviewers receive the exact candidate SHA/diff and source/evidence references; they have no write scope unless separately assigned.
+The Lead sends the fields in [delegation-packet-template.md](delegation-packet-template.md) through the host's available delegation interface. Include an immutable base SHA, task-specific source IDs, prerequisites, disjoint allowed paths, forbidden shared boundaries, verification, merge order and stop conditions. A Writer uses an isolated worktree/branch per [docs/agents/multi-agent-workflow.md](../../../docs/agents/multi-agent-workflow.md). Read-only reviewers receive the exact candidate SHA/diff and source/evidence references; they have no write scope unless separately assigned.
 
 The Writer returns: candidate SHA, exact changed paths, source/contract/migration impacts, tests with actual results, unresolved gaps and dependencies. Reviewers return findings with severity, evidence references and an explicit pass/block judgment. The Lead records those responses in the execution manifest; silence or timeout is pending evidence.
 

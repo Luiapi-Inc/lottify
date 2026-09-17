@@ -13,3 +13,11 @@ packages/contracts/src/generated/api.ts
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Hermes-local orchestration state and local policy (not project source).
+# NOTE: entries are inert while the files remain tracked; untracking is pending
+# explicit owner confirmation.
+.hermes/lottify-orchestration.yaml
+.hermes/plans/
+.hermes/status/
+.serena/

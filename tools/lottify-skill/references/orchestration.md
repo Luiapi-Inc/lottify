@@ -7,7 +7,7 @@ Use the generator/source checker for each work package, then `scripts/orchestrat
 Each package references a Lead-completed manifest. Paths to manifests are relative to this YAML file. Use actual immutable Git SHAs and distinct Writer worktrees. `repo` is the integration checkout. Package dependencies mean the prerequisite must be integrated before the dependent Writer starts.
 
 ```yaml
-repo: /home/ubuntu/lottify
+repo: <repo-root>   # the integration checkout on this host
 max_parallel: 3
 runtime:
   providers:
@@ -28,7 +28,7 @@ packages:
   - id: financial-core
     manifest: financial-core-manifest.yaml
     base_sha: REPLACE_WITH_ACTUAL_FULL_GIT_SHA
-    workspace: /home/ubuntu/lottify-financial-core
+    workspace: <repo-parent>/lottify-financial-core
     priority: integrity-security-compliance
     depends_on: []
     boundaries: [wallet-ledger-transaction]
@@ -36,7 +36,7 @@ packages:
   - id: withdrawal
     manifest: withdrawal-manifest.yaml
     base_sha: REPLACE_WITH_ACTUAL_FULL_GIT_SHA
-    workspace: /home/ubuntu/lottify-withdrawal
+    workspace: <repo-parent>/lottify-withdrawal
     priority: integrity-security-compliance
     depends_on: [financial-core]
     boundaries: [wallet-ledger-transaction]
