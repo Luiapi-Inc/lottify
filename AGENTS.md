@@ -32,6 +32,26 @@ The repo's durable acceptance record is GitHub Issues; project execution is the 
 - If a card ends blocked on a human decision, relabel the issue `ready-for-human` and record the decision options in the issue comment.
 - The Lead sweeps for drift: list done cards that reference still-open issues (`GH #N` in card titles) and reconcile every one — close with evidence, relabel, or leave open with a status comment. An issue with zero comments while its kanban card is `done` is a defect.
 
+## Board ownership — single Lead session (operator decision 2026-09-18)
+
+The Hermes kanban board `lottify` has exactly **one Lead session**: the operator's own
+Telegram DM session running the `default` profile (the same session that answers Luiapi
+directly). This is a deliberate anti-drift rule, because several Hermes sessions were
+mutating the board concurrently and produced conflicting candidates, duplicate swarms and
+stale deploy premises.
+
+- Only that Lead session creates, links, reassigns, blocks/unblocks, or completes cards.
+- Worker sessions (qa-agent, backend-agent, frontend-agent, security-agent,
+  release-gate-agent, quality-gate-agent, memory-context-agent, …) may comment on their own
+  card, attach artifacts, and return findings — they do **not** create or close cards for
+  other tracks. If a card needs a follow-up, the worker records it as a finding and the Lead
+  decides whether it becomes a card.
+- Any other Hermes session that finds board work missing reports it to the operator instead
+  of opening cards itself.
+- There is no technical ACL on the board: this rule is enforced by discipline plus this
+  documented policy. A session that does not follow it is drifting, not authorised.
+- Board-visible evidence: the governance card on the board records the same rule.
+
 ## Verification
 
 - Trace Requirement -> Plan -> Implementation -> Test -> Actual Result.
