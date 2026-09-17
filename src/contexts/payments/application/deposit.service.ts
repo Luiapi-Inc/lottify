@@ -21,6 +21,10 @@ import type {
   PaymentCurrency,
   PaymentProviderOutcome,
 } from "../domain/payment-provider-result";
+import {
+  recordInboundPaymentFailure,
+  recordProviderInteraction,
+} from "../../../platform/observability/operational-metrics";
 
 export interface InitiateDepositCommand {
   providerCode: string;
@@ -124,6 +128,14 @@ export class DepositService {
         requestAttemptId,
         correlationId: correlation,
       });
+      // F7: the adapter answered, so the provider is observable as healthy for
+      // this capability. A BUSINESS_REJECTION is a provider verdict, not a
+      // degradation, and is therefore not recorded as unhealthy here.
+      recordProviderInteraction({
+        provider: created.providerCode,
+        capability: "deposit",
+        healthy: true,
+      });
       return await this.applyProviderOutcome(
         created,
         initiated.result.outcome,
@@ -176,6 +188,23 @@ export class DepositService {
     deposit: Deposit,
     category: string,
   ): Promise<Deposit> {
+    // F3 + F7: a failed/ambiguous inbound payment-provider interaction is the
+    // family's failure signal. For provider health only a transport/ambiguous
+    // failure counts as degradation — a BUSINESS_REJECTION is the provider's
+    // verdict on the request, not a health failure.
+    if (category !== "BUSINESS_REJECTION") {
+      recordProviderInteraction({
+        provider: deposit.providerCode,
+        capability: "deposit",
+        healthy: false,
+        reason: category,
+      });
+    }
+    recordInboundPaymentFailure({
+      provider: deposit.providerCode,
+      stage: "deposit-initiate",
+      reason: category,
+    });
     const status = category === "BUSINESS_REJECTION" ? "REJECTED" : "REVIEW_REQUIRED";
     return this.deposits.resolve(deposit.id, {
       status,
@@ -210,6 +239,12 @@ export class DepositService {
         requestAttemptId: randomUUID(),
         correlationId,
       });
+      // F7: the status query answered, so the provider is healthy for deposits.
+      recordProviderInteraction({
+        provider: deposit.providerCode,
+        capability: "deposit",
+        healthy: true,
+      });
       const status = depositStatusForProviderOutcome(statusResult.result.outcome);
       const resolved = await this.deposits.resolve(deposit.id, {
         providerTransactionId: statusResult.identity.providerTransactionId,
@@ -220,16 +255,38 @@ export class DepositService {
     } catch (error) {
       if (!(error instanceof PaymentProviderAdapterError)) {
         // Unclassified status failure is treated as ambiguous; no credit.
+        this.recordReconcileFailure(deposit, "UNCLASSIFIED");
         return this.deposits.resolve(deposit.id, {
           status: "REVIEW_REQUIRED",
           incomingProviderError: "UNCLASSIFIED",
         });
       }
+      this.recordReconcileFailure(deposit, error.failure.category);
       const status =
         error.failure.category === "BUSINESS_REJECTION" ? "REJECTED" : "REVIEW_REQUIRED";
       return this.deposits.resolve(deposit.id, {
         status,
         incomingProviderError: error.failure.category,
+      });
+    }
+  }
+
+  /**
+   * F3 signal for the reconciliation path: an inbound provider status query
+   * that failed. Same recorder as the initiation path, distinguished by stage.
+   */
+  private recordReconcileFailure(deposit: Deposit, reason: string): void {
+    recordInboundPaymentFailure({
+      provider: deposit.providerCode,
+      stage: "deposit-reconcile",
+      reason,
+    });
+    if (reason !== "BUSINESS_REJECTION") {
+      recordProviderInteraction({
+        provider: deposit.providerCode,
+        capability: "deposit",
+        healthy: false,
+        reason,
       });
     }
   }

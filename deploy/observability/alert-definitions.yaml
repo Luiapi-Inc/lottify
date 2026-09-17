@@ -3,16 +3,23 @@
 # Each of the seven Ticket 13 alert families is enumerated with its alert
 # code(s), severity, triggering condition, source signal, and default route.
 # Routes are delivered by the worker alert pipeline
-# (apps/workers/src/operational-alert.sink.ts) through the configured sinks:
+# (src/platform/observability/operational-alert.sink.ts, re-exported for the
+# workers as apps/workers/src/operational-alert.sink.ts) through the configured
+# sinks:
 #   - Sentry (when SENTRY_DSN is set)
 #   - webhook(s) (when OPERATIONAL_ALERT_WEBHOOK_URLS is set)
-# and mirrored as Prometheus alert rules in prometheus/alerts.yml for the
-# metric-backed families.
+# and mirrored as Prometheus alert rules in prometheus/alerts.yml.
 #
-# Detection status: FAMILY 1 has an in-code detector
-# (apps/workers/src/ledger-wallet-reconciliation-freshness.worker.ts). Families
-# 2-7 are defined here with their Prometheus rules; code-level detectors and
-# the backing metrics are tracked per family in the `detector_status` field.
+# Detection status: every family F1-F7 has an in-code detector that produces the
+# metric named in `source_signal` AND raises the family alert through the
+# OPERATIONAL_ALERT_SINK pipeline. The collectors and the detector
+# thresholds/cooldowns live in
+# src/platform/observability/operational-metrics.ts; F4/F6 are evaluated by the
+# periodic detector apps/workers/src/operational-freshness-detector.worker.ts.
+#
+# detector_status values:
+#   in_code   — an in-code detector exists AND produces the backing metric
+#   rule_only — declared here and in alerts.yml, no backing metric yet
 
 version: 1
 families:
@@ -27,6 +34,7 @@ families:
     source_signal: ledger-wallet reconciliation worker + prometheus metric lottify_reconciliation_discrepancies
     default_route: sentry + webhook
     detector_status: in_code
+    detector: apps/workers/src/ledger-wallet-reconciliation-freshness.worker.ts publishes lottify_reconciliation_discrepancies / _critical after every cycle
 
   - id: F2
     name: confirm_error_failure_spike
@@ -37,7 +45,8 @@ families:
     condition: Confirm transaction error rate or failure burst exceeds threshold over a window
     source_signal: prometheus counter lottify_confirm_errors_total / lottify_confirm_failures_total
     default_route: webhook
-    detector_status: rule_only
+    detector_status: in_code
+    detector: apps/api/src/member-order.controller.ts records every Confirm command (CONFIRMED / REJECTED denial / ERROR) at the command boundary; burst thresholds 3 errors or 5 denials within 5m
 
   - id: F3
     name: payment_webhook_failure
@@ -47,7 +56,9 @@ families:
     condition: Inbound payment webhook handler errors or signature-rejections exceed threshold
     source_signal: prometheus counter lottify_payment_webhook_failures_total
     default_route: webhook
-    detector_status: rule_only
+    detector_status: in_code
+    detector: src/contexts/payments/application/deposit.service.ts records every failed inbound provider interaction (stage deposit-initiate / deposit-reconcile); threshold 3 failures within 10m
+    limitation: the repository still has no HTTP webhook ingress for payment providers, so the family signal is taken at the inbound provider-interaction failure sites that do exist; the ingress must call the same recorder (recordInboundPaymentFailure) when it lands
 
   - id: F4
     name: withdrawal_stuck_reconciling
@@ -57,7 +68,8 @@ families:
     condition: A withdrawal remains in a reconciling/processing state beyond the SLO age
     source_signal: prometheus gauge lottify_withdrawals_stuck_reconciling
     default_route: webhook
-    detector_status: rule_only
+    detector_status: in_code
+    detector: apps/workers/src/operational-freshness-detector.worker.ts counts PAYOUT_PROCESSING / RECONCILING withdrawals older than the 30m SLO and alerts while any is stuck (payment-reconciliation worker group)
 
   - id: F5
     name: settlement_failure
@@ -67,7 +79,8 @@ families:
     condition: Settlement batch execution failures exceed threshold
     source_signal: prometheus counter lottify_settlement_failures_total
     default_route: sentry + webhook
-    detector_status: rule_only
+    detector_status: in_code
+    detector: src/contexts/result-settlement/application/settlement.service.ts counts a batch that ends FAILED once the FAILED state is durable; alerts on the first failure
 
   - id: F6
     name: queue_dlq_lag
@@ -77,7 +90,8 @@ families:
     condition: Outbox/queue depth or dead-letter queue age exceeds threshold
     source_signal: prometheus gauge lottify_queue_dlq_lag / lottify_outbox_lag
     default_route: webhook
-    detector_status: rule_only
+    detector_status: in_code
+    detector: apps/workers/src/operational-freshness-detector.worker.ts reads the oldest unpublished Outbox event and each queue's failed-job depth; alerts above 300s outbox lag or 1000 dead-lettered jobs (scheduler-outbox worker group)
 
   - id: F7
     name: provider_health_degradation
@@ -87,4 +101,6 @@ families:
     condition: An upstream provider (payment/SMS/kyc) reports sustained health degradation
     source_signal: prometheus gauge lottify_provider_health
     default_route: webhook
-    detector_status: rule_only
+    detector_status: in_code
+    detector: src/contexts/payments/application/deposit.service.ts sets lottify_provider_health per provider+capability from observed adapter outcomes (1 = healthy, 0 = degraded) and alerts on the transition into degradation
+    limitation: the shipped payment providers are deterministic sandbox adapters, so health is derived from observed interaction outcomes rather than an active provider health probe

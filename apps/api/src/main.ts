@@ -7,6 +7,7 @@ import {
   RedactingConsoleLogger,
   httpAccessLoggerOptions,
 } from "../../../src/platform/observability/log-redaction";
+import { configureOperationalAlertsFromEnvironment } from "../../../src/platform/observability/operational-alert.sink";
 import { initObservability, shutdownObservability } from "../../../src/platform/observability/observability";
 import { ApiModule } from "./app.module";
 import { configureApp } from "./configure-app";
@@ -19,6 +20,11 @@ type CorrelationRequest = Request & { correlationId?: string };
 async function bootstrap(): Promise<void> {
   const env = getEnvironment();
   initObservability(env.OTEL_SERVICE_NAME);
+  // Bind the process-wide alert pipeline: the alert families whose signal is
+  // observed on the request path (F2 Confirm, F3 inbound payment, F5
+  // settlement, F7 provider health) publish from the API process through these
+  // sinks, exactly like the worker-side detectors do.
+  configureOperationalAlertsFromEnvironment();
 
   const app = await NestFactory.create(ApiModule, {
     logger: new RedactingConsoleLogger({ json: true }),

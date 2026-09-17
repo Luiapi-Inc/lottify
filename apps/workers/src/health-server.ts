@@ -1,11 +1,28 @@
 import { createServer, type Server } from "node:http";
 import Redis from "ioredis";
+import { register } from "prom-client";
 import { PrismaService } from "../../../src/platform/persistence/prisma.service";
 import { getEnvironment } from "../../../src/platform/config/env";
 
 export function startWorkerHealthServer(prisma: PrismaService, port: number): Server {
   let started = true;
   const server = createServer(async (request, response) => {
+    if (request.url === "/metrics") {
+      // Ops surface, same rule as the API: bearer-gated whenever OPS_AUTH_TOKEN
+      // is configured, and the committed scrape config
+      // (deploy/observability/prometheus/prometheus.yml) supplies that token.
+      const token = getEnvironment().OPS_AUTH_TOKEN;
+      if (token && request.headers.authorization !== `Bearer ${token}`) {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(JSON.stringify({ message: "Unauthorized" }));
+        return;
+      }
+      // Worker-process operational metrics (alert families F1/F4/F6, and the
+      // counters this process records) are scraped here.
+      response.writeHead(200, { "content-type": register.contentType });
+      response.end(await register.metrics());
+      return;
+    }
     if (request.url === "/internal/health/live") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ ok: true }));
