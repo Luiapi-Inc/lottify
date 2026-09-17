@@ -122,6 +122,7 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
   {
     key: "approvals",
     label: "Approvals",
+    href: "/approvals",
     capabilities: [
       "accounting-period.approve",
       "lottery-configuration.approve",
@@ -135,12 +136,12 @@ export const NAVIGATION_AREAS: readonly NavigationArea[] = [
   {
     key: "system-config",
     label: "ระบบและตั้งค่า",
-    href: "/lottery",
     capabilities: ["lottery-configuration.read", "accounting-period.read"],
     readCapability: "lottery-configuration.read",
     serviceExposed: true,
-    uiExposed: true,
-    description: "การตั้งค่าสำคัญแบบ DRAFT → REVIEW → PUBLISHED",
+    uiExposed: false,
+    description:
+      "การตั้งค่าสำคัญแบบ DRAFT → REVIEW → PUBLISHED ดำเนินการในหน้าจอหวยและงวด — ยังไม่มีหน้าจอตั้งค่าเฉพาะ",
   },
   {
     key: "audit-reports",
