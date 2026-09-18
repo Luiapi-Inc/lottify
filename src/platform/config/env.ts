@@ -33,6 +33,11 @@ const environmentSchema = z
     ADMIN_MFA_REAUTH_TTL_SECONDS: z.coerce.number().int().positive().default(300),
     ADMIN_LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     ADMIN_LOGIN_LOCKOUT_SECONDS: z.coerce.number().int().positive().default(900),
+    // Member password login (CR #141) carries the same bounded brute-force
+    // defence as the Admin login path; the OTP channel it replaced had
+    // per-purpose attempt limits, which must not be lost on the new channel.
+    MEMBER_LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
+    MEMBER_LOGIN_LOCKOUT_SECONDS: z.coerce.number().int().positive().default(900),
     MEMBER_OTP_CODE_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
     MEMBER_OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
     MEMBER_OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
@@ -77,6 +82,17 @@ const environmentSchema = z
         code: "custom",
         path: ["OTP_PROVIDER"],
         message: "THAIBULKSMS_API_KEY and THAIBULKSMS_API_SECRET are required when OTP_PROVIDER=thaibulksms",
+      });
+    }
+    if (
+      (env.APP_ENV === "staging" || env.APP_ENV === "production") &&
+      !env.OPS_AUTH_TOKEN
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["OPS_AUTH_TOKEN"],
+        message:
+          "OPS_AUTH_TOKEN is required in staging and production so the ops surface (/metrics, /internal/health/*) is never left unauthenticated on the shared listener (W5-F4)",
       });
     }
   });

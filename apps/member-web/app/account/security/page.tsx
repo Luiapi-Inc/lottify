@@ -2,59 +2,124 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  memberApi,
+  type MemberDeviceView,
+  type MemberSessionView,
+} from "../../lib/member-api";
+import { describeMemberApiFailure, formatDateTime } from "../../lib/member-display";
 
-type Device = { id: string; icon: string; name: string; detail: string; current?: boolean };
-type Action = { type: "revoke"; device: Device } | { type: "logout-all" } | { type: "recovery" };
-type Stage = "closed" | "review" | "verify" | "success";
+type LoadState =
+  | { status: "loading" }
+  | { status: "ready"; sessions: MemberSessionView[]; devices: MemberDeviceView[] }
+  | { status: "failed"; message: string; code: string; correlationId?: string };
 
-const initialDevices: Device[] = [
-  { id: "current", icon: "PC", name: "Hermes Desktop · อุปกรณ์นี้", detail: "กรุงเทพฯ · ใช้งานล่าสุดเมื่อสักครู่", current: true },
-  { id: "android", icon: "MB", name: "Chrome on Android", detail: "กรุงเทพฯ · 10 ก.ย. 08:10" },
-  { id: "ipad", icon: "TB", name: "Safari on iPad", detail: "ปทุมธานี · 8 ก.ย. 19:44" },
-];
-
-function config(action: Action | null) {
-  if (!action) return null;
-  if (action.type === "revoke") return { title: `ออกจากระบบ ${action.device.name}?`, copy: "อุปกรณ์นี้จะใช้เซสชันเดิมต่อไม่ได้ และต้องเข้าสู่ระบบใหม่หากต้องการใช้งานอีกครั้ง", note: "เพื่อป้องกันการออกจากระบบโดยไม่ตั้งใจ ระบบจะขอ OTP ก่อนดำเนินการ", verify: true, successTitle: "ออกจากระบบอุปกรณ์แล้ว", successCopy: `${action.device.name} ถูกยกเลิกเซสชันเรียบร้อยแล้ว` };
-  if (action.type === "logout-all") return { title: "ออกจากระบบทุกอุปกรณ์?", copy: "เซสชันทั้งหมดรวมถึงอุปกรณ์นี้จะถูกยกเลิก หลังดำเนินการคุณต้องเข้าสู่ระบบใหม่", note: "รายการนี้กระทบทุกอุปกรณ์ ระบบจะขอ OTP ก่อนดำเนินการ", verify: true, successTitle: "ออกจากระบบทุกอุปกรณ์แล้ว", successCopy: "เซสชันทั้งหมดถูกยกเลิกแล้ว กรุณาเข้าสู่ระบบใหม่เมื่อต้องการใช้งาน" };
-  return { title: "เริ่มคำขอกู้คืนบัญชี?", copy: "ใช้กรณีที่คุณเข้าถึงช่องทางเดิมไม่ได้ ระบบจะบันทึกคำขอและแจ้งข้อมูลหรือหลักฐานที่ต้องใช้ในขั้นตอนถัดไป", note: "การยืนยันเบอร์ใหม่เพียงอย่างเดียวไม่ถือว่ากู้คืนสำเร็จ และระบบจะไม่เปลี่ยนข้อมูลสำคัญจนกว่าการตรวจสอบจะเสร็จ", verify: false, successTitle: "สร้างคำขอกู้คืนแล้ว", successCopy: "เก็บเลขอ้างอิงนี้ไว้เพื่อตรวจสถานะหรือใช้เมื่อติดต่อเจ้าหน้าที่" };
-}
+type ActionState =
+  | { status: "idle" }
+  | { status: "working"; label: string }
+  | { status: "failed"; code: string; message: string; correlationId?: string };
 
 export default function SecurityPage() {
   const router = useRouter();
-  const [devices, setDevices] = useState(initialDevices);
-  const [action, setAction] = useState<Action | null>(null);
-  const [stage, setStage] = useState<Stage>("closed");
-  const [otp, setOtp] = useState("");
-  const [error, setError] = useState("");
-  const activeConfig = config(action);
-  const open = (next: Action) => { setAction(next); setStage("review"); setOtp(""); setError(""); };
-  const close = () => { setAction(null); setStage("closed"); setOtp(""); setError(""); };
-  const complete = () => {
-    if (!action) return;
-    if (action.type === "revoke") setDevices((items) => items.filter((item) => item.id !== action.device.id));
-    if (action.type === "logout-all") setDevices([]);
-    setStage("success");
+  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [action, setAction] = useState<ActionState>({ status: "idle" });
+  const [confirmRevokeAll, setConfirmRevokeAll] = useState(false);
+
+  const load = useCallback(async () => {
+    // Sessions and devices are two separate reads; both come straight from the
+    // identity-access service, so a rendered row always exists on the server.
+    const [sessions, devices] = await Promise.all([memberApi.listSessions(), memberApi.listDevices()]);
+    return { sessions, devices };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    load()
+      .then((data) => {
+        if (active) setState({ status: "ready", ...data });
+      })
+      .catch((loadError) => {
+        if (!active) return;
+        const failure = describeMemberApiFailure(loadError);
+        setState({ status: "failed", message: failure.message, code: failure.code, correlationId: failure.correlationId });
+      });
+    return () => {
+      active = false;
+    };
+  }, [load]);
+
+  const revokeDevice = async (device: MemberDeviceView) => {
+    setAction({ status: "working", label: "กำลังออกจากระบบอุปกรณ์" });
+    try {
+      await memberApi.revokeDevice(device.deviceId);
+      setState(await load().then((data) => ({ status: "ready" as const, ...data })));
+      setAction({ status: "idle" });
+    } catch (error) {
+      const failure = describeMemberApiFailure(error);
+      setAction({ status: "failed", code: failure.code, message: failure.message, correlationId: failure.correlationId });
+    }
   };
-  const start = () => activeConfig?.verify ? setStage("verify") : complete();
-  const verify = () => {
-    if (otp.length !== 6) return setError("กรอกรหัส OTP ให้ครบ 6 หลัก");
-    setError(""); complete();
+
+  const revokeSession = async (session: MemberSessionView) => {
+    setAction({ status: "working", label: "กำลังยกเลิกเซสชัน" });
+    try {
+      await memberApi.revokeSession(session.sessionId);
+      setState(await load().then((data) => ({ status: "ready" as const, ...data })));
+      setAction({ status: "idle" });
+    } catch (error) {
+      const failure = describeMemberApiFailure(error);
+      setAction({ status: "failed", code: failure.code, message: failure.message, correlationId: failure.correlationId });
+    }
   };
+
+  const revokeAll = async () => {
+    setAction({ status: "working", label: "กำลังออกจากระบบทุกอุปกรณ์" });
+    try {
+      await memberApi.revokeAllSessions();
+      // Every session is gone, including this one: the only honest destination
+      // is the sign-in page.
+      router.replace("/login");
+    } catch (error) {
+      const failure = describeMemberApiFailure(error);
+      setAction({ status: "failed", code: failure.code, message: failure.message, correlationId: failure.correlationId });
+      setConfirmRevokeAll(false);
+    }
+  };
+
+  if (state.status === "loading") {
+    return <main id="main"><div className="breadcrumb"><Link href="/account">บัญชี</Link><span>/</span><span>ความปลอดภัย</span></div><section className="panel"><div className="panel-title"><h2>กำลังโหลดอุปกรณ์และเซสชัน</h2></div><p className="muted small">กำลังดึงรายการเซสชันและอุปกรณ์จาก API…</p></section></main>;
+  }
+
+  if (state.status === "failed") {
+    return <main id="main"><div className="breadcrumb"><Link href="/account">บัญชี</Link><span>/</span><span>ความปลอดภัย</span></div><section className="panel"><div className="panel-title"><h2>โหลดข้อมูลความปลอดภัยไม่สำเร็จ</h2><span className="status danger">{state.code}</span></div><p className="muted small">{state.message}</p>{state.correlationId && <p className="muted small">รหัสอ้างอิง: {state.correlationId}</p>}</section></main>;
+  }
+
+  const { sessions, devices } = state;
 
   return <main id="main">
     <div className="breadcrumb"><Link href="/account">บัญชี</Link><span>/</span><span>ความปลอดภัย</span></div>
-    <div className="page-head"><div><h1>ความปลอดภัย</h1><p>ตรวจอุปกรณ์ที่เข้าใช้งาน ออกจากระบบรายอุปกรณ์ ออกจากระบบทั้งหมด และเริ่มกู้คืนบัญชีเมื่อจำเป็น</p></div><button className="button danger" type="button" onClick={() => open({ type: "logout-all" })}>ออกจากระบบทุกอุปกรณ์</button></div>
-    <section className="grid-2"><div className="stack"><section className="panel"><div className="panel-title"><h2>อุปกรณ์และการเข้าสู่ระบบ</h2><span className={`status ${devices.length ? "success" : "neutral"}`}>{devices.length} เซสชัน</span></div>
-      {devices.some((device) => device.id === "android") && <div className="notice warning security-device-alert"><b>!</b><div><strong>มีการเข้าสู่ระบบจาก Chrome on Android วันนี้ 08:10</strong>หากเป็นคุณไม่ต้องทำอะไร หากไม่ใช่คุณให้ออกจากระบบอุปกรณ์นั้นและยืนยันตัวตนอีกครั้ง</div></div>}
-      <div className="device-list">{devices.length ? devices.map((device) => <div className="device-row" key={device.id}><div className="device-icon">{device.icon}</div><div><strong>{device.name}</strong><span>{device.detail}</span></div>{device.current ? <span className="status success">ปัจจุบัน</span> : <button className="button danger" type="button" onClick={() => open({ type: "revoke", device })}>ออกจากระบบ</button>}</div>) : <div className="notice success"><b>✓</b><div><strong>ออกจากระบบทุกอุปกรณ์แล้ว</strong>เซสชันทั้งหมดถูกยกเลิก กรุณาเข้าสู่ระบบใหม่</div></div>}</div>
-    </section></div><aside className="stack"><section className="panel"><div className="panel-title"><h2>การยืนยันสำหรับรายการสำคัญ</h2></div><div className="notice info"><b>i</b><div><strong>ระบบอาจขอ OTP หรือยืนยันซ้ำ</strong>ใช้สำหรับเปลี่ยนข้อมูลสำคัญ ถอนเงิน และจัดการอุปกรณ์ ตามสิทธิ์ที่คุณยังเข้าถึงได้</div></div></section><section className="panel" id="recovery"><div className="panel-title"><h2>กู้คืนบัญชี</h2></div><p className="muted small" style={{ lineHeight: 1.8 }}>หากเข้าถึงเบอร์โทรเดิมไม่ได้ สามารถเริ่มคำขอกู้คืน ระบบจะขอข้อมูลหรือหลักฐานที่จำเป็นตามสถานการณ์ การยืนยันเบอร์ใหม่เพียงอย่างเดียวไม่ถือว่ากู้คืนสำเร็จ</p><button className="button secondary block" type="button" style={{ marginTop: 14 }} onClick={() => open({ type: "recovery" })}>เริ่มคำขอกู้คืนบัญชี</button></section></aside></section>
+    <div className="page-head"><div><h1>ความปลอดภัย</h1><p>เซสชันและอุปกรณ์ด้านล่างคือรายการจริงที่ระบบยืนยันตัวตนบันทึกไว้สำหรับบัญชีของคุณ</p></div><button className="button danger" type="button" onClick={() => setConfirmRevokeAll(true)} disabled={action.status === "working"}>ออกจากระบบทุกอุปกรณ์</button></div>
+    {action.status === "failed" && <div className="notice warning" aria-live="polite"><b>!</b><div><strong>ดำเนินการไม่สำเร็จ ({action.code})</strong>{action.message}{action.correlationId ? ` · รหัสอ้างอิง ${action.correlationId}` : ""}</div></div>}
+    <section className="grid-2"><div className="stack">
+      <section className="panel"><div className="panel-title"><h2>อุปกรณ์ที่เข้าใช้งาน</h2><span className={`status ${devices.length ? "success" : "neutral"}`}>{devices.length} อุปกรณ์</span></div>
+        {devices.length === 0
+          ? <div className="notice info"><b>i</b><div><strong>ยังไม่มีอุปกรณ์ที่บันทึกไว้</strong>อุปกรณ์จะปรากฏเมื่อมีการเข้าสู่ระบบพร้อมชื่ออุปกรณ์</div></div>
+          : <div className="device-list">{devices.map((device) => <div className="device-row" key={device.deviceId}><div className="device-icon">{device.name ? device.name.slice(0, 2).toUpperCase() : "DV"}</div><div><strong>{device.name ?? "ไม่ระบุชื่ออุปกรณ์"}</strong><span>รหัสอุปกรณ์ {device.deviceId} · ใช้งานล่าสุด {device.lastUsedAt ? formatDateTime(device.lastUsedAt) : "—"} · สร้างเมื่อ {formatDateTime(device.createdAt)}</span></div><button className="button danger" type="button" onClick={() => revokeDevice(device)} disabled={action.status === "working"}>ออกจากระบบอุปกรณ์นี้</button></div>)}</div>}
+      </section>
+      <section className="panel"><div className="panel-title"><h2>เซสชันที่ยังใช้งานได้</h2><span className={`status ${sessions.length ? "success" : "neutral"}`}>{sessions.length} เซสชัน</span></div>
+        {sessions.length === 0
+          ? <div className="notice info"><b>i</b><div><strong>ไม่มีเซสชันที่ใช้งานได้</strong>เมื่อคุณเข้าสู่ระบบใหม่ เซสชันจะแสดงที่นี่</div></div>
+          : <div className="device-list">{sessions.map((session) => <div className="device-row" key={session.sessionId}><div className="device-icon">SS</div><div><strong>เซสชัน {session.sessionId.slice(0, 8)}…</strong><span>อุปกรณ์ {session.deviceId ?? "ไม่ระบุ"} · หมดอายุ {formatDateTime(session.expiresAt)}</span></div><button className="button danger" type="button" onClick={() => revokeSession(session)} disabled={action.status === "working"}>ยกเลิกเซสชันนี้</button></div>)}</div>}
+      </section>
+    </div>
+    <aside className="stack">
+      <section className="panel"><div className="panel-title"><h2>การยืนยันสำหรับรายการสำคัญ</h2></div><div className="notice info"><b>i</b><div><strong>การเปลี่ยนข้อมูลสำคัญและการถอนเงินมีการยืนยันแยก</strong>ระบบจะขอรหัสยืนยันในการทำรายการที่มีความอ่อนไหวเสมอ</div></div><p className="muted small" style={{ marginTop: 10 }}>หน้านี้จัดการเฉพาะเซสชันและอุปกรณ์ รหัสผ่านและกู้คืนบัญชีจัดการได้จากหน้าเข้าสู่ระบบและกู้คืนบัญชี</p><Link className="text-link" href="/forgot-password" style={{ display: "inline-block", marginTop: 10 }}>กู้คืนบัญชี / ตั้งรหัสผ่านใหม่ →</Link></section>
+      <Link className="button secondary block" href="/account">← กลับบัญชี</Link>
+    </aside></section>
 
-    {stage !== "closed" && activeConfig && <div className="security-overlay"><section className="security-sheet" role="dialog" aria-modal="true" aria-labelledby="security-flow-title"><button className="security-sheet-close" type="button" aria-label="ปิด" onClick={close}>×</button>
-      {stage === "review" && <div className="security-flow-state"><span className="security-step">ตรวจสอบรายการ</span><h2 id="security-flow-title">{activeConfig.title}</h2><p>{activeConfig.copy}</p><div className="notice warning"><b>!</b><div><strong>รายการสำคัญ</strong><span>{activeConfig.note}</span></div></div><div className="security-sheet-actions"><button className="button secondary" type="button" onClick={close}>ยกเลิก</button><button className="button primary" type="button" onClick={start}>{activeConfig.verify ? "ส่ง OTP เพื่อยืนยัน" : "เริ่มคำขอ"}</button></div></div>}
-      {stage === "verify" && <div className="security-flow-state"><span className="security-step">ขั้นตอนยืนยันตัวตน</span><h2>ยืนยันว่าเป็นคุณ</h2><p>กรอกรหัส OTP 6 หลักที่ส่งไปยังเบอร์โทรที่ยืนยันไว้ รหัสใช้ได้ครั้งเดียว</p><div className="otp-grid security-otp">{Array.from({ length: 6 }, (_, index) => <input key={index} inputMode="numeric" maxLength={1} aria-label={`OTP หลักที่ ${index + 1}`} value={otp[index] ?? ""} onChange={(event) => { const digit = event.target.value.replace(/\D/g, "").slice(0, 1); setOtp(`${otp.slice(0, index)}${digit}${otp.slice(index + 1)}`.slice(0, 6)); }} />)}</div><div className="field-error">{error}</div><div className="security-sheet-actions"><button className="button secondary" type="button" onClick={() => setStage("review")}>ย้อนกลับ</button><button className="button primary" type="button" onClick={verify}>ยืนยันและดำเนินการ</button></div></div>}
-      {stage === "success" && <div className="security-flow-state security-flow-success"><div className="security-success-icon">✓</div><span className="security-step">ดำเนินการสำเร็จ</span><h2>{activeConfig.successTitle}</h2><p>{activeConfig.successCopy}</p>{action?.type === "recovery" && <div className="security-reference"><strong>เลขอ้างอิง REC-20260910-001</strong>สถานะ: รับคำขอแล้ว · รอขั้นตอนตรวจสอบถัดไป</div>}<div className="security-sheet-actions"><button className="button primary block" type="button" onClick={() => action?.type === "logout-all" ? router.push("/login") : close()}>{action?.type === "logout-all" ? "ไปหน้าเข้าสู่ระบบ" : "เสร็จสิ้น"}</button></div></div>}
+    {confirmRevokeAll && <div className="security-overlay"><section className="security-sheet" role="dialog" aria-modal="true" aria-labelledby="security-flow-title"><button className="security-sheet-close" type="button" aria-label="ปิด" onClick={() => setConfirmRevokeAll(false)}>×</button>
+      <div className="security-flow-state"><span className="security-step">ตรวจสอบรายการ</span><h2 id="security-flow-title">ออกจากระบบทุกอุปกรณ์?</h2><p>เซสชันทั้งหมดรวมถึงอุปกรณ์นี้จะถูกยกเลิกทันที และคุณต้องเข้าสู่ระบบใหม่</p><div className="notice warning"><b>!</b><div><strong>รายการสำคัญ</strong><span>คำสั่งนี้เรียกใช้การยกเลิกเซสชันทั้งหมดของบัญชีนี้</span></div></div><div className="security-sheet-actions"><button className="button secondary" type="button" onClick={() => setConfirmRevokeAll(false)}>ยกเลิก</button><button className="button danger" type="button" onClick={revokeAll} disabled={action.status === "working"}>{action.status === "working" ? "กำลังดำเนินการ…" : "ยืนยันยกเลิกทุกเซสชัน"}</button></div></div>
     </section></div>}
   </main>;
 }

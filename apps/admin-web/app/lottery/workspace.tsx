@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { components } from '@lottify/contracts';
 import { AdminClient, ApiFailure } from './client';
 import Login from './login';
+import { AdminShell } from '../control-plane/shell';
 import './workspace.css';
 
 type Admin = components['schemas']['AdminMeResponse'];
@@ -76,10 +77,15 @@ export default function LotteryWorkspace() {
     });
   }
   const previous=resource?.versions.find(v=>version&&v.version<version.version);
-  return <div className="lot-shell"><aside className="lot-sidebar"><a className="lot-brand" href="/lottery"><span className="lot-mark">L</span> Lottify <small>ADMIN</small></a><p className="lot-nav-label">พื้นที่ปฏิบัติงาน</p><nav aria-label="เมนูหลัก"><a href="/lottery" aria-current="page">หวยและงวด <span>01</span></a><a href="/accounting-periods">การเงิน <span>02</span></a></nav><div className="lot-sidebar-foot">การตั้งค่าแบบมีเวอร์ชัน<br/>ทุกการเผยแพร่ตรวจสอบย้อนหลังได้</div></aside>
-    <main className="lot-main"><header className="lot-top"><span>Admin / หวยและงวด</span>{admin&&<div>{admin.name} <span className="lot-role">{admin.role}</span><button disabled={busy} onClick={()=>void run(async()=>{await client.publicRequest('auth/logout');client.clear();setAdmin(null);setItems([]);setResource(null);setVersion(null);})}>ออกจากระบบ</button></div>}</header>
-    {boot?<p role="status">กำลังตรวจสอบ session…</p>:!admin?<Login client={client} onLogin={initialize}/>:<>
-    <section className="lot-heading"><div><h1>ตั้งค่าหวย</h1><p>จัดการผลิตภัณฑ์และประเภทเดิมพัน ตั้งแต่ draft จนถึงการเผยแพร่</p></div><span className="lot-timezone">เวลาแสดงผล · Asia/Bangkok</span></section>
+  async function signOut() {
+    try { await client.publicRequest('auth/logout'); } catch { /* best-effort */ }
+    client.clear();
+    setAdmin(null);setItems([]);setResource(null);setVersion(null);
+  }
+  if (boot) return <main className="cp-center"><p role="status">กำลังตรวจสอบ session…</p></main>;
+  if (!admin) return <div className="lot-shell"><Login client={client} onLogin={initialize}/></div>;
+  return <AdminShell admin={admin} activeKey="lottery" onLogout={()=>void signOut()} breadcrumb="หวยและงวด / ตั้งค่าหวย" title="ตั้งค่าหวย" subtitle="จัดการผลิตภัณฑ์และประเภทเดิมพัน ตั้งแต่ draft จนถึงการเผยแพร่ · เวลาแสดงผล Asia/Bangkok" extraClassName="lot-shell"><>
+    <section className="lot-heading"><div><h2>ผลิตภัณฑ์และประเภทเดิมพัน</h2><p>จัดการผลิตภัณฑ์และประเภทเดิมพัน ตั้งแต่ draft จนถึงการเผยแพร่</p></div><span className="lot-timezone">เวลาแสดงผล · Asia/Bangkok</span></section>
     {error&&<div className="lot-error" role="alert">{error}<button disabled={busy} onClick={()=>void run(async()=>{if(resource)await detail(resource.id,version?.id);await load();})}>โหลดข้อมูลล่าสุด</button></div>}
     {notice&&<div className="lot-success" role="status">{notice}</div>}
     <div className="lot-tabs" role="tablist" aria-label="ประเภทการตั้งค่า">{(['products','bet-types'] as const).map(k=><button role="tab" aria-selected={kind===k} key={k} disabled={busy} onClick={()=>{setKind(k);setNotice('');}}>{k==='products'?'ผลิตภัณฑ์หวย':'ประเภทเดิมพัน'}</button>)}</div>
@@ -100,5 +106,5 @@ export default function LotteryWorkspace() {
     <h3>ตรวจรายละเอียดก่อนส่งตรวจ / อนุมัติ</h3><div className="lot-table-wrap"><table className="lot-diff"><thead><tr><th>การตั้งค่า</th><th>{previous?`เวอร์ชันก่อนหน้า v${previous.version}`:'ก่อนสร้าง'}</th><th>เวอร์ชันที่เลือก</th></tr></thead><tbody>{Object.keys(labels).filter(k=>version[k]!==undefined).map(k=><tr key={k}><th>{labels[k]}</th><td><pre>{show(previous?.[k])}</pre></td><td><pre>{show(version[k])}</pre></td></tr>)}</tbody></table></div>
     <div className="lot-actions">{version.state==='DRAFT'&&can('submit')&&<button className="lot-primary" disabled={busy} onClick={()=>void command('submit')}>ตรวจแล้ว ส่งอนุมัติ</button>}{version.state==='REVIEW'&&can('approve')&&<button className="lot-primary" disabled={busy} onClick={()=>setApproval(!approval)}>อนุมัติและเผยแพร่</button>}{version.state==='REVIEW'&&<p>ADMIN ต้องให้ผู้มีสิทธิ์คนอื่นอนุมัติ ระบบตรวจ maker-checker อีกครั้งก่อนเผยแพร่</p>}{version.state==='PUBLISHED'&&<p>เวอร์ชันนี้เผยแพร่แล้ว หากต้องเปลี่ยนการตั้งค่าให้สร้างเวอร์ชันใหม่</p>}</div>
     {approval&&<form className="lot-approval" onSubmit={e=>{e.preventDefault();void command('approve');}}><h3>ยืนยันการเผยแพร่ v{version.version}</h3><p>ตรวจรายละเอียดและเวลาเริ่มใช้ด้านบนก่อนยืนยัน</p><label>รหัส MFA 6 หลัก<input value={mfa} onChange={e=>setMfa(e.target.value)} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required disabled={busy}/></label><button className="lot-primary" disabled={busy}>ยืนยันอนุมัติและเผยแพร่</button><button type="button" disabled={busy} onClick={()=>{setApproval(false);setMfa('');}}>ยกเลิก</button></form>}</>:<p>รายการนี้ยังไม่มีเวอร์ชัน เริ่มจากสร้าง draft เพื่อกำหนดการตั้งค่า</p>}</section>}
-    </>}</main></div>;
+    </></AdminShell>;
 }

@@ -4,6 +4,8 @@ import type { components } from "@lottify/contracts";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { accountingPeriodCancellationUi } from "./accounting-period-cancellation-ui";
 import { AdminApi, ApiFailure } from "./control-plane/admin-api";
+import { randomUUID } from "./lib/random-uuid";
+import { AdminShell, adminLogout } from "./control-plane/shell";
 
 type AccountingPeriod = components["schemas"]["AccountingPeriodResponse"];
 type AccountingPeriodCommand = components["schemas"]["AccountingPeriodCommandResponse"];
@@ -26,20 +28,6 @@ type BusyAction =
 
 const ACCOUNTING_PERIOD_APPROVAL_ACTION_CLASS = "accounting-period.approve";
 const ACCOUNTING_PERIOD_CANCELLATION_ACTION_CLASS = "accounting-period.cancel";
-
-const navigation = [
-  "ภาพรวม",
-  "หวยและงวด",
-  "การเดิมพันและความเสี่ยง",
-  "การเงิน",
-  "ผลรางวัลและ Settlement",
-  "สมาชิกและ KYC",
-  "โปรโมชั่น",
-  "Reconciliation",
-  "Approvals",
-  "ระบบและตั้งค่า",
-  "Audit / Reports",
-] as const;
 
 export default function AccountingPeriodWorkspace() {
   const [api] = useState(() => new AdminApi());
@@ -235,6 +223,13 @@ export default function AccountingPeriodWorkspace() {
     api.clear();
   }
 
+  async function signOut() {
+    await adminLogout(api, async () => {
+      setAdmin(null);
+      setSessionUnavailable(true);
+    })();
+  }
+
   if (busy === "session") {
     return <div className="shell-state">กำลังตรวจสอบ Admin session…</div>;
   }
@@ -257,34 +252,14 @@ export default function AccountingPeriodWorkspace() {
   }
 
   return (
-    <div className="admin-shell">
-      <aside className="sidebar" aria-label="Admin navigation">
-        <div className="brand">Lottify Admin</div>
-        <nav>
-          {navigation.map((item) => (
-            <span
-              key={item}
-              className={item === "ระบบและตั้งค่า" ? "nav-item nav-item-active" : "nav-item"}
-              aria-current={item === "ระบบและตั้งค่า" ? "page" : undefined}
-            >
-              {item}
-            </span>
-          ))}
-        </nav>
-      </aside>
-
-      <main className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="breadcrumb">ระบบและตั้งค่า / Accounting Period</p>
-            <h1>Accounting Period</h1>
-          </div>
-          <div className="admin-identity">
-            <strong>{admin.name}</strong>
-            <span>{admin.role}</span>
-          </div>
-        </header>
-
+    <AdminShell
+      admin={admin}
+      activeKey="finance"
+      onLogout={() => void signOut()}
+      breadcrumb="การเงิน / Accounting Period"
+      title="Accounting Period"
+      subtitle="ช่วงบัญชีที่ระบบรับรอง การอนุมัติ และการปิดรอบอย่างเป็นทางการ · เวลาอ้างอิง Asia/Bangkok"
+    >
         {error ? (
           <div className="error-banner" role="alert">
             <strong>{error.code}</strong>
@@ -560,8 +535,7 @@ export default function AccountingPeriodWorkspace() {
             </div>
           </div>
         </section>
-      </main>
-    </div>
+    </AdminShell>
   );
 }
 
@@ -770,7 +744,7 @@ function idempotencyKey(
   const fingerprint = `${operation}:${JSON.stringify(payload)}`;
   const existing = keys.get(fingerprint);
   if (existing) return existing;
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   keys.set(fingerprint, key);
   return key;
 }

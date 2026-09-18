@@ -27,7 +27,7 @@ import { PrismaService } from "../../src/platform/persistence/prisma.service";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 const emailPrefix = "member-readiness-integration+";
-const phonePrefix = "+6695";
+const phonePrefix = "095";
 
 /**
  * Member capability readiness + KYC eligibility over the real HTTP boundary and
@@ -187,7 +187,7 @@ describe.runIf(runIntegration)("Member readiness + KYC eligibility vertical", ()
   });
 
   async function createMember(): Promise<string> {
-    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
     const member = await prisma.member.create({ data: { phone, status: "ACTIVE" } });
     memberIds.push(member.id);
     return member.id;

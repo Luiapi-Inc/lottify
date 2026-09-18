@@ -1,0 +1,133 @@
+{
+  "id": "ticket13-capacity-v1",
+  "version": "1.0.0",
+  "issue": "GH #91",
+  "card": "t_4fd8e4a7",
+  "sourceOfTruth": ".scratch/lottify-v1-specification/issues/13-non-functional-targets-and-release-gates.md",
+  "notes": [
+    "Every threshold in targets[] is transcribed verbatim from the Ticket 13 resolved answer (NFR round 1 + round 2).",
+    "Do not lower a target to make a run pass. A profile that does not declare claimsTarget=true can only ever report MEASURED / NOT_MEASURED / ENV_GATED - never PASS.",
+    "The Quote/Confirm/payment mix and the pre-cutoff burst shape are NOT fixed by Ticket 13; the numbers below are this harness's declared scenario identity (harness decision, must be stated in every report)."
+  ],
+  "mix": {
+    "quotes_per_confirmed_bet": 2,
+    "quotes_per_second_to_confirms_per_second_ratio": "2:1 (2 Quotes issued per 1 Confirm, i.e. the Quote -> Order -> Confirm funnel re-quotes on half of its attempts)",
+    "quote_payload_lines": 1,
+    "stakeMinor": "1000",
+    "canonicalNumber": "42",
+    "confirm_is_explicit_command": "POST /api/v1/member/orders/:id/confirm with Idempotency-Key and expected version"
+  },
+  "burst": {
+    "description": "realistic pre-cutoff burst: steady phase, then a linear ramp to peak inside the last burstWindowSeconds before Draw cutoff, held until cutoff",
+    "steady_share_of_peak": 0.35,
+    "ramp_seconds": 120,
+    "burst_window_seconds": 300,
+    "hold_at_peak_seconds": 180
+  },
+  "dataset": {
+    "members": "one active, KYC-verified, terms-accepted, profile-complete Member per concurrent session",
+    "wallet": "each Member funded in the CASH bucket with enough minor units for its whole session's stake volume",
+    "draws": "one OPEN Draw per product with cutoff far in the future for steady-state scenarios; a dedicated Draw whose cutoff is placed burst_window_seconds ahead for the pre-cutoff burst scenario",
+    "settlement": "N confirmed Bet Orders, each with at least one Bet Line, on a Draw that has a CONFIRMED Result revision"
+  },
+  "targets": {
+    "concurrent_active_member_sessions": {
+      "min": 5000,
+      "unit": "concurrent authenticated Member sessions",
+      "verbatim": "5,000 concurrently active Member sessions"
+    },
+    "quote_requests_per_second": {
+      "min": 300,
+      "unit": "req/s",
+      "verbatim": "at least 300 Quote requests/second"
+    },
+    "confirm_requests_per_second": {
+      "min": 150,
+      "unit": "req/s",
+      "verbatim": "at least 150 Confirm requests/second"
+    },
+    "payment_webhook_events_per_second": {
+      "min": 200,
+      "unit": "events/s",
+      "verbatim": "at least 200 payment/webhook events/second under production-like tests"
+    },
+    "read_api_latency": {
+      "p95_ms_max": 300,
+      "p99_ms_max": 800,
+      "verbatim": "ordinary read APIs target p95 <= 300 ms and p99 <= 800 ms"
+    },
+    "quote_latency": {
+      "p95_ms_max": 500,
+      "p99_ms_max": 1500,
+      "verbatim": "Quote targets p95 <= 500 ms and p99 <= 1.5 s"
+    },
+    "confirm_latency": {
+      "p95_ms_max": 800,
+      "p99_ms_max": 2000,
+      "verbatim": "Confirm targets p95 <= 800 ms and p99 <= 2 s"
+    },
+    "critical_server_error_rate": {
+      "max": 0.005,
+      "unit": "fraction of critical requests",
+      "verbatim": "Critical API server error rate must remain below 0.5%"
+    },
+    "critical_queue_lag": {
+      "p95_ms_max": 5000,
+      "alert_threshold_ms": 30000,
+      "unit": "ms (Outbox/queue delivery lag)",
+      "verbatim": "critical Outbox/queue delivery targets p95 < 5 s under normal operation, with alerting if critical lag exceeds 30 seconds"
+    },
+    "settlement_capacity": {
+      "min_bet_lines": 100000,
+      "within_seconds": 600,
+      "idempotent_resume_required": true,
+      "member_visible_partial_completion_allowed": false,
+      "verbatim": "at least 100,000 Bet Lines within 10 minutes for the configured worker pool; failures must resume idempotently and partial completion is never Member-visible"
+    },
+    "duplicate_financial_effect_under_load": {
+      "allowed": false,
+      "verbatim": "no critical business or financial effect may duplicate under load"
+    }
+  },
+  "profiles": {
+    "smoke": {
+      "claimsTarget": false,
+      "purpose": "harness plumbing proof: exercises every driver against a real API and emits the report shape. Never capacity evidence.",
+      "sessions": { "target": 20, "rampSeconds": 5 },
+      "read": { "targetRps": 10, "durationSeconds": 20 },
+      "quoteConfirm": { "quoteRps": 5, "confirmRps": 2, "durationSeconds": 20 },
+      "paymentEvents": { "targetRps": 5, "durationSeconds": 20 },
+      "burst": { "enabled": true, "peakMultiplier": 2, "durationSeconds": 10 },
+      "settlement": { "betLines": 200, "budgetSeconds": 120 }
+    },
+    "sandbox": {
+      "claimsTarget": false,
+      "purpose": "largest run that is honest on a single co-located 2 vCPU host. Reported as MEASURED, never PASS.",
+      "sessions": { "target": 200, "rampSeconds": 20 },
+      "read": { "targetRps": 100, "durationSeconds": 60 },
+      "quoteConfirm": { "quoteRps": 25, "confirmRps": 12, "durationSeconds": 60 },
+      "paymentEvents": { "targetRps": 25, "durationSeconds": 60 },
+      "burst": { "enabled": true, "peakMultiplier": 3, "durationSeconds": 30 },
+      "settlement": { "betLines": 2000, "budgetSeconds": 300 }
+    },
+    "target": {
+      "claimsTarget": true,
+      "purpose": "the Ticket 13 acceptance run. Requires a production-like environment (see docs/implementation/load-harness-scenario-and-environment.md).",
+      "sessions": { "target": 5000, "rampSeconds": 300 },
+      "read": { "targetRps": 1500, "durationSeconds": 900 },
+      "quoteConfirm": { "quoteRps": 300, "confirmRps": 150, "durationSeconds": 900 },
+      "paymentEvents": { "targetRps": 200, "durationSeconds": 900 },
+      "burst": { "enabled": true, "peakMultiplier": 3.5, "durationSeconds": 600 },
+      "settlement": { "betLines": 100000, "budgetSeconds": 600 }
+    }
+  },
+  "requiredObservability": {
+    "note": "The harness will not scrape logs to fake an SLO. Each signal must be read from the API/worker metrics surface. A missing family is reported as NOT_MEASURED with the observed metric-family inventory.",
+    "families": [
+      { "id": "queueLag", "purpose": "critical Outbox/queue delivery lag p95", "match": ["lottify_outbox", "outbox_lag", "queue_lag", "bullmq"] },
+      { "id": "settlementThroughput", "purpose": "settlement batch throughput / duration", "match": ["lottify_settlement", "settlement_"] },
+      { "id": "dlqDepth", "purpose": "critical DLQ entries", "match": ["dlq", "dead_letter"] },
+      { "id": "paymentWebhook", "purpose": "payment/webhook ingestion and failure counts", "match": ["lottify_payment", "webhook"] }
+    ]
+  }
+}

@@ -58,6 +58,7 @@ import {
   type SettlementRepository,
   type SettlementOrderRecord,
 } from "./settlement.repository";
+import { recordSettlementFailure } from "../../../platform/observability/operational-metrics";
 
 export type SettlementErrorCode =
   | "DRAW_NOT_FOUND"
@@ -650,6 +651,19 @@ export class SettlementService {
       }
     } catch (error) {
       await this.repo.updateBatchState(batch.id, "FAILED");
+      // F5 (settlement failure): record only once the FAILED state is durable,
+      // so the metric counts batches that actually ended failed.
+      recordSettlementFailure({
+        stage: "batch-execution",
+        batchId: batch.id,
+        drawId: batch.drawId,
+        reason:
+          error instanceof SettlementError
+            ? error.code
+            : error instanceof Error
+              ? error.name
+              : "UNKNOWN",
+      });
       if (error instanceof SettlementError) throw error;
       throw error;
     }

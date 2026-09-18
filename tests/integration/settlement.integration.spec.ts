@@ -16,6 +16,7 @@
 // balance, not just a status code.
 
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
 import { resetEnvironmentForTests } from "../../src/platform/config/env";
@@ -36,6 +37,11 @@ import { SettlementDrawAdapter } from "../../src/platform/integration/settlement
 import { SettlementOrdersAdapter } from "../../src/platform/integration/settlement-orders.adapter";
 import { allowBetEligibility } from "../support/betting-eligibility.fake";
 import { settlementFingerprint } from "../../src/contexts/result-settlement/application/settlement.service";
+import {
+  promotionTermsDigest,
+  type PromotionWinningsDestination,
+} from "../../src/contexts/promotion/domain/campaign-terms";
+import { validTerms } from "../support/promotion-fixtures";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 
@@ -56,6 +62,14 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
   const betTypeVersionIds: string[] = [];
   const drawIds: string[] = [];
   const settlementBatchIds: string[] = [];
+  const promotionCampaignIds: string[] = [];
+  const promotionCampaignVersionIds: string[] = [];
+  const promotionEntitlementIds: string[] = [];
+  // Funding system codes this suite asks the ledger to create. Scoped by exact
+  // code, never by prefix: a prefix sweep here deletes the promotion suites'
+  // accounts and violates ledger_postings_account_id_fkey when the files run in
+  // parallel against the shared test database.
+  const ownedFundingSystemCodes: string[] = [];
 
   const actor = () => ({ adminId, sessionId, role: "ADMIN" as const });
 
@@ -83,7 +97,7 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
     settlement = new SettlementService(
       new PrismaSettlementRepository(prisma),
       new SettlementDrawAdapter(draws, prisma),
-      new SettlementWalletAdapter(ledger),
+      new SettlementWalletAdapter(ledger, prisma),
       new SettlementOrdersAdapter(prisma),
       resultProvider,
     );
@@ -119,6 +133,7 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
             { systemCode: "betting-settlement" },
             { systemCode: { startsWith: "settlement-test-funding" } },
             { systemCode: { startsWith: "order-test-funding" } },
+            { systemCode: { in: ownedFundingSystemCodes } },
           ],
         },
         select: { id: true },
@@ -139,13 +154,24 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
         await tx.$executeRawUnsafe('ALTER TABLE "lottery_bet_type_versions" DISABLE TRIGGER "lottery_bet_type_versions_published_immutable"');
 
         await tx.settlementOrder.deleteMany({ where: { memberId: { in: memberIds } } });
-        await tx.settlementBatch.deleteMany({ where: { id: { in: settlementBatchIds } } });
+        // A code path the test does not track can still create a batch for this
+        // test's draws (e.g. a FAILED batch); leaving it behind makes the
+        // resultRevision delete below hit settlement_batches_result_revision_id_fkey.
+        await tx.settlementBatch.deleteMany({
+          where: { OR: [{ id: { in: settlementBatchIds } }, { drawId: { in: drawIds } }] },
+        });
         await tx.resultRevision.deleteMany({ where: { drawId: { in: drawIds } } });
         await tx.betReceipt.deleteMany({ where: { memberId: { in: memberIds } } });
         await tx.betOrderLine.deleteMany({ where: { order: { memberId: { in: memberIds } } } });
         await tx.betOrder.deleteMany({ where: { memberId: { in: memberIds } } });
         await tx.bettingQuoteLine.deleteMany({ where: { quote: { memberId: { in: memberIds } } } });
         await tx.bettingQuote.deleteMany({ where: { memberId: { in: memberIds } } });
+        await tx.promotionTurnoverEntry.deleteMany({
+          where: { entitlementId: { in: promotionEntitlementIds } },
+        });
+        await tx.promotionEntitlement.deleteMany({ where: { id: { in: promotionEntitlementIds } } });
+        await tx.promotionCampaignVersion.deleteMany({ where: { id: { in: promotionCampaignVersionIds } } });
+        await tx.promotionCampaign.deleteMany({ where: { id: { in: promotionCampaignIds } } });
 
         await tx.reservationAllocation.deleteMany({
           where: { reservation: { OR: [{ memberId: { in: memberIds } }, { consumingTransactionId: { in: transactionIds } }] } },
@@ -253,7 +279,7 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
     const id = randomUUID();
     memberIds.push(id);
     await prisma.member.create({
-      data: { id, phone: `+66${id.replaceAll("-", "").slice(0, 10)}` },
+      data: { id, phone: `09${id.replace(/\D/g, "").padEnd(8, "0").slice(0, 8)}` },
     });
     return id;
   }
@@ -284,9 +310,104 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
     });
   }
 
+  async function grantPromotionBonus(input: {
+    memberId: string;
+    productId: string;
+    betTypeCode: string;
+    amountMinor: bigint;
+    winningsDestination: PromotionWinningsDestination;
+    proportionalWinningsBps?: number | null;
+  }): Promise<string> {
+    const campaignId = randomUUID();
+    const campaignVersionId = randomUUID();
+    const entitlementId = randomUUID();
+    promotionCampaignIds.push(campaignId);
+    promotionCampaignVersionIds.push(campaignVersionId);
+    promotionEntitlementIds.push(entitlementId);
+    const terms = validTerms({
+      // Per-run funding source: the shared fixture default ("welcome-2026") makes
+      // every suite share one ledger account, so whichever suite cleans up first
+      // trips ledger_postings_account_id_fkey on the other suites' postings.
+      fundingSource: `settlement-${campaignId}`,
+      rewardAmountMinor: input.amountMinor.toString(),
+      scope: {
+        eligibleProductIds: [input.productId],
+        eligibleBetTypeCodes: [input.betTypeCode],
+        contributionBps: 10_000,
+        minPayoutRef: null,
+      },
+      winningsDestination: input.winningsDestination,
+      proportionalWinningsBps: input.proportionalWinningsBps ?? null,
+    });
+    await prisma.promotionCampaign.create({
+      data: { id: campaignId, code: `settlement-funding-${campaignId}` },
+    });
+    await prisma.promotionCampaignVersion.create({
+      data: {
+        id: campaignVersionId,
+        campaignId,
+        version: 1,
+        state: "PUBLISHED",
+        terms: terms as unknown as Prisma.InputJsonValue,
+        termsDigest: promotionTermsDigest(terms),
+        effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+        publishedAt: new Date("2020-01-01T00:00:00.000Z"),
+      },
+    });
+    const bonusAccountId = await ledger.ensureMemberAccount(input.memberId, "BONUS", "THB");
+    const fundingSystemCode = `promotion-funding:${terms.fundingSource}`;
+    ownedFundingSystemCodes.push(fundingSystemCode);
+    const fundingAccountId = await ledger.ensureSystemAccount(fundingSystemCode, "THB");
+    const grantLedgerTransactionId = await ledger.post({
+      businessTransactionId: `promotion-grant:${entitlementId}`,
+      operationType: "PROMOTION_BONUS_GRANT",
+      correlationId: randomUUID(),
+      idempotency: {
+        scope: `PROMOTION_BONUS_GRANT:${entitlementId}`,
+        key: entitlementId,
+        fingerprint: entitlementId,
+      },
+      domainReferences: { promotionEntitlementId: entitlementId },
+      currency: "THB",
+      effectiveAt: new Date(),
+      postings: [
+        { accountId: bonusAccountId, side: "CREDIT", amountMinor: input.amountMinor },
+        { accountId: fundingAccountId, side: "DEBIT", amountMinor: input.amountMinor },
+      ],
+    });
+    await prisma.promotionEntitlement.create({
+      data: {
+        id: entitlementId,
+        memberId: input.memberId,
+        campaignId,
+        campaignVersionId,
+        campaignVersion: 1,
+        state: "ACTIVE",
+        termsSnapshot: terms as unknown as Prisma.InputJsonValue,
+        stackingDecision: { granted: [{ campaignVersionId, priority: terms.stacking.priority }] } as Prisma.InputJsonValue,
+        currency: "THB",
+        rewardMinor: input.amountMinor,
+        turnoverTargetMinor: input.amountMinor,
+        grantedAt: new Date(),
+        expiresAt: new Date("2200-01-01T00:00:00.000Z"),
+        grantLedgerTransactionId,
+        idempotencyScope: `PROMOTION_CLAIM:${input.memberId}`,
+        idempotencyKey: campaignVersionId,
+        fingerprint: randomUUID(),
+        correlationId: randomUUID(),
+      },
+    });
+    return entitlementId;
+  }
+
   async function cashAvailable(memberId: string): Promise<bigint> {
     const cashAccountId = await ledger.ensureMemberAccount(memberId, "CASH", "THB");
     return ledger.getAvailableMinorUnits(cashAccountId);
+  }
+
+  async function bonusAvailable(memberId: string): Promise<bigint> {
+    const bonusAccountId = await ledger.ensureMemberAccount(memberId, "BONUS", "THB");
+    return ledger.getAvailableMinorUnits(bonusAccountId);
   }
 
   async function settleFixture(opts: {
@@ -415,6 +536,135 @@ describe.runIf(runIntegration)("Result intake + Settlement Batch + Refund/correc
     // The Draw reached terminal SETTLED.
     const draw = await prisma.lotteryDraw.findUniqueOrThrow({ where: { id: drawId } });
     expect(draw.state).toBe("SETTLED");
+  });
+
+  it("routes winnings from the accepted mixed CASH/BONUS allocation snapshot", async () => {
+    const { productId, betTypeId } = await publishedProductFixture("S_PROMO");
+    const day = "2099-08-15";
+    const summary = (
+      await draws.generateDraws({
+        productId,
+        baseOccurrences: [{
+          occurrenceIdentity: `${productId}-${day}`,
+          localDate: day,
+          openAt: new Date(`${day}T06:00:00.000Z`),
+          cutoffAt: new Date(`${day}T11:00:00.000Z`),
+          drawAt: new Date(`${day}T12:00:00.000Z`),
+          provenance: "SCHEDULE_GENERATED" as const,
+        }],
+        actor: actor(),
+      })
+    ).created[0]!;
+    drawIds.push(summary.id);
+    await draws.transition({ id: summary.id, command: "SCHEDULE", expectedVersion: 1, actor: actor() });
+    await draws.transition({ id: summary.id, command: "OPEN", expectedVersion: 2, actor: actor() });
+    const betType = await prisma.lotteryDrawBetType.findFirstOrThrow({ where: { drawId: summary.id, betTypeId } });
+    const memberId = await newMember();
+    await fundCash(memberId, 10_000n);
+    await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode: betType.betTypeCode,
+      amountMinor: 40n,
+      winningsDestination: "BONUS",
+    });
+    const serverNow = new Date(`${day}T08:00:00.000Z`);
+    const quote = await quotes.createQuote({
+      memberId,
+      drawId: summary.id,
+      currency: "THB",
+      idempotencyKey: `settle-promo-q-${randomUUID()}`,
+      lines: [{ betTypeCode: betType.betTypeCode, canonicalNumber: "42", stakeMinor: 100n }],
+      now: serverNow,
+    });
+    const order = await orders.createOrder({
+      memberId,
+      quoteId: quote.id,
+      idempotencyKey: `settle-promo-o-${randomUUID()}`,
+    });
+    const confirmed = await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: order.version,
+      idempotencyKey: `settle-promo-c-${randomUUID()}`,
+      now: serverNow,
+    });
+    expect(await cashAvailable(memberId)).toBe(9_940n);
+    expect(await bonusAvailable(memberId)).toBe(0n);
+    await draws.transition({ id: summary.id, command: "CLOSE", expectedVersion: 3, actor: actor() });
+    await intakeAndConfirm(summary.id, { [betType.betTypeCode]: "42" });
+    const batch = await settlement.runSettlement({ drawId: summary.id, actor: actor() });
+    settlementBatchIds.push(batch.id);
+    expect(batch.totalPayoutMinor).toBe(9_000n);
+    expect(await cashAvailable(memberId)).toBe(15_340n);
+    expect(await bonusAvailable(memberId)).toBe(3_600n);
+    const payout = await prisma.financialTransaction.findFirstOrThrow({
+      where: { operationType: "SETTLEMENT_PAYOUT", domainReferences: { path: ["orderId"], equals: order.id } },
+    });
+    expect(payout.domainReferences).toMatchObject({
+      stakeTransactionId: confirmed.stakeTransactionId,
+      sourceAllocationPolicy: "bet-stake-source-allocation-v1",
+    });
+  });
+
+  it("fails closed instead of inventing undefined PROPORTIONAL winnings semantics", async () => {
+    const { productId, betTypeId } = await publishedProductFixture("S_PROP");
+    const day = "2099-08-16";
+    const summary = (
+      await draws.generateDraws({
+        productId,
+        baseOccurrences: [{
+          occurrenceIdentity: `${productId}-${day}`,
+          localDate: day,
+          openAt: new Date(`${day}T06:00:00.000Z`),
+          cutoffAt: new Date(`${day}T11:00:00.000Z`),
+          drawAt: new Date(`${day}T12:00:00.000Z`),
+          provenance: "SCHEDULE_GENERATED" as const,
+        }],
+        actor: actor(),
+      })
+    ).created[0]!;
+    drawIds.push(summary.id);
+    await draws.transition({ id: summary.id, command: "SCHEDULE", expectedVersion: 1, actor: actor() });
+    await draws.transition({ id: summary.id, command: "OPEN", expectedVersion: 2, actor: actor() });
+    const betType = await prisma.lotteryDrawBetType.findFirstOrThrow({ where: { drawId: summary.id, betTypeId } });
+    const memberId = await newMember();
+    await fundCash(memberId, 10_000n);
+    await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode: betType.betTypeCode,
+      amountMinor: 100n,
+      winningsDestination: "PROPORTIONAL",
+      proportionalWinningsBps: 5_000,
+    });
+    const serverNow = new Date(`${day}T08:00:00.000Z`);
+    const quote = await quotes.createQuote({
+      memberId,
+      drawId: summary.id,
+      currency: "THB",
+      idempotencyKey: `settle-prop-q-${randomUUID()}`,
+      lines: [{ betTypeCode: betType.betTypeCode, canonicalNumber: "42", stakeMinor: 100n }],
+      now: serverNow,
+    });
+    const order = await orders.createOrder({
+      memberId,
+      quoteId: quote.id,
+      idempotencyKey: `settle-prop-o-${randomUUID()}`,
+    });
+    await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: order.version,
+      idempotencyKey: `settle-prop-c-${randomUUID()}`,
+      now: serverNow,
+    });
+    await draws.transition({ id: summary.id, command: "CLOSE", expectedVersion: 3, actor: actor() });
+    await intakeAndConfirm(summary.id, { [betType.betTypeCode]: "42" });
+    await expect(settlement.runSettlement({ drawId: summary.id, actor: actor() })).rejects.toMatchObject({
+      code: "PAYOUT_POLICY_UNSUPPORTED",
+    });
+    expect(await payoutTransactionCount(order.id)).toBe(0);
   });
 
   it("is idempotent: a re-driven run reuses the same batch and never re-pays", async () => {

@@ -25,3 +25,23 @@ scrape_configs:
           - api:3000
         labels:
           service: lottify-api
+
+  # F1 (reconciliation), F4 (stuck withdrawals) and F6 (outbox/queue lag) are
+  # produced inside the worker process, which serves the same registry on its
+  # health listener; without this target those families' rules would never see a
+  # series. The worker /metrics route is bearer-gated by the same OPS_AUTH_TOKEN
+  # rule as the API. One target per worker group (they share the health port).
+  - job_name: lottify-worker
+    metrics_path: /metrics
+    bearer_token: ${OPS_AUTH_TOKEN}
+    static_configs:
+      - targets:
+          - worker-scheduler-outbox:3100
+        labels:
+          service: lottify-worker
+          worker_group: scheduler-outbox
+      - targets:
+          - worker-payment-reconciliation:3100
+        labels:
+          service: lottify-worker
+          worker_group: payment-reconciliation

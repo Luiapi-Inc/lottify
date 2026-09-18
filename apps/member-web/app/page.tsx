@@ -1,43 +1,148 @@
-import Link from "next/link";
+"use client";
 
-const draws = [
-  ["th", "TH", "สลากกินแบ่งรัฐบาล", "งวดวันที่ 16 ก.ย. 2569 · ปิดรับ 15:15 น.", "02:00:34"],
-  ["la", "LA", "หวยลาวพัฒนา", "งวดวันนี้ · ปิดรับ 20:00 น.", "05:14:00"],
-  ["vn", "VN", "ฮานอยพิเศษ", "งวดวันนี้ · ปิดรับ 17:15 น.", "02:21:00"],
-];
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import {
+  memberApi,
+  type BetOrder,
+  type MemberDraw,
+  type WalletBalance,
+} from "./lib/member-api";
+import {
+  describeDrawState,
+  describeMemberApiFailure,
+  describeOrderState,
+  formatBaht,
+  formatDateTime,
+  sumMinor,
+} from "./lib/member-display";
+
+type HomeState =
+  | { status: "loading" }
+  | { status: "ready"; balance: WalletBalance | null; orders: BetOrder[]; openDraws: MemberDraw[]; partialError: string | null }
+  | { status: "failed"; message: string; code: string; correlationId?: string };
 
 export default function HomePage() {
-  return <main id="main">
-    <div className="wallet-hero">
-      <div className="wallet-hero-top"><h2>ยอดเงินในกระเป๋า</h2><Link className="button ghost" href="/wallet">จัดการกระเป๋า →</Link></div>
-      <div className="wallet-grid">
-        <div className="wallet-cell"><div className="wallet-label">เงินสด</div><div className="wallet-amount">12,450.00<small>บาท</small></div><div className="wallet-actions"><Link className="button secondary" href="/wallet/deposit">เติมเงิน</Link></div></div>
-        <div className="wallet-cell"><div className="wallet-label">โบนัส</div><div className="wallet-amount">300.00<small>บาท</small></div><div className="wallet-actions"><Link className="button secondary" href="/promotions">ดูเงื่อนไข</Link></div></div>
-        <div className="wallet-cell"><div className="wallet-label">ยอดที่พักไว้</div><div className="wallet-amount">120.00<small>บาท</small></div><div className="wallet-actions"><Link className="button secondary" href="/wallet">ดูรายละเอียด</Link></div></div>
-        <div className="wallet-cell"><div className="wallet-label">ถอนออกได้</div><div className="wallet-amount">12,330.00<small>บาท</small></div><div className="wallet-actions"><Link className="button lime" href="/wallet/withdraw">ถอนเงิน</Link></div></div>
-      </div>
-    </div>
+  const [state, setState] = useState<HomeState>({ status: "loading" });
 
-    <section className="grid-2" style={{ marginTop: 18 }}>
-      <div className="stack">
-        <section className="panel"><div className="panel-title"><h2>งวดที่เปิดรับ</h2><Link href="/buy">ดูทั้งหมด →</Link></div><div className="draw-list">
-          {draws.map(([kind, code, name, detail, countdown]) => <div className="draw-row" key={name}><div className={`lottery-icon ${kind}`}>{code}</div><div className="draw-name"><strong>{name}</strong><span>{detail}</span></div><div className="countdown"><small>ปิดรับใน</small><span>{countdown}</span></div><Link className="button primary" href="/buy/bet">ซื้อเลย</Link></div>)}
-        </div></section>
-        <section className="panel"><div className="panel-title"><h2>โพยล่าสุดของฉัน</h2><Link href="/slips">ดูทั้งหมด →</Link></div><div className="activity-list">
-          <div className="activity-row"><span>10 ก.ย. 11:08</span><div><strong>สลากกินแบ่งรัฐบาล</strong><span className="small muted">708 · 2 รายการ</span></div><strong>200.00 บาท</strong><span className="status info">รอผล</span></div>
-          <div className="activity-row"><span>10 ก.ย. 09:42</span><div><strong>หวยลาวพัฒนา</strong><span className="small muted">27 · 1 รายการ</span></div><strong>100.00 บาท</strong><span className="status info">รอผล</span></div>
-          <div className="activity-row"><span>9 ก.ย. 20:15</span><div><strong>ฮานอยพิเศษ</strong><span className="small muted">640 · 3 รายการ</span></div><strong>300.00 บาท</strong><span className="status success">ถูกรางวัล</span></div>
-        </div></section>
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [wallet, orderPage, productPage] = await Promise.all([
+          memberApi.getWallet(),
+          memberApi.listOrders({ limit: 3 }),
+          memberApi.listProducts({ limit: 6 }),
+        ]);
+
+        let openDraws: MemberDraw[] = [];
+        let partialError: string | null = null;
+        try {
+          const pages = await Promise.all(productPage.items.map((product) => memberApi.listDraws(product.id, { limit: 10 })));
+          openDraws = pages.flatMap((page) => page.items).filter((draw) => draw.state === "OPEN").slice(0, 3);
+        } catch (drawError) {
+          partialError = describeMemberApiFailure(drawError).message;
+        }
+        if (!active) return;
+        setState({ status: "ready", balance: wallet, orders: orderPage.items, openDraws, partialError });
+      } catch (error) {
+        if (!active) return;
+        const failure = describeMemberApiFailure(error);
+        setState({ status: "failed", message: failure.message, code: failure.code, correlationId: failure.correlationId });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (state.status === "loading") {
+    return <main id="main"><section className="panel"><div className="panel-title"><h2>กำลังโหลดข้อมูลบัญชี</h2></div><p className="muted small">กำลังดึงยอดเงิน งวดที่เปิดรับ และโพยล่าสุดจาก API…</p></section></main>;
+  }
+
+  if (state.status === "failed") {
+    return <main id="main"><section className="panel"><div className="panel-title"><h2>โหลดหน้าแรกไม่สำเร็จ</h2><span className="status danger">{state.code}</span></div><p className="muted small">{state.message}</p>{state.correlationId && <p className="muted small">รหัสอ้างอิง: {state.correlationId}</p>}</section></main>;
+  }
+
+  const { balance, orders, openDraws, partialError } = state;
+  const cash = balance?.buckets.find((bucket) => bucket.bucket === "CASH");
+  const bonus = balance?.buckets.find((bucket) => bucket.bucket === "BONUS");
+  const reservedMinor = sumMinor((balance?.buckets ?? []).map((bucket) => bucket.reservedMinor));
+
+  return <main id="main" className="home-stage">
+    <section className="home-intro" aria-labelledby="home-heading">
+      <div className="home-intro-copy">
+        <div className="home-kicker">LOTTIFY MEMBER · THB</div>
+        <h1 id="home-heading">ทุกงวด ทุกโพย และทุกยอดเงิน อยู่ในที่เดียว</h1>
+        <p>เลือกงวดจากสถานะจริงของระบบ ตรวจ Quote ก่อนยืนยัน และติดตามโพยกับกระเป๋าจากข้อมูลล่าสุดของบัญชี</p>
+        <div className="home-primary-actions">
+          <Link className="button primary" href="/buy">เลือกงวดและซื้อหวย</Link>
+          <Link className="button secondary" href="/slips">ดูโพยของฉัน</Link>
+        </div>
       </div>
-      <div className="stack">
-        <section className="promo-card"><div className="panel-title"><h2>โปรโมชั่น</h2><Link href="/promotions">ดูทั้งหมด →</Link></div><strong>สมาชิกใหม่ รับโบนัส 100 บาท</strong><p className="muted small">โบนัสคงเหลือ 80 บาท · หมดอายุ 30 ก.ย. 2569</p><div className="progress"><span style={{ width: "50%" }} /></div><div className="progress-meta"><span>ทำยอดแล้ว 2,500 บาท</span><strong>50%</strong></div></section>
-        <section className="panel"><div className="panel-title"><h2>ทำรายการต่อ</h2></div><div className="menu-row"><div className="menu-icon">S</div><div><strong>สลากกินแบ่งรัฐบาล</strong><span>1 โพย · 6 รายการที่เตรียมไว้</span></div><Link className="button primary" href="/buy/bet">ทำรายการต่อ</Link></div></section>
-        <section className="panel" id="alerts"><div className="panel-title"><h2>การแจ้งเตือนสำคัญ</h2></div><div className="alert-list">
-          <div className="alert-row"><div className="alert-icon danger">!</div><div><strong>ใกล้ปิดรับสลากกินแบ่งรัฐบาล</strong><span>งวด 16 ก.ย. ปิดรับในอีกประมาณ 2 ชั่วโมง</span></div><span className="small muted">วันนี้</span></div>
-          <div className="alert-row"><div className="alert-icon">i</div><div><strong>ยืนยันตัวตนเพื่อใช้งานการถอนเงิน</strong><span>ทำให้เรียบร้อยก่อนส่งคำขอถอนครั้งถัดไป</span></div><Link className="text-link" href="/account/kyc">ไปยืนยันตัวตน</Link></div>
-          <div className="alert-row"><div className="alert-icon success">✓</div><div><strong>ผลฮานอยพิเศษได้รับการยืนยันแล้ว</strong><span>โพยของคุณได้รับเงินรางวัล 1,350 บาท</span></div><Link className="text-link" href="/slips">ดูโพย</Link></div>
-        </div></section>
+      <div className="home-balance" aria-label="สรุปกระเป๋า">
+        <div className="home-balance-label">เงินสดที่ใช้ได้</div>
+        <div className="home-balance-amount">{cash ? formatBaht(cash.availableMinor) : "ยังโหลดไม่ได้"}</div>
+        <div className="home-balance-meta">
+          <div><span>โบนัสที่ใช้ได้</span><strong>{bonus ? formatBaht(bonus.availableMinor) : "—"}</strong></div>
+          <div><span>ยอดที่พักไว้</span><strong>{formatBaht(reservedMinor)}</strong></div>
+        </div>
+        {balance && <p className="small" style={{ margin: "14px 0 0", color: "rgba(248,244,233,.54)" }}>ข้อมูล ณ {formatDateTime(balance.dataAsOf)}</p>}
       </div>
+    </section>
+
+    <section className="home-ledger">
+      <div className="stack">
+        <section className="home-section">
+          <div className="home-section-head"><h2>งวดที่เปิดรับ</h2><Link href="/buy">ดูทั้งหมด →</Link></div>
+          {openDraws.length === 0
+            ? <div className="notice warning"><b>!</b><div><strong>ยังไม่มีงวดที่เปิดรับ</strong>{partialError ? ` อ่านรายการงวดไม่สำเร็จ: ${partialError}` : " เมื่อมีงวดที่เผยแพร่และเปิดรับ ระบบจะแสดงที่นี่"}</div></div>
+            : <div>{openDraws.map((draw) => {
+              const status = describeDrawState(draw.state);
+              return <div className="home-draw-row" key={draw.id}>
+                <div className="home-draw-date">{draw.localDate.slice(5)}</div>
+                <div className="home-draw-name"><strong>งวด {draw.localDate}</strong><span>สินค้า {draw.productId} · ปิดรับ {formatDateTime(draw.cutoffAt)}</span></div>
+                <span className={`status ${status.tone}`}>{status.label}</span>
+                <Link className="button primary" href={`/buy/bet?drawId=${encodeURIComponent(draw.id)}`}>ซื้อเลย</Link>
+              </div>;
+            })}</div>}
+        </section>
+
+        <section className="home-section">
+          <div className="home-section-head"><h2>โพยล่าสุด</h2><Link href="/slips">ดูทั้งหมด →</Link></div>
+          {orders.length === 0
+            ? <div className="notice info"><b>i</b><div><strong>ยังไม่มีโพย</strong>เมื่อคุณยืนยันรายการซื้อสำเร็จ โพยจะปรากฏที่นี่</div></div>
+            : <div>{orders.map((order) => {
+              const status = describeOrderState(order.state);
+              return <div className="home-slip-row" key={order.id}>
+                <span>{formatDateTime(order.createdAt)}</span>
+                <div><strong>{order.productId}</strong><span className="small muted">{order.lines.map((line) => line.canonicalNumber).join(" · ")} · {order.lines.length} รายการ</span></div>
+                <strong>{formatBaht(order.totalStakeMinor)}</strong>
+                <span className={`status ${status.tone}`}>{status.label}</span>
+                <Link className="text-link" href={`/slips/detail?orderId=${encodeURIComponent(order.id)}`}>ดู →</Link>
+              </div>;
+            })}</div>}
+        </section>
+      </div>
+
+      <aside className="home-aside">
+        <section className="home-aside-block ticket">
+          <h2>กระเป๋าของฉัน</h2>
+          <p>ยอดถอนจริงจะถูกตรวจด้วย withdrawal preflight ก่อนส่งคำขอทุกครั้ง</p>
+          <div className="home-primary-actions">
+            <Link className="button secondary" href="/wallet/deposit">เติมเงิน</Link>
+            <Link className="button primary" href="/wallet/withdraw">ถอนเงิน</Link>
+          </div>
+        </section>
+        <section className="home-aside-block" id="alerts">
+          <h2>ทางลัด</h2>
+          <div className="home-shortcuts">
+            <Link className="home-shortcut" href="/wallet#transactions"><b>01</b><div><strong>ประวัติกระเป๋า</strong><span>รายการเงินล่าสุดและรายละเอียด</span></div><span>→</span></Link>
+            <Link className="home-shortcut" href="/promotions"><b>02</b><div><strong>โปรโมชั่นของฉัน</strong><span>โบนัส ยอดเล่น และเงื่อนไขสิทธิ์</span></div><span>→</span></Link>
+            <Link className="home-shortcut" href="/account/security"><b>03</b><div><strong>ความปลอดภัย</strong><span>เซสชัน อุปกรณ์ และการออกจากระบบ</span></div><span>→</span></Link>
+          </div>
+        </section>
+      </aside>
     </section>
   </main>;
 }

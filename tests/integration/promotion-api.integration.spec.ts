@@ -34,7 +34,7 @@ import { validTerms } from "../support/promotion-fixtures";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 const emailPrefix = "promotion-api-integration+";
-const phonePrefix = "+6696";
+const phonePrefix = "096";
 
 describe.runIf(runIntegration)("Promotion API HTTP boundary", () => {
   let app: INestApplication;
@@ -125,16 +125,37 @@ describe.runIf(runIntegration)("Promotion API HTTP boundary", () => {
         where: { id: { in: ledgerTransactionIds } },
         select: { id: true, accountingPeriodId: true },
       });
+      const ownAccountIds = (
+        await prisma.ledgerPosting.findMany({
+          where: { transactionId: { in: transactions.map((row) => row.id) } },
+          select: { accountId: true },
+          distinct: ["accountId"],
+        })
+      ).map((row) => row.accountId);
       await prisma.ledgerPosting.deleteMany({ where: { transactionId: { in: transactions.map((row) => row.id) } } });
       await prisma.financialTransaction.deleteMany({ where: { id: { in: transactions.map((row) => row.id) } } });
       await prisma.ledgerAccount.deleteMany({
         where: {
-          OR: [{ memberId: { in: [memberId, authorMemberId] } }, { systemCode: { startsWith: "promotion-funding:" } }],
+          OR: [{ memberId: { in: [memberId, authorMemberId] } }, { id: { in: ownAccountIds } }],
         },
       });
-      await prisma.accountingPeriod.deleteMany({
-        where: { id: { in: [...new Set(transactions.map((row) => row.accountingPeriodId))] } },
-      });
+      // Accounting periods are auto-created and shared across suites, so only the
+      // ones no transaction references any more may be removed — deleting a period
+      // another suite still uses violates its foreign key.
+      const periodIds = [...new Set(transactions.map((row) => row.accountingPeriodId))];
+      const stillReferencedPeriodIds = new Set(
+        (
+          await prisma.financialTransaction.findMany({
+            where: { accountingPeriodId: { in: periodIds } },
+            select: { accountingPeriodId: true },
+            distinct: ["accountingPeriodId"],
+          })
+        ).map((row) => row.accountingPeriodId),
+      );
+      const deletablePeriodIds = periodIds.filter((id) => !stillReferencedPeriodIds.has(id));
+      if (deletablePeriodIds.length > 0) {
+        await prisma.accountingPeriod.deleteMany({ where: { id: { in: deletablePeriodIds } } });
+      }
 
       await prisma.idempotencyRecord.deleteMany({
         where: { OR: [...adminIds.map((id) => ({ scope: { startsWith: `admin:${id}:promotion:` } })), { scope: { startsWith: "PROMOTION_CLAIM:" } }] },
@@ -161,7 +182,7 @@ describe.runIf(runIntegration)("Promotion API HTTP boundary", () => {
   });
 
   async function createMember(): Promise<string> {
-    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 8)}`;
+    const phone = `${phonePrefix}${randomUUID().replace(/\D/g, "").slice(0, 7)}`;
     const member = await prisma.member.create({ data: { phone } });
     return member.id;
   }

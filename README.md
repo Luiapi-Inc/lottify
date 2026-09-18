@@ -158,7 +158,7 @@ The Hermes checkout is configured with the Serena project `lottify` and the `lot
 Useful diagnostics:
 
 ```bash
-serena project health-check /home/ubuntu/lottify
+serena project health-check "$PWD"   # run from the checkout root
 serena mode list
 codex mcp get serena
 codex mcp list
