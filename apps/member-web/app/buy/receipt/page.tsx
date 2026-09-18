@@ -1,34 +1,135 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-
-type CancelState = "idle" | "review" | "pending" | "cancelled";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createIdempotencyKey,
+  memberApi,
+  type BetOrder,
+  type BetReceipt,
+  type MemberSettlementOutcome,
+} from "../../lib/member-api";
+import { ErrorState, LoadingState, Money, PageHeading, Section, StatusBadge } from "../../components/presentation";
 
 export default function ReceiptPage() {
-  const [cancelState, setCancelState] = useState<CancelState>("idle");
-  const cancelled = cancelState === "cancelled";
+  const [orderId, setOrderId] = useState("");
+  const [order, setOrder] = useState<BetOrder | null>(null);
+  const [receipt, setReceipt] = useState<BetReceipt | null>(null);
+  const [settlement, setSettlement] = useState<MemberSettlementOutcome | null>(null);
+  const [settlementError, setSettlementError] = useState<unknown>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
+  const cancelKey = useRef(createIdempotencyKey());
+
+  const load = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(null);
+    const [orderResult, receiptResult, settlementResult] = await Promise.allSettled([
+      memberApi.getOrder(id),
+      memberApi.getReceipt(id),
+      memberApi.getSettlement(id),
+    ]);
+    if (orderResult.status === "rejected") {
+      setError(orderResult.reason);
+      setLoading(false);
+      return;
+    }
+    setOrder(orderResult.value);
+    if (receiptResult.status === "fulfilled") setReceipt(receiptResult.value);
+    else setError(receiptResult.reason);
+    if (settlementResult.status === "fulfilled") {
+      setSettlement(settlementResult.value);
+      setSettlementError(null);
+    } else {
+      setSettlement(null);
+      setSettlementError(settlementResult.reason);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("orderId") ?? "";
+    setOrderId(id);
+    if (id) void load(id);
+    else {
+      setLoading(false);
+      setError(new Error("ไม่พบ orderId กรุณาเปิดใบรับรายการจากโพยของฉัน"));
+    }
+  }, [load]);
+
+  async function cancel() {
+    if (!order || !order.allowedActions.includes("CANCEL")) return;
+    setCancelling(true);
+    setError(null);
+    try {
+      const updated = await memberApi.cancelOrder(order.id, { version: order.version, reason: "MEMBER_REQUEST" }, cancelKey.current);
+      setOrder(updated);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return <main id="main">
-    <section className="receipt panel">
-      <div className="receipt-hero"><div className="success-check">✓</div><h1 style={{ margin: "0 0 7px" }}>ยืนยันรายการสำเร็จ</h1><p className="muted">ระบบยืนยันรายการแล้ว เก็บเลขอ้างอิงนี้ไว้สำหรับตรวจสอบภายหลัง</p><p className="receipt-ref">Order #ORD-20260910-843201 · ยืนยันเมื่อ 10 ก.ย. 2569 11:31:42 น.</p></div>
-      <div className="receipt-grid">
-        <div className="receipt-item"><span>หวย</span><strong>สลากกินแบ่งรัฐบาล</strong></div><div className="receipt-item"><span>งวด</span><strong>16 ก.ย. 2569</strong></div>
-        <div className="receipt-item"><span>ประเภท / เลข</span><strong>3 ตัวตรง · 708</strong></div><div className="receipt-item"><span>ยอดซื้อ / อัตราจ่าย</span><strong>100 บาท · x900</strong></div>
-        <div className="receipt-item"><span>ประเภท / เลข</span><strong>2 ตัวบน · 27</strong></div><div className="receipt-item"><span>ยอดซื้อ / อัตราจ่าย</span><strong>50 บาท · x95</strong></div>
-        <div className="receipt-item"><span>เงินสดที่ใช้</span><strong>120.00 บาท</strong></div><div className="receipt-item"><span>โบนัสที่ใช้</span><strong>30.00 บาท</strong></div>
-        <div className="receipt-item"><span>ปิดรับ</span><strong>16 ก.ย. 2569 · 15:15 น.</strong></div><div className="receipt-item"><span>สถานะ</span><span className={`status ${cancelled ? "neutral" : "info"}`}>{cancelled ? "ยกเลิกแล้ว" : "ยืนยันแล้ว · รอผล"}</span></div>
-      </div>
-      <div className="notice info" style={{ marginTop: 18 }}><b>i</b><div><strong>ใบรับรายการนี้เก็บเงื่อนไขที่ยอมรับไว้</strong>หากภายหลังมีการยกเลิก คืนเงิน หรือแก้ไขผล คุณจะเห็นประวัติเป็นลำดับโดยไม่ลบข้อมูลเดิม</div></div>
-      {cancelled && <div className="cancel-history"><div className="panel-title"><h2>ประวัติการยกเลิก</h2></div><div className="stack"><div className="notice info"><b>1</b><div><strong>ยืนยันรายการ · 10 ก.ย. 11:31</strong>รับโพย ORD-20260910-843201 ยอดซื้อ 150.00 บาท</div></div><div className="notice warning"><b>2</b><div><strong>ขอยกเลิกโพย</strong>ระบบตรวจ cutoff และนโยบายการยกเลิกของงวดอีกครั้งก่อนคืนเงิน</div></div><div className="notice success"><b>3</b><div><strong>คืนเงินสำเร็จ · ยกเลิกแล้ว</strong>ยอดคืน 150.00 บาทถูกบันทึกแล้ว และโพยสิ้นสุดในสถานะยกเลิก</div></div></div></div>}
-      <div className="receipt-actions">{!cancelled && <button className="button danger" type="button" onClick={() => setCancelState("review")}>ยกเลิกโพย</button>}<Link className="button secondary" href="/buy">ซื้อรายการใหม่</Link><Link className="button primary" href="/slips">ไปโพยของฉัน</Link><Link className="button secondary" href="/">กลับหน้าแรก</Link></div>
-    </section>
+    <PageHeading
+      eyebrow="BETTING · RECEIPT"
+      title="ใบรับรายการจากข้อมูลที่ยืนยันแล้ว"
+      description="Receipt แสดง accepted terms ที่ backend บันทึกไว้ ไม่ reconstruct จาก Quote ใน browser และ Settlement ถูกอ่านแยกจาก authoritative endpoint"
+      action={<button className="button secondary" type="button" disabled={!orderId} onClick={() => orderId && void load(orderId)}>รีเฟรชสถานะ</button>}
+    />
 
-    {cancelState !== "idle" && cancelState !== "cancelled" && <div className="cancel-overlay">
-      <section className="cancel-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-title">
-        {cancelState === "review" && <><button className="cancel-sheet-close" type="button" aria-label="ปิด" onClick={() => setCancelState("idle")}>×</button><span className="status warning">ก่อน cutoff</span><h2 id="cancel-title">ยกเลิกโพยนี้?</h2><p className="muted">ระบบจะตรวจนโยบายของหวย/งวดและเวลาปิดรับอีกครั้งก่อนรับคำขอ</p><div className="cancel-summary"><div><span>เลขอ้างอิง</span><strong>ORD-20260910-843201</strong></div><div><span>ยอดซื้อ</span><strong>150.00 บาท</strong></div><div><span>ปิดรับ</span><strong>16 ก.ย. 2569 · 15:15 น.</strong></div><div><span>ยอดคืนเมื่อสำเร็จ</span><strong>150.00 บาท</strong></div></div><div className="notice warning"><b>!</b><div><strong>การยกเลิกจะสมบูรณ์เมื่อคืนเงินสำเร็จ</strong>ระหว่างดำเนินการโพยจะแสดงสถานะ “กำลังยกเลิก” และยังไม่ถือว่ายกเลิกเสร็จ</div></div><div className="cancel-sheet-actions"><button className="button secondary" type="button" onClick={() => setCancelState("idle")}>ยังไม่ยกเลิก</button><button className="button danger" type="button" onClick={() => setCancelState("pending")}>ยืนยันยกเลิกโพย</button></div></>}
-        {cancelState === "pending" && <div className="cancel-flow-state"><div className="cancel-state-icon pending">…</div><h2>กำลังยกเลิกโพย</h2><p>รับคำขอแล้ว กำลังยืนยันการคืนเงิน 150.00 บาท</p><div className="notice info"><b>i</b><div><strong>ยังไม่ถือว่ายกเลิกเสร็จ</strong>สถานะจะเปลี่ยนเป็น “ยกเลิกแล้ว” เมื่อยอดคืนถูกบันทึกสำเร็จ</div></div><div className="cancel-sheet-actions single"><button className="button primary" type="button" onClick={() => setCancelState("cancelled")}>จำลองคืนเงินสำเร็จ</button></div></div>}
-      </section>
-    </div>}
+    {loading ? <LoadingState label="กำลังโหลด Order, Receipt และ Settlement…" /> : null}
+    {error ? <div style={{ marginBottom: 16 }}><ErrorState error={error} retry={orderId ? () => void load(orderId) : undefined} /></div> : null}
+
+    {order && receipt ? <section className="grid-2">
+      <div className="stack">
+        <section className="receipt">
+          <div className="receipt-hero">
+            <div className="success-check">✓</div>
+            <h1 style={{ marginBottom: 7 }}>ระบบรับรายการแล้ว</h1>
+            <p className="muted">Order และ Receipt ด้านล่างคือข้อมูล authoritative ที่โหลดใหม่จาก API</p>
+            <p className="receipt-ref">{receipt.id} · Order {order.id}</p>
+          </div>
+          <div className="receipt-grid">
+            <div className="receipt-item"><span>สถานะ Order</span><StatusBadge tone={order.state === "CONFIRMED" || order.state === "SETTLED" ? "success" : order.state === "CANCELLED" ? "neutral" : "info"}>{order.state}</StatusBadge></div>
+            <div className="receipt-item"><span>ยอดซื้อที่ยอมรับ</span><strong><Money minor={receipt.terms.totalStakeMinor} /></strong></div>
+            <div className="receipt-item"><span>Product</span><strong>{receipt.terms.productId}</strong></div>
+            <div className="receipt-item"><span>Product version</span><strong>{receipt.terms.productVersionId}</strong></div>
+            <div className="receipt-item"><span>Draw</span><strong>{receipt.terms.drawReference ?? order.drawId}</strong></div>
+            <div className="receipt-item"><span>Cutoff</span><strong>{receipt.terms.drawCutoffAt ? new Date(receipt.terms.drawCutoffAt).toLocaleString("th-TH") : "—"}</strong></div>
+            <div className="receipt-item"><span>Accepted at</span><strong>{new Date(receipt.terms.acceptedAt).toLocaleString("th-TH")}</strong></div>
+            <div className="receipt-item"><span>Digest</span><strong style={{ overflowWrap: "anywhere" }}>{receipt.contentDigest}</strong></div>
+          </div>
+        </section>
+
+        <Section title="Accepted Bet Lines" subtitle="เก็บ payout snapshot ตาม Receipt">
+          <div className="table-wrap"><table><thead><tr><th>Bet Type</th><th>เลข</th><th>Stake</th><th>Accepted payout</th></tr></thead><tbody>
+            {receipt.terms.lines.map((line, index) => <tr key={index}><td>{line.betTypeCode}</td><td><strong>{line.canonicalNumber}</strong></td><td><Money minor={line.stakeMinor} /></td><td>{Object.keys(line.resolvedPayout).length ? JSON.stringify(line.resolvedPayout) : "server snapshot"}</td></tr>)}
+          </tbody></table></div>
+        </Section>
+      </div>
+
+      <aside className="stack">
+        <Section title="Settlement" subtitle="GET /orders/{id}/settlement">
+          {settlement ? <div className="data-list">
+            <div className="data-row"><div className="data-main"><strong>ผลล่าสุด</strong><span>Batch {settlement.batchState ?? "ยังไม่มี batch"}</span></div><StatusBadge tone={settlement.authoritative ? "success" : "warning"}>{settlement.authoritative ? "AUTHORITATIVE" : "PENDING"}</StatusBadge></div>
+            <div className="data-row"><div className="data-main"><strong>{settlement.outcome ?? "ยังไม่มีผล"}</strong><span>เงินรางวัลที่ server รายงาน</span></div><div className="data-meta"><strong><Money minor={settlement.payoutMinor} /></strong></div></div>
+          </div> : settlementError ? <div className="state-card"><span className="state-symbol">…</span><div><strong>Settlement ยังไม่พร้อม</strong><p>ผลจะไม่ถูกเดาหรือสร้างจาก client กดรีเฟรชเมื่อต้องการตรวจใหม่</p></div></div> : null}
+        </Section>
+
+        <Section title="Order actions" subtitle={`version ${order.version}`}>
+          <div className="data-row"><div className="data-main"><strong>Allowed actions</strong><span>{order.allowedActions.join(", ") || "ไม่มี action ที่อนุญาต"}</span></div><StatusBadge tone="info">{order.state}</StatusBadge></div>
+          {order.allowedActions.includes("CANCEL") ? <button className="button danger block" type="button" disabled={cancelling} onClick={() => void cancel()}>{cancelling ? "กำลังส่งคำขอยกเลิก…" : "ขอยกเลิกโพย"}</button> : null}
+          {order.state === "CANCELLING" ? <div className="notice warning" style={{ marginTop: 12 }}><b>!</b><div><strong>ยังไม่ถือว่ายกเลิกเสร็จ</strong>UI จะรอ authoritative refund/order state ก่อนแสดง CANCELLED</div></div> : null}
+        </Section>
+
+        <div className="action-grid">
+          <Link className="action-card" href="/slips"><b>≡</b><div><strong>โพยของฉัน</strong><span>ดูประวัติทั้งหมด</span></div></Link>
+          <Link className="action-card" href="/buy"><b>+</b><div><strong>ซื้ออีก</strong><span>เลือก Draw ใหม่</span></div></Link>
+        </div>
+      </aside>
+    </section> : null}
   </main>;
 }

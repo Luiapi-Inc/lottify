@@ -7,7 +7,6 @@ export type AuthFlowPurpose = MemberAuthPurpose | "RECOVERY";
 export interface PendingAuthFlow {
   purpose: AuthFlowPurpose;
   phone: string;
-  ref?: string;
   deliveredTo: string;
   retryAfterSeconds: number | null;
   /** Password set on the registration page and carried into the REGISTER OTP
@@ -32,7 +31,6 @@ export function readAuthFlow(): PendingAuthFlow | null {
       phone: value.phone,
       deliveredTo: value.deliveredTo,
       retryAfterSeconds: typeof value.retryAfterSeconds === "number" ? value.retryAfterSeconds : null,
-      ref: typeof value.ref === "string" ? value.ref : undefined,
       password: typeof value.password === "string" ? value.password : undefined,
     };
   } catch {

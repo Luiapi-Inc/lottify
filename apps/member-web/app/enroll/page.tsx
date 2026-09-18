@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "../components/auth-shell";
+import { AuthFormIntro, AuthorityCallout } from "../components/workflow";
 import { saveAuthFlow } from "../lib/auth-flow";
 import { MemberApiFailure, memberApi } from "../lib/member-api";
 
@@ -40,6 +41,6 @@ export default function EnrollPage() {
     }
   };
   return <AuthShell title={<>บัญชีเดิม<br />ตั้งรหัสผ่านให้พร้อม</>} copy="บัญชีของคุณยังไม่มีรหัสผ่าน เราจะส่ง OTP เพื่อยืนยันว่าเป็นคุณ แล้วให้ตั้งรหัสผ่านใหม่เพื่อเข้าใช้งานครั้งต่อไป" foot="ขั้นตอนตั้งรหัสผ่านครั้งแรก">
-    <form className="auth-card" onSubmit={submit}><h2>ตั้งรหัสผ่านครั้งแรก</h2><p>กรอกเบอร์โทรศัพท์ที่ใช้สมัครบัญชี Lottify เพื่อรับรหัส OTP</p><div className="field"><label htmlFor="phone">เบอร์โทรศัพท์</label><input id="phone" className="input" inputMode="tel" autoComplete="tel" placeholder="08X-XXX-XXXX" value={phone} onChange={(event) => { setPhone(event.target.value); setError(""); }} /></div><div className="notice info" style={{ marginTop: 14 }}><b>i</b><div><strong>หลังยืนยัน OTP</strong>ระบบจะให้ตั้งรหัสผ่านใหม่ จากนั้นกลับมาเข้าสู่ระบบด้วยเบอร์โทรและรหัสผ่าน</div></div><div className="field-error">{error}</div><button className={`button lime block ${submitting ? "disabled" : ""}`} type="submit" disabled={submitting} style={{ marginTop: 16 }}>{submitting ? "กำลังส่งรหัส…" : "รับรหัส OTP →"}</button><p className="small muted" style={{ marginTop: 18, textAlign: "center" }}>จำรหัสผ่านได้แล้ว? <Link className="text-link" href="/login">เข้าสู่ระบบ</Link></p></form>
+    <form className="auth-card" onSubmit={submit}><AuthFormIntro step="PASSWORD ENROLLMENT · STEP 1" title="ตั้งรหัสผ่านครั้งแรก" description="บัญชีเดิมที่ยังไม่มีรหัสผ่านต้องยืนยัน OTP purpose PASSWORD_ENROLL ก่อนเข้าสู่ขั้นตอนตั้งรหัสผ่าน" /><AuthorityCallout>หน้านี้ไม่เปลี่ยนสถานะ KYC หรือ readiness การสำเร็จของ password enrollment เป็นคนละ capability กับการยืนยันตัวตนระดับ KYC</AuthorityCallout><div className="field" style={{ marginTop: 18 }}><label htmlFor="phone">เบอร์โทรศัพท์</label><input id="phone" className="input" inputMode="tel" autoComplete="tel" placeholder="08X-XXX-XXXX" value={phone} onChange={(event) => { setPhone(event.target.value); setError(""); }} /></div><div className="notice info" style={{ marginTop: 14 }}><b>i</b><div><strong>หลังยืนยัน OTP</strong>ระบบจะให้ตั้งรหัสผ่านใหม่ จากนั้นกลับมาเข้าสู่ระบบด้วยเบอร์โทรและรหัสผ่าน</div></div><div className="field-error">{error}</div><button className={`button lime block ${submitting ? "disabled" : ""}`} type="submit" disabled={submitting} style={{ marginTop: 16 }}>{submitting ? "กำลังส่งรหัส…" : "รับรหัส OTP →"}</button><p className="small muted" style={{ marginTop: 18, textAlign: "center" }}>จำรหัสผ่านได้แล้ว? <Link className="text-link" href="/login">เข้าสู่ระบบ</Link></p></form>
   </AuthShell>;
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AuthShell } from "../components/auth-shell";
+import { AuthFormIntro, AuthorityCallout } from "../components/workflow";
 import {
   memberApi,
   type CapabilityReadiness,
@@ -118,9 +119,8 @@ export default function EligibilityPage() {
       foot="ขั้นตอน 5 จาก 5 · Eligibility"
     >
       <div className="auth-card onboarding-card eligibility-card">
-        <div className="onboarding-step">ตรวจความพร้อมก่อนเริ่มใช้งาน</div>
-        <h2>บัญชีพร้อมสำหรับอะไรบ้าง</h2>
-        <p>ผลด้านล่างมาจาก readiness policy ของระบบและมีอายุจำกัด</p>
+        <AuthFormIntro step="ONBOARDING · STEP 5" title="บัญชีพร้อมสำหรับอะไรบ้าง" description="อ่าน capability readiness แยก BET, DEPOSIT และ WITHDRAWAL จาก policy ปัจจุบัน ไม่รวมเป็น accountReady ค่าเดียว" />
+        <AuthorityCallout>ผล readiness มีอายุและระบบจะประเมินซ้ำในจุดทำรายการสำคัญ หน้านี้จึงไม่สร้างสิทธิ์จาก client state เอง</AuthorityCallout>
 
         {loading && <div className="notice info"><b>i</b><div><strong>กำลังตรวจความพร้อม</strong>กำลังอ่าน Terms, Profile, KYC และ Eligibility ล่าสุดจากระบบ</div></div>}
         {error && <div className="notice warning"><b>!</b><div><strong>ตรวจความพร้อมไม่สำเร็จ</strong>{error}</div></div>}

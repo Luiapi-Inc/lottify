@@ -1,52 +1,155 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  memberApi,
+  type AddPayoutDestinationRequest,
+  type PayoutDestination,
+} from "../../lib/member-api";
+import { ErrorState, LoadingState, PageHeading, Section, StatusBadge } from "../../components/presentation";
 
-type FlowState = "closed" | "reauth" | "details" | "review" | "verified";
-type Destination = { bank: string; account: string };
-
-const mask = ({ bank, account }: Destination) => `${bank} ••••${account.slice(-4)}`;
+const emptyDraft: AddPayoutDestinationRequest = {
+  type: "BANK_ACCOUNT",
+  bankCode: "",
+  accountNumber: "",
+  accountHolderName: "",
+};
 
 export default function BankAccountPage() {
-  const [current, setCurrent] = useState<Destination>({ bank: "กสิกรไทย", account: "4821" });
-  const [flow, setFlow] = useState<FlowState>("closed");
-  const [otp, setOtp] = useState("");
-  const [draft, setDraft] = useState<Destination>({ bank: "", account: "" });
-  const [error, setError] = useState("");
-  useEffect(() => {
+  const [items, setItems] = useState<PayoutDestination[]>([]);
+  const [selected, setSelected] = useState<PayoutDestination | null>(null);
+  const [draft, setDraft] = useState<AddPayoutDestinationRequest>(emptyDraft);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const stored = window.localStorage.getItem("lottify-bank-destination");
-      if (stored) setCurrent(JSON.parse(stored));
-    } catch {}
+      const result = await memberApi.listPayoutDestinations();
+      setItems(result.items);
+      if (result.items[0]) {
+        const detail = await memberApi.getPayoutDestination(result.items[0].id);
+        setSelected(detail);
+      } else {
+        setSelected(null);
+      }
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  const close = () => { setFlow("closed"); setError(""); setOtp(""); setDraft({ bank: "", account: "" }); };
-  const nextFromReauth = () => {
-    if (otp.length !== 6) return setError("กรอกรหัส OTP ให้ครบ 6 หลักเพื่อยืนยันซ้ำ");
-    setError(""); setFlow("details");
-  };
-  const nextFromDetails = () => {
-    if (!draft.bank.trim() || !draft.account.trim()) return setError("กรอกธนาคารและเลขบัญชีรับเงินก่อนส่งตรวจ");
-    setError(""); setFlow("review");
-  };
-  const verify = () => {
-    setCurrent(draft);
-    try { window.localStorage.setItem("lottify-bank-destination", JSON.stringify(draft)); } catch {}
-    setFlow("verified");
-  };
-  const badge = flow === "details" ? ["info", "กรอกปลายทางใหม่"] : flow === "review" ? ["warning", "กำลังตรวจสอบ"] : flow === "verified" ? ["success", "ยืนยันแล้ว"] : ["warning", "ต้องยืนยันซ้ำ"];
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function selectDestination(id: string) {
+    setError(null);
+    try {
+      setSelected(await memberApi.getPayoutDestination(id));
+    } catch (cause) {
+      setError(cause);
+    }
+  }
+
+  async function add(event: FormEvent) {
+    event.preventDefault();
+    if (!draft.bankCode.trim() || !draft.accountNumber.trim() || !draft.accountHolderName.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const created = await memberApi.addPayoutDestination({
+        type: "BANK_ACCOUNT",
+        bankCode: draft.bankCode.trim().toUpperCase(),
+        accountNumber: draft.accountNumber.replace(/\D/g, ""),
+        accountHolderName: draft.accountHolderName.trim(),
+      });
+      setDraft(emptyDraft);
+      setShowForm(false);
+      const detail = await memberApi.getPayoutDestination(created.id);
+      setSelected(detail);
+      const result = await memberApi.listPayoutDestinations();
+      setItems(result.items);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function verify() {
+    if (!selected || selected.status === "VERIFIED") return;
+    setVerifying(true);
+    setError(null);
+    try {
+      const result = await memberApi.verifyPayoutDestination(selected.id);
+      setSelected(result);
+      setItems((current) => current.map((item) => item.id === result.id ? result : item));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   return <main id="main">
-    <div className="breadcrumb"><Link href="/account">บัญชี</Link><span>/</span><span>บัญชีรับเงิน</span></div>
-    <div className="page-head"><div><h1>บัญชีรับเงิน</h1><p>จัดการปลายทางรับเงินที่ยืนยันแล้ว การเพิ่มหรือเปลี่ยนปลายทางเป็นรายการสำคัญและอาจต้องยืนยันซ้ำก่อนส่งตรวจ</p></div><span className="status success">ยืนยันแล้ว</span></div>
-    <section className="grid-2 account-verification-layout"><div className="stack">
-      <section className="panel"><div className="panel-title"><h2>ปลายทางปัจจุบัน</h2></div><div className="bank-destination-card"><div className="bank-mark">{current.bank.trim().charAt(0).toUpperCase() || "B"}</div><div><strong>{mask(current)}</strong><span>ปลายทางปัจจุบัน · ผ่านการตรวจสำหรับการใช้งานในตัวอย่างนี้</span></div><span className="status success">ใช้งานได้</span></div><button className="button secondary block" type="button" onClick={() => { setFlow("reauth"); setOtp(""); setDraft({ bank: "", account: "" }); setError(""); }} style={{ marginTop: 14 }}>เปลี่ยนบัญชีรับเงิน</button></section>
-      {flow !== "closed" && <section className="panel"><div className="panel-title"><h2>เปลี่ยนบัญชีรับเงิน</h2><span className={`status ${badge[0]}`}>{badge[1]}</span></div>
-        {flow === "reauth" && <><div className="bank-flow-steps"><div className="bank-flow-step"><strong>1 · ยืนยันว่าเป็นคุณ</strong><span>รายการเปลี่ยนปลายทางมีความอ่อนไหว ระบบอาจขอ re-auth/OTP ตาม policy</span></div></div><div className="reauth-code">{Array.from({ length: 6 }, (_, index) => <input key={index} inputMode="numeric" maxLength={1} aria-label={`OTP สำหรับยืนยันซ้ำหลักที่ ${index + 1}`} value={otp[index] ?? ""} onChange={(event) => { const digit = event.target.value.replace(/\D/g, "").slice(0, 1); setOtp(`${otp.slice(0, index)}${digit}${otp.slice(index + 1)}`.slice(0, 6)); }} />)}</div><div className="field-error">{error}</div><div className="verification-actions"><button className="button primary" type="button" onClick={nextFromReauth}>ยืนยัน OTP →</button><button className="button secondary" type="button" onClick={close}>ยกเลิก</button></div></>}
-        {flow === "details" && <><div className="bank-flow-steps"><div className="bank-flow-step"><strong>2 · ระบุบัญชีรับเงินใหม่</strong><span>OTP เป็นเพียง re-auth ขั้นตอนนี้ยังต้องระบุปลายทางใหม่และส่งให้ระบบตรวจแยกต่างหาก</span></div></div><div className="form-grid" style={{ marginTop: 14 }}><div className="field"><label htmlFor="bank-name">ธนาคาร</label><input id="bank-name" className="input" value={draft.bank} onChange={(event) => setDraft({ ...draft, bank: event.target.value })} placeholder="ชื่อธนาคาร" /></div><div className="field"><label htmlFor="bank-account">เลขบัญชีรับเงิน</label><input id="bank-account" className="input" inputMode="numeric" autoComplete="off" value={draft.account} onChange={(event) => setDraft({ ...draft, account: event.target.value.replace(/\D/g, "") })} placeholder="กรอกเลขบัญชี" /></div></div><div className="field-error">{error}</div><div className="verification-actions"><button className="button primary" type="button" onClick={nextFromDetails}>ตรวจข้อมูลก่อนส่ง →</button><button className="button secondary" type="button" onClick={close}>ยกเลิก</button></div></>}
-        {flow === "review" && <><div className="bank-flow-steps"><div className="bank-flow-step"><strong>3 · ส่งปลายทางใหม่เพื่อตรวจแล้ว</strong><span>{mask(draft)} · OTP ผ่านแล้ว แต่ยังไม่ถือว่าปลายทางใหม่ได้รับอนุมัติ ระบบต้องตรวจ verification/risk/eligibility แยกอีกครั้ง</span></div><div className="bank-flow-step"><strong>ปลายทางเดิมยังคงใช้ได้</strong><span>ตัวอย่างนี้ไม่สลับปลายทางจนกว่าผลตรวจของปลายทางใหม่จะยืนยันแล้ว</span></div></div><div className="verification-actions" style={{ marginTop: 14 }}><button className="button secondary" type="button" onClick={verify}>จำลองผลตรวจผ่าน</button></div></>}
-        {flow === "verified" && <><div className="notice success"><b>✓</b><div><strong>ปลายทางใหม่ผ่านการตรวจแล้ว</strong>{mask(current)} เป็นปลายทางปัจจุบันใน frontend preview และยังต้องผ่าน Withdrawal eligibility ณ เวลาจ่าย</div></div><div className="verification-actions" style={{ marginTop: 14 }}><button className="button secondary" type="button" onClick={close}>ปิด</button></div></>}
-      </section>}
-    </div><aside className="stack"><section className="panel"><div className="panel-title"><h2>การตรวจแยกกัน</h2></div><div className="notice info"><b>i</b><div><strong>ยืนยันปลายทาง ≠ KYC</strong>สถานะของบัญชีรับเงินเป็นคนละ verification กับ Member/KYC และระบบจะตรวจ eligibility ของปลายทางอีกครั้งก่อนจ่ายเงินจริง</div></div><div className="notice warning" style={{ marginTop: 10 }}><b>!</b><div><strong>OTP เป็นเพียง re-auth</strong>การกรอก OTP สำเร็จไม่ได้แปลว่าปลายทางใหม่ได้รับอนุมัติ ระบบยังต้องตรวจสถานะและ policy ของปลายทาง</div></div></section><Link className="button secondary block" href="/account">← กลับบัญชี</Link></aside></section>
+    <PageHeading
+      eyebrow="PAYOUT DESTINATIONS"
+      title="บัญชีรับเงิน"
+      description="เลขบัญชีเต็มใช้เฉพาะตอนส่งฟอร์มเพิ่มปลายทาง หลังจากนั้น UI แสดงเฉพาะค่าที่ API mask ให้ และสถานะ verification เป็นคนละเรื่องกับ KYC"
+      action={<button className="button primary" type="button" onClick={() => setShowForm((value) => !value)}>{showForm ? "ปิดฟอร์ม" : "+ เพิ่มบัญชีรับเงิน"}</button>}
+    />
+
+    {loading ? <LoadingState label="กำลังโหลดบัญชีรับเงิน…" /> : null}
+    {error ? <div style={{ marginBottom: 16 }}><ErrorState error={error} retry={() => void load()} /></div> : null}
+
+    <section className="grid-2">
+      <div className="stack">
+        {showForm ? <Section title="เพิ่ม BANK_ACCOUNT" subtitle="ข้อมูลเลขบัญชีเต็มจะไม่ถูกเก็บใน localStorage หรือ state หลังส่งสำเร็จ">
+          <form className="form-grid" onSubmit={add}>
+            <div className="field"><label htmlFor="bank-code">รหัสธนาคาร</label><input id="bank-code" value={draft.bankCode} placeholder="KBANK" onChange={(event) => setDraft((current) => ({ ...current, bankCode: event.target.value }))} /></div>
+            <div className="field"><label htmlFor="holder-name">ชื่อเจ้าของบัญชี</label><input id="holder-name" value={draft.accountHolderName} autoComplete="name" onChange={(event) => setDraft((current) => ({ ...current, accountHolderName: event.target.value }))} /></div>
+            <div className="field full"><label htmlFor="account-number">เลขบัญชี</label><input id="account-number" inputMode="numeric" autoComplete="off" value={draft.accountNumber} onChange={(event) => setDraft((current) => ({ ...current, accountNumber: event.target.value.replace(/\D/g, "") }))} /></div>
+            <div className="field full"><button className="button lime block" disabled={submitting} type="submit">{submitting ? "กำลังเพิ่ม…" : "ส่งบัญชีรับเงินให้ API"}</button></div>
+          </form>
+        </Section> : null}
+
+        <Section title="ปลายทางทั้งหมด" subtitle={`${items.length} รายการจาก payout-destinations`}>
+          {items.length ? <div className="data-list">{items.map((item) => <button
+            type="button"
+            key={item.id}
+            className="data-row"
+            style={{ width: "100%", textAlign: "left", borderTop: 0, borderLeft: 0, borderRight: 0, cursor: "pointer", background: selected?.id === item.id ? "var(--mint)" : "transparent" }}
+            onClick={() => void selectDestination(item.id)}
+          >
+            <div className="data-main"><strong>{bankLabel(item.bankCode)} · {item.accountNumberMasked}</strong><span>{item.accountHolderName} · {item.id}</span></div>
+            <StatusBadge tone={item.status === "VERIFIED" ? "success" : item.status === "REJECTED" ? "danger" : "warning"}>{item.status}</StatusBadge>
+          </button>)}</div> : !loading ? <div className="state-card"><span className="state-symbol">+</span><div><strong>ยังไม่มีบัญชีรับเงิน</strong><p>เพิ่มบัญชีเพื่อใช้เป็น Payout Destination สำหรับ Withdrawal</p></div></div> : null}
+        </Section>
+      </div>
+
+      <aside className="stack">
+        <Section title="รายละเอียดปลายทาง" subtitle="อ่านจาก GET /payout-destinations/{id}">
+          {selected ? <div className="data-list">
+            <div className="data-row"><div className="data-main"><strong>{bankLabel(selected.bankCode)} · {selected.accountNumberMasked}</strong><span>{selected.accountHolderName}</span></div><StatusBadge tone={selected.status === "VERIFIED" ? "success" : selected.status === "REJECTED" ? "danger" : "warning"}>{selected.status}</StatusBadge></div>
+            <div className="data-row"><div className="data-main"><strong>Currency</strong><span>{selected.currency}</span></div><div className="data-meta"><strong>v{selected.version}</strong></div></div>
+            <div className="data-row"><div className="data-main"><strong>Verification evidence</strong><span>{selected.verificationEvidenceRef ?? "ยังไม่มีหลักฐาน verification"}</span></div><div className="data-meta"><strong>{selected.verifiedAt ? new Date(selected.verifiedAt).toLocaleString("th-TH") : "—"}</strong></div></div>
+          </div> : <div className="state-card"><span className="state-symbol">○</span><div><strong>เลือกบัญชีรับเงิน</strong><p>รายละเอียดและสถานะจะโหลดจาก API</p></div></div>}
+        </Section>
+
+        {selected && selected.status !== "VERIFIED" ? <button className="button primary block" type="button" disabled={verifying} onClick={() => void verify()}>{verifying ? "กำลังตรวจสอบ…" : "ส่งตรวจ Payout Destination"}</button> : null}
+        <div className="notice info"><b>i</b><div><strong>Verification ≠ KYC</strong>ปลายทางที่ VERIFIED ยังต้องผ่าน Withdrawal eligibility และ risk policy ณ เวลาถอนเงิน</div></div>
+        <Link className="button secondary block" href="/wallet/withdraw">ไปหน้าถอนเงิน →</Link>
+      </aside>
+    </section>
   </main>;
+}
+
+function bankLabel(code: string): string {
+  const labels: Record<string, string> = { KBANK: "กสิกรไทย", SCB: "ไทยพาณิชย์", KTB: "กรุงไทย", BBL: "กรุงเทพ", BAY: "กรุงศรี" };
+  return labels[code] ?? code;
 }

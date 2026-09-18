@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "../components/auth-shell";
+import { AuthFormIntro, AuthorityCallout } from "../components/workflow";
 import { saveAuthFlow } from "../lib/auth-flow";
 import { MemberApiFailure, memberApi } from "../lib/member-api";
 
@@ -40,6 +41,6 @@ export default function ForgotPasswordPage() {
     }
   };
   return <AuthShell title={<>ลืมรหัสผ่าน?<br />เราช่วยคุณได้</>} copy="เราจะส่งรหัส OTP ไปยังเบอร์โทรที่ยืนยันไว้ เพื่อยืนยันว่าเป็นคุณ แล้วให้ตั้งรหัสผ่านใหม่ การรีเซ็ตจะออกจากระบบทุกอุปกรณ์" foot="การกู้คืนผ่านเบอร์โทรที่ยืนยัน">
-    <form className="auth-card" onSubmit={submit}><h2>ลืมรหัสผ่าน</h2><p>กรอกเบอร์โทรศัพท์ที่ใช้กับบัญชี Lottify เพื่อรับรหัส OTP</p><div className="field"><label htmlFor="phone">เบอร์โทรศัพท์</label><input id="phone" className="input" inputMode="tel" autoComplete="tel" placeholder="08X-XXX-XXXX" value={phone} onChange={(event) => { setPhone(event.target.value); setError(""); }} /></div><div className="notice warning" style={{ marginTop: 14 }}><b>!</b><div><strong>หลังรีเซ็ตจะออกจากระบบทุกอุปกรณ์</strong>คุณต้องเข้าสู่ระบบใหม่ด้วยรหัสผ่านที่ตั้งใหม่</div></div><div className="field-error">{error}</div><button className={`button lime block ${submitting ? "disabled" : ""}`} type="submit" disabled={submitting} style={{ marginTop: 16 }}>{submitting ? "กำลังส่งรหัส…" : "ส่งรหัส OTP →"}</button><p className="small muted" style={{ marginTop: 18, textAlign: "center" }}>จำรหัสได้แล้ว? <Link className="text-link" href="/login">เข้าสู่ระบบ</Link></p></form>
+    <form className="auth-card" onSubmit={submit}><AuthFormIntro step="RECOVERY · STEP 1" title="ขอรหัสกู้คืนบัญชี" description="กรอกเบอร์โทรศัพท์ของบัญชีเพื่อเริ่ม recovery challenge โดยใช้ flow แยกจาก registration OTP" /><AuthorityCallout tone="warning" title="Recovery OTP ไม่ใช่ KYC">OTP พิสูจน์การครอบครองช่องทางติดต่อเท่านั้น การกู้คืนที่มีความเสี่ยงสูงยังอยู่ภายใต้ policy และ evidence ของระบบ</AuthorityCallout><div className="field" style={{ marginTop: 18 }}><label htmlFor="phone">เบอร์โทรศัพท์</label><input id="phone" className="input" inputMode="tel" autoComplete="tel" placeholder="08X-XXX-XXXX" value={phone} onChange={(event) => { setPhone(event.target.value); setError(""); }} /></div><div className="notice warning" style={{ marginTop: 14 }}><b>!</b><div><strong>หลังรีเซ็ตจะออกจากระบบทุกอุปกรณ์</strong>คุณต้องเข้าสู่ระบบใหม่ด้วยรหัสผ่านที่ตั้งใหม่</div></div><div className="field-error">{error}</div><button className={`button lime block ${submitting ? "disabled" : ""}`} type="submit" disabled={submitting} style={{ marginTop: 16 }}>{submitting ? "กำลังส่งรหัส…" : "ส่งรหัส OTP →"}</button><p className="small muted" style={{ marginTop: 18, textAlign: "center" }}>จำรหัสได้แล้ว? <Link className="text-link" href="/login">เข้าสู่ระบบ</Link></p></form>
   </AuthShell>;
 }

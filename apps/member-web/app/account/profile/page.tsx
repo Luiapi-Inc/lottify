@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { memberApi } from "../../lib/member-api";
 
-const defaultProfile = { name: "", birthdate: "", province: "กรุงเทพมหานคร" };
+const defaultProfile = { name: "", birthdate: "", province: "" };
 
 function maskPhone(phone: string): string {
   if (phone.length <= 4) return phone;
@@ -25,7 +25,7 @@ export default function MemberProfilePage() {
         setProfile({
           name: currentProfile.fullName ?? "",
           birthdate: currentProfile.dateOfBirth ?? "",
-          province: currentProfile.province ?? "กรุงเทพมหานคร",
+          province: currentProfile.province ?? "",
         });
         setPhone(currentProfile.phone);
         setProfileComplete(currentProfile.profileComplete);
@@ -51,7 +51,7 @@ export default function MemberProfilePage() {
       setProfile({
         name: result.fullName ?? "",
         birthdate: result.dateOfBirth ?? "",
-        province: result.province ?? "กรุงเทพมหานคร",
+        province: result.province ?? "",
       });
       setPhone(result.phone);
       setProfileComplete(result.profileComplete);

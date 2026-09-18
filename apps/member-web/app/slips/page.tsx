@@ -1,41 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { memberApi, type BetOrder, type BetOrderList } from "../lib/member-api";
+import { ErrorState, LoadingState, Money, PageHeading, Section, StatusBadge } from "../components/presentation";
 
-const rows = [
-  { date: "10 ก.ย. 11:31", lottery: "สลากกินแบ่งรัฐบาล", draw: "16 ก.ย. 2569", lines: 2, amount: "150.00 บาท", state: "รอผล", tone: "info", href: "/buy/receipt" },
-  { date: "10 ก.ย. 09:42", lottery: "หวยลาวพัฒนา", draw: "10 ก.ย. 2569", lines: 1, amount: "100.00 บาท", state: "รอผล", tone: "info", href: "/slips/detail" },
-  { date: "9 ก.ย. 20:15", lottery: "ฮานอยพิเศษ", draw: "9 ก.ย. 2569", lines: 3, amount: "300.00 บาท", state: "ถูกรางวัล", tone: "success", href: "/slips/detail" },
-  { date: "8 ก.ย. 18:02", lottery: "ฮานอยปกติ", draw: "8 ก.ย. 2569", lines: 2, amount: "200.00 บาท", state: "แก้ไขผลแล้ว", tone: "warning", href: "/slips/detail#correction" },
-] as const;
+const states: Array<BetOrder["state"] | "ALL"> = ["ALL","CONFIRMED","SETTLED","CANCELLING","CANCELLED","REJECTED","EXPIRED"];
 
 export default function SlipsPage() {
-  const [lottery, setLottery] = useState("ทั้งหมด");
-  const [status, setStatus] = useState("ทั้งหมด");
-  const filtered = useMemo(
-    () => rows.filter((row) => (lottery === "ทั้งหมด" || row.lottery === lottery) && (status === "ทั้งหมด" || row.state === status)),
-    [lottery, status],
-  );
+  const [filter, setFilter] = useState<BetOrder["state"] | "ALL">("ALL");
+  const [page, setPage] = useState<BetOrderList | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(async (state = filter) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setPage(await memberApi.listOrders({ state: state === "ALL" ? undefined : state, limit: 30 }));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]);
+
+  useEffect(() => { void load(filter); }, [filter, load]);
+
+  async function loadMore() {
+    if (!page?.nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const next = await memberApi.listOrders({ state: filter === "ALL" ? undefined : filter, cursor: page.nextCursor, limit: 30 });
+      setPage({ items: [...page.items, ...next.items], nextCursor: next.nextCursor });
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return <main id="main">
-    <div className="page-head">
-      <div><h1>โพยของฉัน</h1><p>ค้นหาและตรวจสอบใบรับรายการ ผล การคืนเงิน การยกเลิก และประวัติการแก้ไขผลของแต่ละโพย</p></div>
-      <Link className="button primary" href="/buy">+ ซื้อหวย</Link>
+    <PageHeading eyebrow="ORDERS" title="โพยของฉัน" description="ทุกแถวคือ Bet Order จาก API เปิดดู Receipt, Settlement, cancellation และ correction-aware outcome ได้จากหน้ารายละเอียด" action={<button className="button secondary" type="button" onClick={() => void load()}>รีเฟรช</button>} />
+
+    <div className="section-tabs">
+      {states.map((state) => <button className={`tab ${filter === state ? "active" : ""}`} key={state} type="button" onClick={() => setFilter(state)}>{state === "ALL" ? "ทั้งหมด" : state}</button>)}
     </div>
-    <section className="panel">
-      <div className="filters">
-        <div className="field"><label htmlFor="slip-period">ช่วงเวลา</label><select id="slip-period" className="select"><option>30 วันล่าสุด</option><option>7 วันล่าสุด</option><option>เดือนนี้</option></select></div>
-        <div className="field"><label htmlFor="slip-lottery">หวย</label><select id="slip-lottery" className="select" value={lottery} onChange={(event) => setLottery(event.target.value)}><option>ทั้งหมด</option><option>สลากกินแบ่งรัฐบาล</option><option>หวยลาวพัฒนา</option><option>ฮานอยพิเศษ</option><option>ฮานอยปกติ</option></select></div>
-        <div className="field"><label htmlFor="slip-status">สถานะ</label><select id="slip-status" className="select" value={status} onChange={(event) => setStatus(event.target.value)}><option>ทั้งหมด</option><option>รอผล</option><option>ถูกรางวัล</option><option>แก้ไขผลแล้ว</option></select></div>
-        <button className="button secondary" type="button" onClick={() => { setLottery("ทั้งหมด"); setStatus("ทั้งหมด"); }}>ล้างตัวกรอง</button>
-      </div>
-    </section>
-    <section className="panel" style={{ marginTop: 18 }}>
-      <div className="panel-title"><h2>รายการล่าสุด</h2><span className="muted small">แสดง {filtered.length} โพย</span></div>
-      <div className="table-wrap"><table><thead><tr><th>วัน / เวลา</th><th>หวย / งวด</th><th>รายการ</th><th>ยอดซื้อ</th><th>สถานะ</th><th /></tr></thead><tbody>
-        {filtered.map((row) => <tr key={`${row.date}-${row.lottery}`}><td>{row.date}</td><td><strong>{row.lottery}</strong><br /><span className="muted">{row.draw}</span></td><td>{row.lines} รายการ</td><td>{row.amount}</td><td><span className={`status ${row.tone}`}>{row.state}</span></td><td><Link className="text-link" href={row.href}>ดูรายละเอียด →</Link></td></tr>)}
-      </tbody></table></div>
-    </section>
+
+    {loading ? <LoadingState label="กำลังโหลด Bet Orders…" /> : null}
+    {error ? <div style={{ marginBottom: 16 }}><ErrorState error={error} retry={() => void load()} /></div> : null}
+
+    <Section title="รายการ Bet Order" subtitle={page ? `${page.items.length} รายการที่โหลดแล้ว` : "GET /orders"}>
+      {page?.items.length ? <div className="data-list">{page.items.map((order) => <Link className="data-row" key={order.id} href={`/slips/detail?id=${encodeURIComponent(order.id)}`}>
+        <div className="data-main">
+          <strong>{order.lines.map((line) => line.canonicalNumber).join(" · ") || order.id}</strong>
+          <span>{order.id} · {new Date(order.createdAt).toLocaleString("th-TH")} · {order.lines.length} lines</span>
+        </div>
+        <div className="data-meta"><strong><Money minor={order.totalStakeMinor} /></strong><StatusBadge tone={order.state === "CONFIRMED" || order.state === "SETTLED" ? "success" : order.state === "REJECTED" ? "danger" : order.state === "CANCELLED" ? "neutral" : "info"}>{order.state}</StatusBadge></div>
+      </Link>)}</div> : !loading ? <div className="state-card"><span className="state-symbol">○</span><div><strong>ไม่พบโพยในสถานะนี้</strong><p>รายการจะมาจาก backend เท่านั้น ไม่มี fixture เติมแทน</p></div></div> : null}
+      {page?.nextCursor ? <button className="button secondary block" style={{ marginTop: 14 }} type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "กำลังโหลด…" : "โหลดเพิ่ม"}</button> : null}
+    </Section>
   </main>;
 }

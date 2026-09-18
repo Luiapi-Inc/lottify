@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AuthShell } from "../components/auth-shell";
 import { memberApi } from "../lib/member-api";
 
-const defaultProfile = { name: "", birthdate: "", province: "กรุงเทพมหานคร" };
+const defaultProfile = { name: "", birthdate: "", province: "" };
 
 export default function OnboardingProfilePage() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function OnboardingProfilePage() {
         setProfile({
           name: currentProfile.fullName ?? "",
           birthdate: currentProfile.dateOfBirth ?? "",
-          province: currentProfile.province ?? "กรุงเทพมหานคร",
+          province: currentProfile.province ?? "",
         });
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "โหลดข้อมูลสมาชิกไม่สำเร็จ"))
@@ -44,7 +44,6 @@ export default function OnboardingProfilePage() {
         setError("ข้อมูลที่จำเป็นยังไม่ครบ กรุณาตรวจข้อมูลอีกครั้ง");
         return;
       }
-      try { window.localStorage.setItem("lottify-onboarding-profile", "complete"); } catch {}
       router.push("/eligibility");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "บันทึกข้อมูลสมาชิกไม่สำเร็จ");

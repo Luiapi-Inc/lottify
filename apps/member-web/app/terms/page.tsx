@@ -46,7 +46,6 @@ export default function TermsPage() {
         setError("ยังมีข้อตกลงที่ต้องยอมรับ กรุณาตรวจรายการอีกครั้ง");
         return;
       }
-      try { window.localStorage.setItem("lottify-onboarding-terms", "accepted"); } catch {}
       router.push(fromAccount ? "/account" : "/profile");
     } catch (acceptError) {
       setError(acceptError instanceof Error ? acceptError.message : "บันทึกการยอมรับไม่สำเร็จ");

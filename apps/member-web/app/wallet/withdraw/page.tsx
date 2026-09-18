@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createIdempotencyKey, type PayoutDestination, type WithdrawalPreflight, MemberApiFailure, memberApi } from "../../lib/member-api";
+import { AuthorityCallout, WorkflowHero, WorkflowRail } from "../../components/workflow";
 
 const amountChips = ["500", "1000", "3000", "5000"];
 const amountPattern = /^\d+(\.\d{1,2})?$/;
@@ -105,9 +106,10 @@ export default function WithdrawPage() {
   };
 
   return <main id="main">
-    <div className="breadcrumb"><Link href="/wallet">กระเป๋า</Link><span>/</span><span>ถอนเงิน</span></div>
-    <div className="page-head"><div><h1>ถอนเงิน</h1><p>ตรวจยอดเงินสดที่ถอนได้ ปลายทาง ค่าธรรมเนียม และเงื่อนไขการยืนยันตัวตนก่อนส่งคำขอ</p></div></div>
-    <section className="grid-2"><div className="stack">
+    <WorkflowHero eyebrow="WALLET · WITHDRAWAL" title="ถอนเงินจาก CASH ที่ผ่าน preflight ล่าสุดเท่านั้น" description="ก่อน submit ระบบ re-run withdrawal preflight เพื่อใช้ balance, policy, KYC, destination และ restriction ล่าสุดจาก server" backHref="/wallet" backLabel="กระเป๋า"><span>Preflight before confirm</span><span>Server allowed actions</span></WorkflowHero>
+    <WorkflowRail active="preflight" steps={[{ key: "destination", label: "ปลายทาง", hint: "Verified payout destination" }, { key: "amount", label: "ยอดถอน", hint: "CASH only" }, { key: "preflight", label: "ตรวจเงื่อนไข", hint: "Policy decision" }, { key: "status", label: "ติดตามผล", hint: "Authoritative state" }]} />
+    <AuthorityCallout tone={preflight?.outcome === "DENY" ? "warning" : "info"}>ยอด โบนัส และสิทธิ์ถอนเงินไม่ถูกคำนวณจากหน้าเว็บ ผล ALLOW / REVIEW_REQUIRED / DENY และ reason codes มาจาก Withdrawal API</AuthorityCallout>
+    <section className="grid-2" style={{ marginTop: 18 }}><div className="stack">
       <section className="panel"><div className="panel-title"><h2>ปลายทางรับเงิน</h2><Link href="/account/bank-account">จัดการบัญชีธนาคาร →</Link></div>{loadingDestinations ? <div className="notice info"><b>i</b><div><strong>กำลังโหลดปลายทางรับเงิน</strong>กำลังอ่านบัญชีรับเงินที่ผูกไว้กับสมาชิก</div></div> : destinations.length === 0 ? <div className="notice warning"><b>!</b><div><strong>ยังไม่มีบัญชีรับเงิน</strong>เพิ่มและยืนยันบัญชีธนาคารก่อนถอนเงิน</div></div> : <div className="payment-methods">{destinations.map((item) => <button className={`method ${destinationId === item.id ? "active" : ""}`} type="button" key={item.id} onClick={() => { if (destinationId === item.id) return; idempotencyKeyRef.current = null; setDestinationId(item.id); }}><strong>{bankLabel(item.bankCode)} · {item.accountNumberMasked}</strong><span>ชื่อบัญชี: {item.accountHolderName} · {destinationStatus(item.status)}</span></button>)}</div>}</section>
       <section className="panel"><div className="panel-title"><h2>จำนวนเงินที่ต้องการถอน</h2></div><div className="field"><label htmlFor="withdraw-amount">จำนวนเงิน</label><input id="withdraw-amount" className="input large" type="text" inputMode="decimal" value={amount} onChange={(event) => { if (event.target.value !== amount) idempotencyKeyRef.current = null; setAmount(event.target.value); }} />{amountError && <div className="hint">{amountError}</div>}<div className="amount-chips">{amountChips.map((value) => <button className={`chip-btn ${amount === value ? "active" : ""}`} type="button" key={value} onClick={() => { if (amount === value) return; idempotencyKeyRef.current = null; setAmount(value); }}>{Number.parseInt(value, 10).toLocaleString("th-TH")}</button>)}</div><div className="hint">ยอดเงินสดที่ถอนออกได้ {preflight ? `${formatBaht(preflight.availableMinor)} บาท` : checking ? "กำลังตรวจสอบ" : "-"} · โบนัสไม่รวมในยอดที่ถอนได้</div></div></section>
       {preflight && preflight.outcome !== "ALLOW" && <div className="notice warning"><b>!</b><div><strong>{preflight.outcome === "REVIEW_REQUIRED" ? "รายการนี้อาจต้องตรวจสอบเพิ่มเติม" : "ยังไม่สามารถถอนเงินจำนวนนี้ได้"}</strong>{preflight.reasonCodes.map(reasonCopy).join(" · ")}</div></div>}

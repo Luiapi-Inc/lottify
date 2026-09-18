@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createIdempotencyKey, type Withdrawal, MemberApiFailure, memberApi } from "../../../lib/member-api";
+import { AuthorityCallout, WorkflowHero } from "../../../components/workflow";
 
 type StepTone = "done" | "current" | "future";
 
@@ -80,8 +81,9 @@ function WithdrawStatusInner() {
   };
 
   return <main id="main" className="payment-status-page">
-    <div className="breadcrumb"><Link href="/wallet">กระเป๋า</Link><span>/</span><Link href="/wallet/withdraw">ถอนเงิน</Link><span>/</span><span>สถานะ</span></div>
-    <section className="payment-status-shell">
+    <WorkflowHero eyebrow="WITHDRAWAL · AUTHORITATIVE STATUS" title="สถานะรายการเดิม ไม่สร้างคำขอใหม่ระหว่างรอผล" description="REQUESTED ถึง RECONCILING ยังไม่ใช่ความสำเร็จ UI จะแสดง COMPLETED ก็ต่อเมื่อ API ยืนยัน state สุดท้ายแล้ว" backHref="/wallet/withdraw" backLabel="ถอนเงิน" status={withdrawal && copy ? <span className={`payment-status-badge ${copy.badgeClass}`}>{copy.badge}</span> : undefined}><span>Reference {id || "—"}</span><span>Polling + manual refresh</span></WorkflowHero>
+    <AuthorityCallout tone={withdrawal?.state === "RECONCILING" ? "warning" : "info"}>ถ้าผลผู้ให้บริการยังไม่ชัดเจน ระบบคงยอดพักไว้และไม่คืนยอด/แสดง success จนกว่า authoritative state จะยืนยันผล</AuthorityCallout>
+    <section className="payment-status-shell" style={{ marginTop: 18 }}>
       <div className="payment-status-grid">
         <section className="panel payment-status-main" aria-labelledby="status-title">
           {error && <div className="notice warning" role="alert"><b>!</b><div><strong>ไม่สามารถอ่านสถานะถอนเงินได้</strong>{error}</div></div>}

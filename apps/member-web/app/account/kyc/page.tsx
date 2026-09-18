@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AuthorityCallout, WorkflowHero } from "../../components/workflow";
 import { useEffect, useState } from "react";
 import {
   memberApi,
@@ -126,11 +127,9 @@ export default function KycPage() {
   const config = configs[state];
 
   return <main id="main">
-    <div className="breadcrumb"><Link href="/account">บัญชี</Link><span>/</span><span>การยืนยันตัวตน</span></div>
-    <div className="page-head">
-      <div><h1>การยืนยันตัวตน</h1><p>ระบบขอ KYC เฉพาะ capability ที่ policy กำหนด และประเมินแต่ละบริการแยกกัน</p></div>
-      <span className={`status ${loading ? "info" : config.tone}`}>{loading ? "กำลังโหลด" : config.label}</span>
-    </div>
+    <WorkflowHero eyebrow="ACCOUNT · KYC / RISK" title="ยืนยันตัวตนเท่าที่แต่ละบริการต้องใช้" description="KYC เป็น evidence และ policy decision แยกจาก OTP, session และ payout-destination verification ทุก capability ถูกประเมินตามเงื่อนไขของตัวเอง" backHref="/account" backLabel="บัญชี" status={<span className={`status ${loading ? "info" : config.tone}`}>{loading ? "กำลังโหลด" : config.label}</span>}>
+      <span>Capability-specific</span><span>Policy {readiness?.policyVersion ?? "—"}</span>
+    </WorkflowHero>
 
     {loading && <div className="notice info"><b>i</b><div><strong>กำลังอ่านสถานะ KYC</strong>กำลังตรวจ readiness และ eligibility ล่าสุดจากระบบ</div></div>}
     {error && <div className="notice warning"><b>!</b><div><strong>อ่านสถานะไม่สำเร็จ</strong>{error}</div></div>}
@@ -166,7 +165,7 @@ export default function KycPage() {
 
       <aside className="stack">
         <section className="panel">
-          <div className="panel-title"><h2>หลักการสำคัญ</h2></div>
+          <div className="panel-title"><h2>หลักการสำคัญ</h2></div><AuthorityCallout>สถานะหน้านี้อ่านจาก readiness/KYC canonical outcome เท่านั้น Member UI ไม่แก้ผล VERIFIED, REJECTED หรือ REVIEW_REQUIRED เอง</AuthorityCallout>
           <div className="notice info"><b>i</b><div><strong>OTP ไม่ใช่ KYC</strong>OTP ใช้ยืนยันการเข้าใช้งานหรือ re-auth ส่วน KYC ใช้ผลการตรวจตาม policy แยกต่างหาก</div></div>
           <div className="notice warning" style={{ marginTop: 10 }}><b>!</b><div><strong>ผล Eligibility มีอายุ</strong>บริการสำคัญจะประเมินสิทธิ์อีกครั้งเมื่อทำรายการ ไม่ถือผล readiness นี้ว่าใช้ได้ถาวร</div></div>
           {!readiness.requirements.kyc.verified && <div className="notice info" style={{ marginTop: 10 }}><b>i</b><div><strong>สถานะมาจากระบบ KYC/Risk</strong>หน้านี้แสดงผล authoritative ปัจจุบันและไม่เปลี่ยนสถานะ KYC จากฝั่ง Member โดยตรง</div></div>}

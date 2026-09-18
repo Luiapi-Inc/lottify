@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createIdempotencyKey, type DepositMethodDescription, type DepositMethodSummary, MemberApiFailure, memberApi } from "../../lib/member-api";
+import { AuthorityCallout, WorkflowHero, WorkflowRail } from "../../components/workflow";
 
 const amountChips = ["300", "500", "1000", "3000", "5000"];
 const amountPattern = /^\d+(\.\d{1,2})?$/;
@@ -103,9 +104,10 @@ export default function DepositPage() {
   };
 
   return <main id="main">
-    <div className="breadcrumb"><Link href="/wallet">กระเป๋า</Link><span>/</span><span>ฝากเงิน</span></div>
-    <div className="page-head"><div><h1>ฝากเงิน</h1><p>เลือกช่องทางและจำนวนเงิน ตรวจค่าธรรมเนียมก่อนยืนยัน แล้วติดตามสถานะรายการเดิมจนเสร็จ</p></div></div>
-    <section className="grid-2"><div className="stack">
+    <WorkflowHero eyebrow="WALLET · DEPOSIT" title="ฝากเงินโดยสร้างรายการครั้งเดียว แล้วติดตาม reference เดิม" description="ช่องทาง ค่าธรรมเนียม instructions และ lifecycle มาจาก Deposit API ทั้งหมด ไม่มีสถานะสำเร็จที่สร้างเองใน browser" backHref="/wallet" backLabel="กระเป๋า"><span>THB minor units</span><span>Stable Idempotency-Key</span></WorkflowHero>
+    <WorkflowRail active="request" steps={[{ key: "method", label: "ช่องทาง", hint: "Provider / Method" }, { key: "request", label: "สร้างรายการ", hint: "Amount + Fee" }, { key: "instructions", label: "ชำระเงิน", hint: "Server instructions" }, { key: "status", label: "ติดตามผล", hint: "Same deposit id" }]} />
+    <AuthorityCallout>การ retry ของ intent เดิมใช้ Idempotency-Key เดิม และหน้า status re-fetch/reconcile รายการเดิมเพื่อป้องกัน duplicate visible credit</AuthorityCallout>
+    <section className="grid-2" style={{ marginTop: 18 }}><div className="stack">
       <section className="panel"><div className="panel-title"><h2>1. เลือกช่องทาง</h2></div><div className="payment-methods">{loadingMethods ? <div className="notice info"><b>i</b><div><strong>กำลังโหลดช่องทางฝากเงิน</strong>กำลังอ่านช่องทางที่เปิดให้บริการล่าสุด</div></div> : methods.length === 0 ? <div className="notice warning"><b>!</b><div><strong>ยังไม่มีช่องทางฝากเงินที่เปิดให้บริการ</strong>กรุณาลองใหม่อีกครั้งภายหลัง</div></div> : methods.map((item) => <button className={`method ${methodCode === item.methodCode ? "active" : ""}`} type="button" key={`${item.providerCode}:${item.methodCode}`} onClick={() => { if (methodCode === item.methodCode) return; idempotencyKeyRef.current = null; setDescription(null); setLoadingDescription(true); setMethodCode(item.methodCode); }}><strong>{methodLabel(item.methodCode)}</strong><span>{item.providerCode} · {methodDescription(item.methodCode)}</span></button>)}</div></section>
       <section className="panel"><div className="panel-title"><h2>2. ระบุจำนวนเงิน</h2></div><div className="field"><label htmlFor="deposit-amount">จำนวนเงิน</label><input id="deposit-amount" className="input large" type="text" inputMode="decimal" value={amount} onChange={(event) => { if (event.target.value !== amount) idempotencyKeyRef.current = null; setAmount(event.target.value); }} />{amountError && <div className="hint">{amountError}</div>}<div className="amount-chips">{amountChips.map((value) => <button className={`chip-btn ${amount === value ? "active" : ""}`} type="button" key={value} onClick={() => { if (amount === value) return; idempotencyKeyRef.current = null; setAmount(value); }}>{Number.parseInt(value, 10).toLocaleString("th-TH")}</button>)}</div></div></section>
       {description && <section className="panel"><div className="panel-title"><h2>คำแนะนำการชำระเงิน</h2></div><div className="stack">{description.instructions.map((instruction) => <div className="notice info" key={instruction}><b>i</b><div>{instruction}</div></div>)}</div></section>}

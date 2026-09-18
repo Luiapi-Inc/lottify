@@ -8,6 +8,7 @@ coverage/
 apps/api/openapi/openapi.json
 packages/contracts/src/generated/api.ts
 *.log
+*.tsbuildinfo
 .DS_Store
 
 # Python bytecode cache

@@ -1,92 +1,138 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-
-type QuoteState = "normal" | "expired" | "closed" | "changed" | "funds" | "eligibility";
-
-const states: Array<{ value: QuoteState; label: string }> = [
-  { value: "normal", label: "ปกติ" },
-  { value: "expired", label: "Quote หมดอายุ" },
-  { value: "closed", label: "งวดปิดแล้ว" },
-  { value: "changed", label: "อัตราจ่ายเปลี่ยน" },
-  { value: "funds", label: "เงินไม่พอ" },
-  { value: "eligibility", label: "ติดเงื่อนไข" },
-];
-
-const failures: Record<Exclude<QuoteState, "normal">, { tone: "warning" | "danger"; title: string; body: string; action: string; href: string }> = {
-  expired: {
-    tone: "warning",
-    title: "Quote หมดอายุแล้ว",
-    body: "ราคานี้ใช้ยืนยันต่อไม่ได้ กรุณาสร้าง Quote ใหม่จากรายการเดิมและตรวจข้อมูลอีกครั้งก่อน Confirm",
-    action: "สร้าง Quote ใหม่",
-    href: "/buy/bet",
-  },
-  closed: {
-    tone: "danger",
-    title: "งวดนี้ปิดรับแล้ว",
-    body: "ระบบหยุดการยืนยันรายการใหม่แล้ว กรุณากลับไปเลือกงวดที่ยังเปิดรับ",
-    action: "เลือกงวดใหม่",
-    href: "/buy",
-  },
-  changed: {
-    tone: "warning",
-    title: "เงื่อนไขสำคัญเปลี่ยนแปลง",
-    body: "อัตราจ่ายหรือข้อจำกัดเปลี่ยนจาก Quote เดิม ระบบต้องสร้างข้อเสนอใหม่และให้คุณตรวจอีกครั้งก่อนยืนยัน",
-    action: "ตรวจข้อเสนอใหม่",
-    href: "/buy/bet",
-  },
-  funds: {
-    tone: "danger",
-    title: "ยอดเงินที่ใช้ได้ไม่เพียงพอ",
-    body: "ยอดที่ใช้ยืนยันรายการนี้ไม่พอ กรุณาปรับยอดซื้อหรือจัดการกระเป๋าก่อนสร้าง Quote ใหม่",
-    action: "ไปที่กระเป๋า",
-    href: "/wallet",
-  },
-  eligibility: {
-    tone: "warning",
-    title: "ต้องดำเนินการเงื่อนไขบัญชีก่อน",
-    body: "ระบบไม่สามารถยืนยันรายการได้จนกว่าข้อกำหนดของสิทธิ์ BET ที่เกี่ยวข้องจะครบ",
-    action: "ตรวจความพร้อมบัญชี",
-    href: "/account",
-  },
-};
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createIdempotencyKey,
+  memberApi,
+  type BetOrder,
+  type BettingQuote,
+} from "../../lib/member-api";
+import { ErrorState, LoadingState, Money, PageHeading, Section, StatusBadge } from "../../components/presentation";
 
 export default function QuotePage() {
-  const [state, setState] = useState<QuoteState>("normal");
+  const [quoteId, setQuoteId] = useState("");
+  const [quote, setQuote] = useState<BettingQuote | null>(null);
+  const [order, setOrder] = useState<BetOrder | null>(null);
   const [accepted, setAccepted] = useState(false);
-  const failure = state === "normal" ? null : failures[state];
-  const canConfirm = state === "normal" && accepted;
+  const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const createOrderKey = useRef(createIdempotencyKey());
+  const confirmOrderKey = useRef(createIdempotencyKey());
+
+  const load = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setQuote(await memberApi.getQuote(id));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("quoteId") ?? "";
+    setQuoteId(id);
+    if (id) void load(id);
+    else {
+      setLoading(false);
+      setError(new Error("ไม่พบ quoteId กรุณาสร้าง Quote ใหม่จากหน้ากรอกเลข"));
+    }
+  }, [load]);
+
+  const expired = useMemo(() => !quote || quote.status === "EXPIRED" || new Date(quote.expiresAt).getTime() <= Date.now(), [quote]);
+  const canConfirm = Boolean(quote && !expired && accepted && !confirming);
+
+  async function confirm() {
+    if (!quote || !canConfirm) return;
+    setConfirming(true);
+    setError(null);
+    try {
+      const currentOrder = order ?? await memberApi.createOrder(quote.id, createOrderKey.current);
+      setOrder(currentOrder);
+      const confirmed = await memberApi.confirmOrder(
+        currentOrder.id,
+        { version: currentOrder.version },
+        confirmOrderKey.current,
+      );
+      setOrder(confirmed);
+      window.location.assign(`/buy/receipt?orderId=${encodeURIComponent(confirmed.id)}`);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setConfirming(false);
+    }
+  }
 
   return <main id="main">
-    <div className="breadcrumb"><Link href="/">หน้าแรก</Link><span>/</span><Link href="/buy">ซื้อหวย</Link><span>/</span><Link href="/buy/bet">ใส่เลข</Link><span>/</span><span>Quote</span></div>
-    <div className="page-head"><div><h1>ตรวจสอบข้อเสนอก่อนยืนยัน</h1><p>ราคา รายการ และแหล่งเงินด้านล่างคือข้อมูลที่ระบบยอมรับ ณ เวลาที่สร้าง Quote หากมีการเปลี่ยนแปลงสำคัญ คุณจะต้องตรวจใหม่ก่อนยืนยัน</p></div></div>
-    <div className="stepper"><div className="step done"><strong>1 · เลือกงวด</strong>เลือกแล้ว</div><div className="step done"><strong>2 · ใส่เลข</strong>2 รายการ</div><div className="step active"><strong>3 · ตรวจ Quote</strong>{state === "normal" ? "เหลือเวลาจำกัด" : "ต้องดำเนินการ"}</div><div className="step"><strong>4 · ยืนยัน</strong>ยังไม่ยืนยัน</div></div>
+    <PageHeading
+      eyebrow="BETTING · STEP 3"
+      title="Quote คือเงื่อนไขจาก Server"
+      description="ตรวจ canonical lines, stake, payout และ restrictions ที่ backend resolve แล้วก่อนสร้าง Bet Order และ Confirm ไม่มีการคำนวณ payout หรือสร้างสถานะสำเร็จเองใน browser"
+      action={<Link className="button secondary" href="/buy/bet">← แก้รายการ</Link>}
+    />
+    <div className="stepper">
+      <div className="step done"><strong>1 · เลือกงวด</strong>เสร็จแล้ว</div>
+      <div className="step done"><strong>2 · ใส่เลข</strong>ส่งให้ server แล้ว</div>
+      <div className="step active"><strong>3 · Quote</strong>{quote?.status ?? "กำลังโหลด"}</div>
+      <div className="step"><strong>4 · Confirm</strong>{order?.state ?? "ยังไม่สร้าง Order"}</div>
+    </div>
 
-    <section className="quote-demo panel" aria-label="ตัวอย่างสถานะ Quote">
-      <div className="panel-title"><div><h2>ทดสอบสถานะ Quote</h2><p className="muted small">เลือกสถานการณ์เพื่อดูข้อความและ action ที่ Member จะได้รับ</p></div><span className="status info">Preview</span></div>
-      <div className="quote-demo-actions">
-        {states.map((item) => <button key={item.value} className={`chip-btn ${state === item.value ? "active" : ""}`} type="button" aria-pressed={state === item.value} onClick={() => { setState(item.value); setAccepted(false); }}>{item.label}</button>)}
+    {loading ? <LoadingState label="กำลังอ่าน Quote จาก API…" /> : null}
+    {error ? <div style={{ marginBottom: 16 }}><ErrorState error={error} retry={quoteId ? () => void load(quoteId) : undefined} /></div> : null}
+
+    {quote ? <section className="grid-2">
+      <div className="stack">
+        <Section
+          title={`Quote ${quote.id}`}
+          subtitle={`Draw ${quote.drawId} · หมดอายุ ${new Date(quote.expiresAt).toLocaleString("th-TH")}`}
+          action={<StatusBadge tone={expired ? "danger" : "success"}>{expired ? "EXPIRED" : quote.status}</StatusBadge>}
+        >
+          <div className="table-wrap"><table><thead><tr><th>Bet Type</th><th>เลข</th><th>Stake</th><th>Payout source</th><th>Restrictions</th></tr></thead><tbody>
+            {quote.lines.map((line, index) => <tr key={`${line.betTypeCode}-${line.canonicalNumber}-${index}`}>
+              <td><strong>{line.betTypeCode}</strong></td>
+              <td><strong>{line.canonicalNumber}</strong></td>
+              <td><Money minor={line.stakeMinor} /></td>
+              <td>{line.payoutSource}</td>
+              <td>{line.restrictions.length ? line.restrictions.join(", ") : "ไม่มี"}</td>
+            </tr>)}
+          </tbody></table></div>
+        </Section>
+
+        <Section title="Server-resolved terms" subtitle="ข้อมูลดิบที่ Member ต้องทบทวนก่อน Confirm">
+          <div className="data-list">
+            {quote.lines.map((line, index) => <div className="data-row" key={index}>
+              <div className="data-main"><strong>{line.betTypeCode} · {line.canonicalNumber}</strong><span>Payout: {Object.keys(line.resolvedPayout).length ? JSON.stringify(line.resolvedPayout) : "ตาม policy snapshot ของ server"}</span></div>
+              <div className="data-meta"><strong><Money minor={line.stakeMinor} /></strong><span>{line.payoutSource}</span></div>
+            </div>)}
+          </div>
+        </Section>
       </div>
-    </section>
 
-    {failure && <div className={`quote-failure quote-failure-${failure.tone}`} aria-live="polite">
-      <div className="quote-failure-icon">!</div>
-      <div className="quote-failure-copy"><strong>{failure.title}</strong><span>{failure.body}</span></div>
-      <div className="quote-failure-actions"><Link className="button secondary" href={failure.href}>{failure.action}</Link></div>
-    </div>}
+      <aside className="stack">
+        <section className="summary-box">
+          <div className="summary-row"><span>Currency</span><strong>{quote.currency}</strong></div>
+          <div className="summary-row"><span>จำนวนรายการ</span><strong>{quote.lines.length}</strong></div>
+          <div className="summary-row total"><span>ยอดซื้อรวม</span><strong><Money minor={quote.totalStakeMinor} /></strong></div>
+        </section>
 
-    <section className="quote-box">
-      <div className="quote-head"><div><strong>Quote #QT-20260910-001842</strong><div className="small" style={{ color: "#cde4da", marginTop: 4 }}>สลากกินแบ่งรัฐบาล · งวด 16 ก.ย. 2569</div></div><div><div className="small" style={{ color: "#cde4da" }}>Quote หมดอายุใน</div><div className="quote-timer">00:01:58</div></div></div>
-      <div className="quote-body">
-        <div className="table-wrap"><table className="quote-lines"><thead><tr><th>ประเภท</th><th>เลข</th><th>อัตราจ่าย</th><th>ยอดซื้อ</th><th>เงินรางวัลสูงสุด</th></tr></thead><tbody><tr><td>3 ตัวตรง</td><td><strong>708</strong></td><td className="payout">x900</td><td>100 บาท</td><td>90,000 บาท</td></tr><tr><td>2 ตัวบน</td><td><strong>27</strong></td><td className="payout">x95</td><td>50 บาท</td><td>4,750 บาท</td></tr></tbody></table></div>
-        <div className="grid-equal" style={{ marginTop: 18 }}>
-          <div className="summary-box"><div className="summary-row"><span>ยอดซื้อรวม</span><strong>150.00 บาท</strong></div><div className="summary-row"><span>ใช้เงินสด</span><strong>120.00 บาท</strong></div><div className="summary-row"><span>ใช้โบนัส</span><strong>30.00 บาท</strong></div><div className="summary-row total"><span>ชำระรวม</span><strong>150.00 บาท</strong></div></div>
-          <div className="stack"><div className="notice success"><b>✓</b><div><strong>ตรวจข้อจำกัดแล้ว</strong>รายการนี้ผ่านข้อจำกัดเลขและวงเงิน ณ เวลาสร้าง Quote</div></div><div className="notice info"><b>i</b><div><strong>ก่อน Confirm ระบบจะตรวจซ้ำอีกครั้ง</strong>หาก payout, cutoff, restriction หรือยอดเงินเปลี่ยน คุณจะต้องตรวจข้อเสนอใหม่</div></div></div>
-        </div>
-        <label className="quote-accept-row"><input type="checkbox" checked={accepted} disabled={state !== "normal"} onChange={(event) => setAccepted(event.target.checked)} /><span>ฉันตรวจเลข จำนวนเงิน อัตราจ่าย และแหล่งเงินเรียบร้อยแล้ว และต้องการยืนยันรายการนี้</span></label>
-        <div className="quote-confirm-actions"><Link className="button secondary" href="/buy/bet">← แก้ไขรายการ</Link><Link className={`button lime ${canConfirm ? "" : "disabled"}`} href={canConfirm ? "/buy/receipt" : "#"} aria-disabled={!canConfirm}>ยืนยันซื้อ 150.00 บาท</Link></div>
-      </div>
-    </section>
+        {expired ? <div className="notice danger"><b>!</b><div><strong>Quote ใช้ต่อไม่ได้</strong>กลับไปสร้าง Quote ใหม่ ระบบจะไม่ Confirm เงื่อนไขที่หมดอายุ</div></div> : <div className="notice info"><b>i</b><div><strong>Confirm จะ revalidate อีกครั้ง</strong>Draw, eligibility, restriction, exposure และ Wallet ยังเป็น authoritative server checks</div></div>}
+
+        {order ? <Section title="Bet Order" subtitle="Order ถูกสร้างแล้วและสามารถ retry Confirm ด้วย idempotency identity เดิม">
+          <div className="data-row"><div className="data-main"><strong>{order.id}</strong><span>version {order.version} · {order.allowedActions.join(", ") || "ไม่มี action"}</span></div><StatusBadge tone={order.state === "CONFIRMED" ? "success" : "info"}>{order.state}</StatusBadge></div>
+        </Section> : null}
+
+        <label className="notice" style={{ cursor: expired ? "not-allowed" : "pointer" }}>
+          <input type="checkbox" checked={accepted} disabled={expired} onChange={(event) => setAccepted(event.target.checked)} />
+          <div><strong>ฉันตรวจเลข ยอดซื้อ และเงื่อนไขจาก Quote แล้ว</strong>การ Confirm จะใช้เงื่อนไขนี้เป็นฐานและให้ server ตรวจซ้ำ</div>
+        </label>
+        <button className="button lime block" type="button" disabled={!canConfirm} onClick={() => void confirm()}>
+          {confirming ? "กำลังสร้าง/ยืนยัน Bet Order…" : `ยืนยันซื้อ ${(Number(quote.totalStakeMinor) / 100).toLocaleString("th-TH")} บาท`}
+        </button>
+      </aside>
+    </section> : null}
   </main>;
 }

@@ -18,6 +18,7 @@ function DepositStatusInner() {
   }, []);
   const [deposit, setDeposit] = useState<Deposit | null>(null);
   const [loading, setLoading] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshText, setRefreshText] = useState("ยังไม่ได้ตรวจซ้ำ");
   const refreshGenerationRef = useRef(0);
@@ -50,6 +51,21 @@ function DepositStatusInner() {
     return () => window.clearInterval(timer);
   }, [deposit, refresh]);
 
+  const reconcile = useCallback(async () => {
+    if (!id || !deposit || isFinalStatus(deposit.status)) return;
+    setReconciling(true);
+    setError(null);
+    try {
+      const next = await memberApi.reconcileDeposit(id);
+      setDeposit(next);
+      setRefreshText(new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    } catch (requestError) {
+      setError(toStatusError(requestError));
+    } finally {
+      setReconciling(false);
+    }
+  }, [deposit, id]);
+
   const copy = useMemo(() => deposit ? depositCopy(deposit) : null, [deposit]);
 
   return <main id="main" className="payment-status-page">
@@ -66,7 +82,11 @@ function DepositStatusInner() {
             <div className={`payment-state-note ${copy.noteClass}`} role="status" aria-live="polite"><strong>{copy.noteTitle}</strong><span>{copy.note}</span></div>
             <ol className="payment-timeline" aria-label="ความคืบหน้ารายการฝากเงิน">{copy.steps.map(([tone, stepTitle, detail], index) => <li className={tone} key={`${deposit.status}-${index}`}><span className="payment-step-marker">{index + 1}</span><div><strong>{stepTitle}</strong><span>{detail}</span></div></li>)}</ol>
           </>}
-          <div className="payment-refresh-row"><button className="button primary payment-status-refresh" type="button" onClick={() => void refresh()} disabled={!id || loading}>{loading ? "กำลังตรวจ..." : "ตรวจสถานะล่าสุด"}</button><p>ระบบจะอ่านสถานะของรายการเดิมจาก API และไม่สร้างรายการฝากใหม่</p></div>
+          <div className="payment-refresh-row">
+            <button className="button secondary payment-status-refresh" type="button" onClick={() => void refresh()} disabled={!id || loading}>{loading ? "กำลังอ่าน..." : "อ่านสถานะล่าสุด"}</button>
+            {deposit && !isFinalStatus(deposit.status) ? <button className="button primary payment-status-refresh" type="button" onClick={() => void reconcile()} disabled={reconciling}>{reconciling ? "กำลัง reconcile…" : "ตรวจสอบกับผู้ให้บริการ"}</button> : null}
+            <p>การอ่านสถานะไม่สร้างรายการใหม่ ส่วน reconcile จะตรวจรายการเดิมกับ provider และเครดิตได้เฉพาะผลที่พิสูจน์ว่า APPROVED</p>
+          </div>
           <p className="payment-updated">ตรวจสถานะล่าสุด: <strong>{refreshText}</strong></p>
         </section>
         <aside className="stack payment-status-aside">

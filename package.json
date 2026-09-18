@@ -31,7 +31,8 @@
     "load:seed": "tsx tools/load-harness/seed/seed-load-fixtures.ts",
     "load:run": "node tools/load-harness/run.mjs",
     "load:assert": "tsx tools/load-harness/seed/assert-financial-effects.ts",
-    "check": "pnpm prisma:generate && pnpm openapi:generate && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm prisma:generate && pnpm openapi:generate && pnpm typecheck && pnpm test && pnpm build",
+    "test:e2e:member": "playwright test -c playwright.member.config.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.3",
@@ -61,8 +62,9 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
+    "@playwright/test": "^1.63.0",
     "@types/express": "5.0.3",
+    "@types/node": "24.10.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "openapi-typescript": "7.13.0",

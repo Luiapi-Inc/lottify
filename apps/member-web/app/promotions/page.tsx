@@ -1,28 +1,146 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-
-type Tab = "summary" | "scope" | "history";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createIdempotencyKey,
+  memberApi,
+  type PromotionDiscovery,
+  type PromotionEntitlement,
+  type PromotionEntitlementPage,
+} from "../lib/member-api";
+import { ErrorState, LoadingState, Money, PageHeading, Section, StatusBadge } from "../components/presentation";
 
 export default function PromotionsPage() {
-  const [tab, setTab] = useState<Tab>("summary");
+  const [discovery, setDiscovery] = useState<PromotionDiscovery | null>(null);
+  const [entitlements, setEntitlements] = useState<PromotionEntitlementPage | null>(null);
+  const [selected, setSelected] = useState<PromotionEntitlement | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const claimKeys = useRef(new Map<string, string>());
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const [promotionResult, entitlementResult] = await Promise.allSettled([
+      memberApi.listPromotions(),
+      memberApi.listPromotionEntitlements({ limit: 50 }),
+    ]);
+    if (promotionResult.status === "fulfilled") setDiscovery(promotionResult.value);
+    else setError(promotionResult.reason);
+    if (entitlementResult.status === "fulfilled") {
+      setEntitlements(entitlementResult.value);
+      if (entitlementResult.value.items[0]) {
+        try {
+          setSelected(await memberApi.getPromotionEntitlement(entitlementResult.value.items[0].id));
+        } catch (cause) {
+          setError(cause);
+        }
+      } else {
+        setSelected(null);
+      }
+    } else {
+      setError(entitlementResult.reason);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function claim(campaignVersionId: string) {
+    setBusy(`claim:${campaignVersionId}`);
+    setError(null);
+    const key = claimKeys.current.get(campaignVersionId) ?? createIdempotencyKey();
+    claimKeys.current.set(campaignVersionId, key);
+    try {
+      const result = await memberApi.claimPromotion({ campaignVersionId }, key);
+      setSelected(result);
+      const refreshed = await memberApi.listPromotionEntitlements({ limit: 50 });
+      setEntitlements(refreshed);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function selectEntitlement(id: string) {
+    setBusy(`detail:${id}`);
+    setError(null);
+    try {
+      setSelected(await memberApi.getPromotionEntitlement(id));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy("");
+    }
+  }
+
   return <main id="main">
-    <div className="breadcrumb"><Link href="/">หน้าแรก</Link><span>/</span><span>โปรโมชั่น</span></div>
-    <div className="page-head promotion-page-head"><div><p className="pt-eyebrow">สิทธิ์โบนัสของฉัน</p><h1>โปรโมชั่นและยอดเล่น</h1><p>ดูโบนัสคงเหลือ ยอดเล่นที่ยืนยันแล้ว ยอดชั่วคราว ขอบเขตที่ใช้ได้ วันหมดอายุ และเงื่อนไขของสิทธิ์แต่ละรายการ</p></div><Link className="button secondary" href="/wallet">ดูกระเป๋า</Link></div>
-    <section className="pt-balance-strip" aria-label="สรุปโบนัส"><div><span>โบนัสคงเหลือ</span><strong>80.00 <small>บาท</small></strong></div><div><span>ยอดเล่นยืนยันแล้ว</span><strong>2,500 <small>/ 5,000 บาท</small></strong></div><div><span>ยอดเล่นชั่วคราว</span><strong className="pt-provisional-number">+320 <small>บาท</small></strong></div><div><span>หมดอายุ</span><strong>30 ก.ย. 2569</strong></div></section>
-    <div className="pt-layout">
-      <section className="pt-entitlement-card" aria-labelledby="promo-welcome-title">
-        <div className="pt-card-top"><div><div className="pt-title-row"><span className="pt-gift-mark" aria-hidden="true">✦</span><div><p className="pt-card-kicker">สิทธิ์ที่กำลังใช้งาน</p><h2 id="promo-welcome-title">สมาชิกใหม่ · โบนัส 100 บาท</h2></div></div><p className="pt-card-copy">ข้อมูลสิทธิ์นี้แสดงเงื่อนไขที่ถูกบันทึกไว้ตอนคุณได้รับสิทธิ์ การเปลี่ยนเงื่อนไขของแคมเปญภายหลังจะไม่แก้ประวัติของสิทธิ์นี้</p></div><span className="status success">กำลังใช้งาน</span></div>
-        <div className="pt-progress-block"><div className="pt-progress-heading"><div><span>ยอดเล่นที่ยืนยันแล้ว</span><strong>2,500 / 5,000 บาท</strong></div><strong className="pt-percent">50%</strong></div><div className="pt-progress-track" role="progressbar" aria-label="ยอดเล่นที่ยืนยันแล้ว" aria-valuemin={0} aria-valuemax={5000} aria-valuenow={2500}><span style={{ width: "50%" }} /></div><div className="pt-provisional-callout"><span className="pt-dot" aria-hidden="true" /><div><strong>อีก 320 บาทเป็นยอดชั่วคราว</strong><span>เกิดจากรายการที่ยืนยันแล้วแต่ยังไม่ถึงผลสิ้นสุด จึงยังไม่รวมใน 50% ด้านบน</span></div><button type="button" className="pt-text-button" onClick={() => setTab("history")}>ดูที่มา</button></div></div>
-        <div className="pt-segmented" role="tablist" aria-label="รายละเอียดโปรโมชั่น">{([ ["summary", "ภาพรวม"], ["scope", "ใช้กับอะไรได้"], ["history", "ประวัติยอดเล่น"] ] as const).map(([value, label]) => <button className={`pt-segment ${tab === value ? "active" : ""}`} key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>{label}</button>)}</div>
-        <div className="pt-tab-panels">
-          {tab === "summary" && <section className="pt-tab-panel"><div className="pt-fact-grid"><div className="pt-fact"><span>โบนัสคงเหลือ</span><strong>80.00 บาท</strong><small>โบนัสไม่รวมในยอดที่ถอนได้โดยตรง</small></div><div className="pt-fact"><span>เป้าหมายยอดเล่น</span><strong>5,000 บาท</strong><small>นับจากยอดที่ผ่านเงื่อนไขและยืนยันแล้ว</small></div><div className="pt-fact"><span>หมดอายุ</span><strong>30 ก.ย. 2569</strong><small>โบนัสที่ยังเหลือและผูกกับสิทธิ์นี้อาจถูกนำออกเมื่อหมดอายุ</small></div><div className="pt-fact"><span>เงินรางวัลจากส่วน BONUS</span><strong>เข้า BONUS</strong><small>ใช้กติกาที่บันทึกไว้กับสิทธิ์นี้</small></div></div><div className="notice info pt-notice"><b>i</b><div><strong>ทำยอดครบยังไม่เท่ากับถอนได้ทันที</strong>เมื่อยอดเล่นที่ยืนยันแล้วถึงเป้า สิทธิ์จะเสร็จสมบูรณ์หลังการเปลี่ยนมูลค่าที่เข้าเงื่อนไขจาก BONUS เป็น CASH สำเร็จเท่านั้น</div></div><section className="pt-lifecycle"><div className="pt-section-title"><div><p>วงจรของสิทธิ์</p><h3>จากได้รับโบนัสจนเงื่อนไขสมบูรณ์</h3></div></div><ol className="pt-flow"><li className="done"><span>1</span><div><strong>ได้รับสิทธิ์</strong><small>เงื่อนไขถูกบันทึกไว้สำหรับสมาชิกคนนี้</small></div></li><li className="current"><span>2</span><div><strong>กำลังทำยอด</strong><small>รายการที่ยืนยันและเข้าเงื่อนไขเริ่มเป็นยอดชั่วคราว</small></div></li><li><span>3</span><div><strong>ยืนยันยอดเล่น</strong><small>ผลสิ้นสุดที่ไม่ถูกคืนเงินจึงเปลี่ยนส่วนที่เข้าเงื่อนไขเป็นยอดยืนยันแล้ว</small></div></li><li><span>4</span><div><strong>เปลี่ยน BONUS → CASH</strong><small>เมื่อถึงเป้า ระบบรอผลการเปลี่ยนมูลค่าที่มีผลจริงก่อนถือว่าสิทธิ์เสร็จสมบูรณ์</small></div></li></ol></section></section>}
-          {tab === "scope" && <section className="pt-tab-panel"><div className="pt-section-title"><div><p>ขอบเขตของสิทธิ์ตัวอย่างนี้</p><h3>Products และ Bet Types ที่เข้าเงื่อนไข</h3></div><Link className="text-link" href="/buy">ไปหน้าซื้อหวย →</Link></div><div className="pt-scope-list"><article><div className="lottery-icon th">TH</div><div><strong>สลากกินแบ่งรัฐบาล</strong><span>3 ตัวตรง · 2 ตัวบน</span></div><span className="status success">ใช้ได้</span></article><article><div className="lottery-icon la">LA</div><div><strong>หวยลาวพัฒนา</strong><span>3 ตัวตรง</span></div><span className="status success">ใช้ได้</span></article><article><div className="lottery-icon vn">VN</div><div><strong>ฮานอยพิเศษ</strong><span>3 ตัวตรง</span></div><span className="status success">ใช้ได้</span></article></div><div className="notice warning pt-notice"><b>!</b><div><strong>รายการนอกขอบเขตนี้ไม่สร้างยอดเล่นให้สิทธิ์นี้</strong>ตอนยืนยันโพย ระบบใช้ Product, Bet Type, แหล่งเงิน และเงื่อนไขที่บันทึกไว้กับสิทธิ์เพื่อคำนวณส่วนที่เข้าเงื่อนไข</div></div></section>}
-          {tab === "history" && <section className="pt-tab-panel"><div className="pt-section-title"><div><p>ประวัติที่เก็บย้อนหลัง</p><h3>ยอดชั่วคราว ยอดยืนยัน และการปรับแก้</h3></div><Link className="text-link" href="/slips">ดูโพยของฉัน →</Link></div><ol className="pt-history"><li><div className="pt-history-icon provisional">…</div><div><strong>รายการ ORD-843201 เพิ่มยอดชั่วคราว +150 บาท</strong><span>ยืนยันโพยแล้ว และรายการอยู่ระหว่างรอผลสิ้นสุด</span></div><span className="pt-history-amount provisional">+150</span></li><li><div className="pt-history-icon removed">↩</div><div><strong>ยกเลิกและคืนเงิน · เอายอดชั่วคราวออก −150 บาท</strong><span>ประวัติรายการเดิมยังอยู่และแสดงการนำยอดชั่วคราวออกเป็นเหตุการณ์ถัดมา</span></div><span className="pt-history-amount removed">−150</span></li><li><div className="pt-history-icon final">✓</div><div><strong>รายการ ORD-842955 ยืนยันยอดเล่น +2,600 บาท</strong><span>รายการถึงผลสิ้นสุดโดยไม่ถูกคืนเงิน</span></div><span className="pt-history-amount final">+2,600</span></li><li><div className="pt-history-icon correction">±</div><div><strong>ปรับแก้ยอดเล่น −100 บาท</strong><span>การแก้ไขถูกเพิ่มเป็น adjustment ใหม่ โดยไม่ลบรายการเดิม</span></div><span className="pt-history-amount correction">−100</span></li><li><div className="pt-history-icon provisional">…</div><div><strong>รายการล่าสุดรอผล +320 บาท</strong><span>ยอดนี้ยังเป็นชั่วคราวและยังไม่รวมในยอดยืนยันแล้ว</span></div><span className="pt-history-amount provisional">+320</span></li></ol><div className="pt-history-total"><div><span>ยอดยืนยันแล้วปัจจุบัน</span><strong>2,600 − 100 = 2,500 บาท</strong></div><div><span>ยอดชั่วคราวปัจจุบัน</span><strong>320 บาท</strong></div></div><div className="notice info pt-notice"><b>i</b><div><strong>Correction ไม่เขียนทับประวัติ</strong>ระบบเพิ่มรายการปรับแก้ชดเชยต่อจากข้อเท็จจริงเดิม คุณจึงเห็นทั้งผลเดิม เหตุผลการปรับ และยอดปัจจุบันตามลำดับ</div></div></section>}
-        </div>
-      </section>
-      <aside className="pt-side-stack"><section className="pt-side-card"><div className="pt-section-title"><div><p>สถานะยอดเล่น</p><h3>ต่างกันอย่างไร?</h3></div></div><div className="pt-legend-row"><span className="pt-legend-dot provisional" /><div><strong>ชั่วคราว</strong><span>เกิดหลังยืนยันรายการที่เข้าเงื่อนไข แต่ยังรอผลสิ้นสุด</span></div></div><div className="pt-legend-row"><span className="pt-legend-dot final" /><div><strong>ยืนยันแล้ว</strong><span>มาจากรายการที่ถึงผลสิ้นสุดและไม่ถูกคืนเงิน</span></div></div><div className="pt-legend-row"><span className="pt-legend-dot correction" /><div><strong>ปรับแก้</strong><span>เพิ่มหรือลดยอดด้วยเหตุการณ์ชดเชย โดยเก็บประวัติเดิมไว้</span></div></div></section><section className="pt-side-card pt-expiry-card"><div className="pt-expiry-icon">⌛</div><div><p>หมดอายุ 30 ก.ย. 2569</p><h3>รายการที่ยืนยันแล้วจะไม่ถูกดึงโบนัสกลับกลางทาง</h3><span>เมื่อสิทธิ์หมดอายุ ระบบนำออกเฉพาะ BONUS ที่ยังเหลือและไม่ได้ถูกใช้/พักไว้ในรายการที่ยืนยันแล้ว</span></div></section></aside>
-    </div>
+    <PageHeading
+      eyebrow="PROMOTIONS"
+      title="สิทธิ์ โบนัส และ Turnover ที่ตรวจสอบย้อนกลับได้"
+      description="Discovery แสดงสิทธิ์ที่ claim ได้ ส่วน Entitlement แสดง snapshot ของเงื่อนไขและ turnover จริง รวม provisional/finalized history โดยไม่สร้างยอดตัวอย่าง"
+      action={<button className="button secondary" type="button" onClick={() => void load()}>รีเฟรช</button>}
+    />
+
+    {loading ? <LoadingState label="กำลังโหลด Promotion discovery และ Entitlements…" /> : null}
+    {error ? <div style={{ marginBottom: 16 }}><ErrorState error={error} retry={() => void load()} /></div> : null}
+
+    <section className="grid-2">
+      <div className="stack">
+        <Section title="โปรโมชั่นที่ค้นพบ" subtitle={discovery ? `ข้อมูล ณ ${new Date(discovery.asOf).toLocaleString("th-TH")}` : "GET /promotions"}>
+          {discovery?.items.length ? <div className="data-list">{discovery.items.map((item) => <div className="data-row" key={item.campaignVersionId}>
+            <div className="data-main">
+              <strong>{item.campaignCode}</strong>
+              <span>Reward <Money minor={item.rewardAmountMinor} /> · เป้า Turnover <Money minor={item.turnoverTargetMinor} /> · {item.contributionBps / 100}% contribution</span>
+              {!item.eligible && item.ineligibilityReasons.length ? <span>{item.ineligibilityReasons.join(" · ")}</span> : null}
+            </div>
+            <div className="data-meta">
+              <StatusBadge tone={item.eligible ? "success" : "warning"}>{item.eligible ? "ELIGIBLE" : "INELIGIBLE"}</StatusBadge>
+              {item.eligible ? <button className="text-button" type="button" disabled={busy === `claim:${item.campaignVersionId}`} onClick={() => void claim(item.campaignVersionId)}>{busy === `claim:${item.campaignVersionId}` ? "กำลังรับสิทธิ์…" : "รับสิทธิ์"}</button> : null}
+            </div>
+          </div>)}</div> : !loading ? <div className="state-card"><span className="state-symbol">○</span><div><strong>ไม่มีแคมเปญที่ค้นพบ</strong><p>UI จะไม่แสดงโปรโมชั่นจำลองแทน API</p></div></div> : null}
+        </Section>
+
+        <Section title="Entitlements ของฉัน" subtitle={entitlements ? `${entitlements.items.length} สิทธิ์` : "GET /promotions/entitlements"}>
+          {entitlements?.items.length ? <div className="data-list">{entitlements.items.map((item) => <button
+            key={item.id}
+            type="button"
+            className="data-row"
+            style={{ width: "100%", textAlign: "left", borderTop: 0, borderLeft: 0, borderRight: 0, cursor: "pointer", background: selected?.id === item.id ? "var(--mint)" : "transparent" }}
+            onClick={() => void selectEntitlement(item.id)}
+          >
+            <div className="data-main"><strong>{item.campaignCode}</strong><span>{item.id} · หมดอายุ {new Date(item.expiresAt).toLocaleString("th-TH")}</span></div>
+            <StatusBadge tone={item.state === "ACTIVE" || item.state === "COMPLETED" ? "success" : item.state === "REVOKED" ? "danger" : "warning"}>{item.state}</StatusBadge>
+          </button>)}</div> : !loading ? <div className="state-card"><span className="state-symbol">○</span><div><strong>ยังไม่มี Entitlement</strong><p>รับสิทธิ์จากแคมเปญที่ eligible ด้านบน</p></div></div> : null}
+        </Section>
+      </div>
+
+      <aside className="stack">
+        <Section title="รายละเอียดสิทธิ์" subtitle="GET entitlement by id">
+          {selected ? <>
+            <div className="data-row"><div className="data-main"><strong>{selected.campaignCode}</strong><span>Campaign v{selected.campaignVersion} · entitlement v{selected.version}</span></div><StatusBadge tone={selected.state === "ACTIVE" || selected.state === "COMPLETED" ? "success" : "warning"}>{selected.state}</StatusBadge></div>
+            <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))", marginTop: 12 }}>
+              <div className="kpi"><div className="kpi-label">Reward</div><div className="kpi-value" style={{ fontSize: 22 }}><Money minor={selected.rewardMinor} /></div></div>
+              <div className="kpi"><div className="kpi-label">Remaining turnover</div><div className="kpi-value" style={{ fontSize: 22 }}><Money minor={selected.turnover.remainingMinor} /></div></div>
+              <div className="kpi"><div className="kpi-label">Finalized</div><div className="kpi-value" style={{ fontSize: 22 }}><Money minor={selected.turnover.finalizedMinor} /></div></div>
+              <div className="kpi"><div className="kpi-label">Provisional</div><div className="kpi-value" style={{ fontSize: 22 }}><Money minor={selected.turnover.provisionalMinor} /></div></div>
+            </div>
+            <div className="notice info" style={{ marginTop: 12 }}><b>i</b><div><strong>Allowed actions</strong>{selected.allowedActions.join(", ") || "ไม่มี action"} · releaseReached = {String(selected.turnover.releaseReached)}</div></div>
+          </> : <div className="state-card"><span className="state-symbol">○</span><div><strong>เลือก Entitlement</strong><p>รายละเอียด turnover และ terms จะอ่านจาก resource โดยตรง</p></div></div>}
+        </Section>
+
+        {selected ? <Section title="Turnover history" subtitle="เก็บ provisional/finalized/removed แยกเหตุการณ์">
+          {selected.turnoverEntries.length ? <div className="data-list">{selected.turnoverEntries.map((entry, index) => <div className="data-row" key={`${entry.betReference}:${index}`}>
+            <div className="data-main"><strong>{entry.entryKind} · {entry.betReference}</strong><span>{new Date(entry.occurredAt).toLocaleString("th-TH")}</span></div>
+            <div className="data-meta"><strong><Money minor={entry.contributionMinor} /></strong><StatusBadge tone={entry.state === "FINALIZED" ? "success" : entry.state === "REMOVED" ? "danger" : "warning"}>{entry.state}</StatusBadge></div>
+          </div>)}</div> : <div className="state-card"><span className="state-symbol">○</span><div><strong>ยังไม่มี Turnover entry</strong><p>ประวัติจะไม่ถูกสร้างจากยอดรวมใน client</p></div></div>}
+        </Section> : null}
+
+        <Link className="button secondary block" href="/wallet">← กลับกระเป๋า</Link>
+      </aside>
+    </section>
   </main>;
 }

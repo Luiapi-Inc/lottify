@@ -44,10 +44,6 @@ export default function OtpPage() {
       if (flow.purpose === "REGISTER") {
         if (!flow.password) return setError("ไม่พบรหัสผ่านจากขั้นตอนสมัคร กรุณากลับไปสมัครใหม่");
         await memberApi.verifyOtp("REGISTER", flow.phone, otp, flow.password);
-        try {
-          window.localStorage.setItem("lottify-onboarding-phone", "verified");
-          if (flow.ref) window.localStorage.setItem("lottify-referral-code", flow.ref);
-        } catch {}
         clearAuthFlow();
         router.push("/terms");
         return;
