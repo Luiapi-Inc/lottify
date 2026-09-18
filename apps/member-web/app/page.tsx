@@ -74,10 +74,10 @@ export default function HomePage() {
     <div className="wallet-hero">
       <div className="wallet-hero-top"><h2>ยอดเงินในกระเป๋า</h2><Link className="button ghost" href="/wallet">จัดการกระเป๋า →</Link></div>
       <div className="wallet-grid">
-        <div className="wallet-cell"><div className="wallet-label">เงินสดที่ใช้ได้</div><div className="wallet-amount">{cash ? formatBaht(cash.availableMinor) : "ยังโหลดไม่ได้"}<small>บาท</small></div><div className="wallet-actions"><Link className="button secondary" href="/wallet/deposit">เติมเงิน</Link></div></div>
-        <div className="wallet-cell"><div className="wallet-label">โบนัสที่ใช้ได้</div><div className="wallet-amount">{bonus ? formatBaht(bonus.availableMinor) : "ยังโหลดไม่ได้"}<small>บาท</small></div><div className="wallet-actions"><Link className="button secondary" href="/promotions">ดูเงื่อนไข</Link></div></div>
-        <div className="wallet-cell"><div className="wallet-label">ยอดที่พักไว้</div><div className="wallet-amount">{formatBaht(reservedMinor)}<small>บาท</small></div><div className="wallet-actions"><Link className="button secondary" href="/wallet#transactions">ดูรายละเอียด</Link></div></div>
-        <div className="wallet-cell"><div className="wallet-label">ยอดที่ถอนได้โดยประมาณ</div><div className="wallet-amount">{cash ? formatBaht(cash.availableMinor) : "ยังโหลดไม่ได้"}<small>บาท</small></div><div className="wallet-actions"><Link className="button lime" href="/wallet/withdraw">ถอนเงิน</Link></div></div>
+        <div className="wallet-cell"><div className="wallet-label">เงินสดที่ใช้ได้</div><div className="wallet-amount">{cash ? formatBaht(cash.availableMinor) : "ยังโหลดไม่ได้"}</div><div className="wallet-actions"><Link className="button secondary" href="/wallet/deposit">เติมเงิน</Link></div></div>
+        <div className="wallet-cell"><div className="wallet-label">โบนัสที่ใช้ได้</div><div className="wallet-amount">{bonus ? formatBaht(bonus.availableMinor) : "ยังโหลดไม่ได้"}</div><div className="wallet-actions"><Link className="button secondary" href="/promotions">ดูเงื่อนไข</Link></div></div>
+        <div className="wallet-cell"><div className="wallet-label">ยอดที่พักไว้</div><div className="wallet-amount">{formatBaht(reservedMinor)}</div><div className="wallet-actions"><Link className="button secondary" href="/wallet#transactions">ดูรายละเอียด</Link></div></div>
+        <div className="wallet-cell"><div className="wallet-label">ยอดที่ถอนได้โดยประมาณ</div><div className="wallet-amount">{cash ? formatBaht(cash.availableMinor) : "ยังโหลดไม่ได้"}</div><div className="wallet-actions"><Link className="button lime" href="/wallet/withdraw">ถอนเงิน</Link></div></div>
       </div>
       {balance && <p className="muted small" style={{ marginTop: 8 }}>ข้อมูล ณ {formatDateTime(balance.dataAsOf)} · ยอดที่ถอนได้จริงถูกตรวจอีกครั้งโดย preflight ก่อนส่งคำขอถอน</p>}
     </div>

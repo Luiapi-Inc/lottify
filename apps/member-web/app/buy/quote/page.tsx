@@ -42,7 +42,10 @@ function formatClock(totalSeconds: number): string {
 
 export default function QuotePage() {
   const router = useRouter();
-  const [quoteId, setQuoteId] = useState<string | null>(null);
+  // `undefined` = the query string has not been read yet; `null` = read, and
+  // there is no quoteId. Keeping the two apart stops a missing parameter from
+  // being indistinguishable from "still loading" (which would spin forever).
+  const [quoteId, setQuoteId] = useState<string | null | undefined>(undefined);
   const [state, setState] = useState<QuoteState>({ status: "loading" });
   const [accepted, setAccepted] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState>({ status: "idle" });
@@ -54,7 +57,7 @@ export default function QuotePage() {
   }, []);
 
   useEffect(() => {
-    if (quoteId === null) return;
+    if (quoteId === undefined) return;
     if (!quoteId) {
       setState({ status: "failed", message: "ไม่พบ Quote ที่จะตรวจ กรุณาสร้าง Quote ใหม่จากหน้ากรอกเลข", code: "QUOTE_NOT_SELECTED" });
       return;
@@ -129,7 +132,7 @@ export default function QuotePage() {
     }
   };
 
-  if (state.status === "loading" || quoteId === null) {
+  if (state.status === "loading" || quoteId === undefined) {
     return <main id="main">
       <div className="breadcrumb"><Link href="/">หน้าแรก</Link><span>/</span><Link href="/buy">ซื้อหวย</Link><span>/</span><span>Quote</span></div>
       <section className="panel"><div className="panel-title"><h2>กำลังโหลด Quote</h2></div><p className="muted small">กำลังดึงข้อเสนอที่เซิร์ฟเวอร์บันทึกไว้…</p></section>
