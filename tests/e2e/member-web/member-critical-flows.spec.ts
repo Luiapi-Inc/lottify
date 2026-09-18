@@ -418,7 +418,89 @@ async function json(route: Route, body: unknown) {
 }
 
 async function capture(page: Page, testInfo: TestInfo, filename: string) {
+  await assertVisualLayout(page, testInfo);
   const directory = join(process.cwd(), ".hermes", "evidence", "member-web-e2e", "screenshots", testInfo.project.name);
   mkdirSync(directory, { recursive: true });
   await page.screenshot({ path: join(directory, filename), fullPage: true });
+}
+
+async function assertVisualLayout(page: Page, testInfo: TestInfo) {
+  const metrics = await page.evaluate(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const sidebar = document.querySelector<HTMLElement>(".sidebar");
+    const mobileNav = document.querySelector<HTMLElement>(".mobile-nav");
+    const main = document.querySelector<HTMLElement>("main#main");
+    const heading = main?.querySelector<HTMLElement>("h1, h2") ?? null;
+
+    const displayOf = (element: HTMLElement | null) => element ? getComputedStyle(element).display : "missing";
+    const rectOf = (element: HTMLElement | null) => element ? element.getBoundingClientRect().toJSON() : null;
+
+    return {
+      viewportWidth: root.clientWidth,
+      viewportHeight: root.clientHeight,
+      scrollWidth: Math.max(root.scrollWidth, body.scrollWidth),
+      sidebarDisplay: displayOf(sidebar),
+      mobileNavDisplay: displayOf(mobileNav),
+      mobileNavRect: rectOf(mobileNav),
+      mobileNavLinks: mobileNav ? Array.from(mobileNav.querySelectorAll<HTMLElement>("a")).map((link) => link.getBoundingClientRect().toJSON()) : [],
+      mainRect: rectOf(main),
+      headingRect: rectOf(heading),
+      overflowElements: Array.from(document.querySelectorAll<HTMLElement>("body *"))
+        .map((element) => ({
+          tag: element.tagName,
+          className: element.className,
+          text: element.textContent?.trim().replace(/\s+/g, " ").slice(0, 80) ?? "",
+          rect: element.getBoundingClientRect().toJSON(),
+        }))
+        .filter((item) => item.rect.width > 0 && (item.rect.right > root.clientWidth + 1 || item.rect.left < -1))
+        .slice(0, 12),
+    };
+  });
+
+  expect(metrics.scrollWidth, `${testInfo.project.name}: body must not overflow horizontally; offenders=${JSON.stringify(metrics.overflowElements)}`).toBeLessThanOrEqual(metrics.viewportWidth + 1);
+  expect(metrics.headingRect, `${testInfo.project.name}: critical screen must render a visible heading`).not.toBeNull();
+  expect(metrics.headingRect?.width ?? 0).toBeGreaterThan(0);
+  expect(metrics.headingRect?.height ?? 0).toBeGreaterThan(0);
+
+  if (testInfo.project.name === "mobile-chrome") {
+    expect(metrics.sidebarDisplay, "mobile: desktop sidebar must be hidden").toBe("none");
+    expect(metrics.mobileNavDisplay, "mobile: primary navigation must be visible").not.toBe("none");
+    const nav = metrics.mobileNavRect;
+    expect(nav, "mobile: navigation bounds must exist").not.toBeNull();
+    if (nav) {
+      expect(nav.left).toBeGreaterThanOrEqual(0);
+      expect(nav.right).toBeLessThanOrEqual(metrics.viewportWidth);
+      expect(nav.bottom).toBeLessThanOrEqual(metrics.viewportHeight);
+    }
+    expect(metrics.mobileNavLinks).toHaveLength(5);
+    for (const target of metrics.mobileNavLinks) {
+      expect(target.width, "mobile: primary navigation tap target width").toBeGreaterThanOrEqual(44);
+      expect(target.height, "mobile: primary navigation tap target height").toBeGreaterThanOrEqual(44);
+    }
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const overlap = await page.evaluate(() => {
+      const nav = document.querySelector<HTMLElement>(".mobile-nav");
+      const main = document.querySelector<HTMLElement>("main#main");
+      if (!nav || !main) return null;
+      const candidates = Array.from(main.querySelectorAll<HTMLElement>("a,button,input,select,textarea")).filter((element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+      });
+      const last = candidates.at(-1);
+      if (!last) return null;
+      const lastRect = last.getBoundingClientRect();
+      const navRect = nav.getBoundingClientRect();
+      return { lastBottom: lastRect.bottom, navTop: navRect.top, tag: last.tagName, text: last.textContent?.trim().slice(0, 80) ?? "" };
+    });
+    if (overlap) {
+      expect(overlap.lastBottom, `mobile: last interactive element must remain above fixed nav (${overlap.tag} ${overlap.text})`).toBeLessThanOrEqual(overlap.navTop - 4);
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+  } else {
+    expect(metrics.sidebarDisplay, "desktop: sidebar must remain visible").not.toBe("none");
+    expect(metrics.mobileNavDisplay, "desktop: mobile navigation must remain hidden").toBe("none");
+  }
 }
