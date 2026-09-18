@@ -15,7 +15,7 @@ export function PageHeading({
 }) {
   return <header className="page-heading">
     <div>
-      <p className="eyebrow">{eyebrow ?? "LOTTIFY MEMBER"}</p>
+      {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
       <h1>{title}</h1>
       <p>{description}</p>
     </div>

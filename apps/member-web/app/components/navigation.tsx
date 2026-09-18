@@ -29,18 +29,16 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Navigation() {
+function AreaLinks({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname();
-  return <nav className="nav" aria-label="เมนูหลัก">
-    {areas.map((area) => <Link className={isActive(pathname, area.href) ? "active" : undefined} key={area.href} href={area.href} aria-current={isActive(pathname, area.href) ? "page" : undefined}><span className="nav-icon"><Icon name={area.icon} /></span><span>{area.label}</span></Link>)}
-  </nav>;
+  return <>{areas.map((area) => {
+    const active = isActive(pathname, area.href);
+    return <Link className={active ? "active" : undefined} key={area.href} href={area.href} aria-current={active ? "page" : undefined}>
+      <span className="nav-icon"><Icon name={area.icon} /></span><span>{compact ? area.shortLabel : area.label}</span>
+    </Link>;
+  })}</>;
 }
 
-export function MobileNavigation() {
-  const pathname = usePathname();
-  return <nav className="mobile-nav" aria-label="เมนูหลักมือถือ">
-    {areas.map((area) => <Link className={isActive(pathname, area.href) ? "active" : undefined} key={area.href} href={area.href} aria-current={isActive(pathname, area.href) ? "page" : undefined}><span className="nav-icon"><Icon name={area.icon} /></span><span>{area.shortLabel}</span></Link>)}
-  </nav>;
-}
-
+export function Navigation() { return <nav className="dock-nav" aria-label="เมนูหลัก"><AreaLinks /></nav>; }
+export function MobileNavigation() { return <nav className="mobile-nav" aria-label="เมนูหลักมือถือ"><AreaLinks compact /></nav>; }
 export function BellIcon() { return <Icon name="bell" />; }

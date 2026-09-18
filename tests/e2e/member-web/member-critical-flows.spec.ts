@@ -428,7 +428,8 @@ async function assertVisualLayout(page: Page, testInfo: TestInfo) {
   const metrics = await page.evaluate(() => {
     const root = document.documentElement;
     const body = document.body;
-    const sidebar = document.querySelector<HTMLElement>(".sidebar");
+    const masthead = document.querySelector<HTMLElement>(".member-masthead");
+    const dockNav = document.querySelector<HTMLElement>(".dock-nav");
     const mobileNav = document.querySelector<HTMLElement>(".mobile-nav");
     const main = document.querySelector<HTMLElement>("main#main");
     const heading = main?.querySelector<HTMLElement>("h1, h2") ?? null;
@@ -440,11 +441,14 @@ async function assertVisualLayout(page: Page, testInfo: TestInfo) {
       viewportWidth: root.clientWidth,
       viewportHeight: root.clientHeight,
       scrollWidth: Math.max(root.scrollWidth, body.scrollWidth),
-      sidebarDisplay: displayOf(sidebar),
+      mastheadDisplay: displayOf(masthead),
+      mastheadRect: rectOf(masthead),
+      dockNavDisplay: displayOf(dockNav),
+      dockNavRect: rectOf(dockNav),
+      dockNavLinks: dockNav ? Array.from(dockNav.querySelectorAll<HTMLElement>("a")).map((link) => link.getBoundingClientRect().toJSON()) : [],
       mobileNavDisplay: displayOf(mobileNav),
       mobileNavRect: rectOf(mobileNav),
       mobileNavLinks: mobileNav ? Array.from(mobileNav.querySelectorAll<HTMLElement>("a")).map((link) => link.getBoundingClientRect().toJSON()) : [],
-      mainRect: rectOf(main),
       headingRect: rectOf(heading),
       overflowElements: Array.from(document.querySelectorAll<HTMLElement>("body *"))
         .map((element) => ({
@@ -462,9 +466,15 @@ async function assertVisualLayout(page: Page, testInfo: TestInfo) {
   expect(metrics.headingRect, `${testInfo.project.name}: critical screen must render a visible heading`).not.toBeNull();
   expect(metrics.headingRect?.width ?? 0).toBeGreaterThan(0);
   expect(metrics.headingRect?.height ?? 0).toBeGreaterThan(0);
+  expect(metrics.mastheadDisplay, `${testInfo.project.name}: member masthead must remain visible`).not.toBe("none");
+
+  if (metrics.mastheadRect) {
+    expect(metrics.mastheadRect.left).toBeGreaterThanOrEqual(0);
+    expect(metrics.mastheadRect.right).toBeLessThanOrEqual(metrics.viewportWidth);
+  }
 
   if (testInfo.project.name === "mobile-chrome") {
-    expect(metrics.sidebarDisplay, "mobile: desktop sidebar must be hidden").toBe("none");
+    expect(metrics.dockNavDisplay, "mobile: desktop dock must be hidden").toBe("none");
     expect(metrics.mobileNavDisplay, "mobile: primary navigation must be visible").not.toBe("none");
     const nav = metrics.mobileNavRect;
     expect(nav, "mobile: navigation bounds must exist").not.toBeNull();
@@ -500,7 +510,15 @@ async function assertVisualLayout(page: Page, testInfo: TestInfo) {
     }
     await page.evaluate(() => window.scrollTo(0, 0));
   } else {
-    expect(metrics.sidebarDisplay, "desktop: sidebar must remain visible").not.toBe("none");
+    expect(metrics.dockNavDisplay, "desktop: floating dock must remain visible").not.toBe("none");
     expect(metrics.mobileNavDisplay, "desktop: mobile navigation must remain hidden").toBe("none");
+    expect(metrics.dockNavLinks).toHaveLength(5);
+    const dock = metrics.dockNavRect;
+    expect(dock, "desktop: dock bounds must exist").not.toBeNull();
+    if (dock) {
+      expect(dock.left).toBeGreaterThanOrEqual(0);
+      expect(dock.right).toBeLessThanOrEqual(metrics.viewportWidth);
+      expect(dock.bottom).toBeLessThanOrEqual(metrics.viewportHeight);
+    }
   }
 }
