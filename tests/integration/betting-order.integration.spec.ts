@@ -122,6 +122,13 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
         select: { accountingPeriodId: true },
         distinct: ["accountingPeriodId"],
       });
+      const ownAccountIds = (
+        await prisma.ledgerPosting.findMany({
+          where: { transactionId: { in: transactionIds } },
+          select: { accountId: true },
+          distinct: ["accountId"],
+        })
+      ).map((posting) => posting.accountId);
 
       await prisma.$transaction(async (tx) => {
         await tx.$executeRawUnsafe('ALTER TABLE "bet_receipts" DISABLE TRIGGER "bet_receipts_immutable"');
@@ -146,18 +153,38 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
         await tx.reservation.deleteMany({ where: { memberId: { in: memberIds } } });
         await tx.ledgerPosting.deleteMany({ where: { transactionId: { in: transactionIds } } });
         await tx.financialTransaction.deleteMany({ where: { id: { in: transactionIds } } });
-        await tx.ledgerAccount.deleteMany({
-          where: {
-            OR: [
-              { id: { in: accountIds } },
-              { systemCode: "betting-settlement" },
-              { systemCode: { startsWith: "promotion-funding:" } },
-            ],
-          },
-        });
-        await tx.accountingPeriod.deleteMany({
-          where: { id: { in: periods.map((period) => period.accountingPeriodId) } },
-        });
+        const candidateAccountIds = [...new Set([...accountIds, ...ownAccountIds])];
+        const stillReferencedAccountIds = new Set(
+          (
+            await tx.ledgerPosting.findMany({
+              where: { accountId: { in: candidateAccountIds } },
+              select: { accountId: true },
+              distinct: ["accountId"],
+            })
+          ).map((posting) => posting.accountId),
+        );
+        const deletableAccountIds = candidateAccountIds.filter(
+          (accountId) => !stillReferencedAccountIds.has(accountId),
+        );
+        if (deletableAccountIds.length > 0) {
+          await tx.ledgerAccount.deleteMany({ where: { id: { in: deletableAccountIds } } });
+        }
+        const periodIds = periods.map((period) => period.accountingPeriodId);
+        const stillReferencedPeriodIds = new Set(
+          (
+            await tx.financialTransaction.findMany({
+              where: { accountingPeriodId: { in: periodIds } },
+              select: { accountingPeriodId: true },
+              distinct: ["accountingPeriodId"],
+            })
+          ).map((transaction) => transaction.accountingPeriodId),
+        );
+        const deletablePeriodIds = periodIds.filter(
+          (periodId) => !stillReferencedPeriodIds.has(periodId),
+        );
+        if (deletablePeriodIds.length > 0) {
+          await tx.accountingPeriod.deleteMany({ where: { id: { in: deletablePeriodIds } } });
+        }
 
         await tx.lotteryDrawOverride.deleteMany({ where: { drawId: { in: drawIds } } });
         await tx.lotteryDrawBetType.deleteMany({ where: { drawId: { in: drawIds } } });
@@ -1059,6 +1086,53 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
     expect(projection.buckets.find((bucket) => bucket.bucket === "CASH")?.postedMinor).toBe(1_000n);
   });
 
+  it("snapshots mixed Promotion BONUS and CASH funding without recomputing the source composition", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO_MIXED", "2100-08-12");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const entitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 100n,
+    });
+    const quoteAt = new Date("2100-08-12T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const order = await createOrderForQuote(memberId, quote.id);
+
+    await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: order.id } },
+      include: { allocations: { include: { account: true } } },
+    });
+    expect(
+      reservation.allocations
+        .map((allocation) => ({ bucket: allocation.account.bucket, amountMinor: allocation.amountMinor }))
+        .sort((left, right) => String(left.bucket).localeCompare(String(right.bucket))),
+    ).toEqual([
+      { bucket: "BONUS", amountMinor: 100n },
+      { bucket: "CASH", amountMinor: 200n },
+    ]);
+    const snapshot = reservation.sourceAllocationSnapshot as {
+      allocations?: Array<Record<string, unknown>>;
+    };
+    expect(snapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "100",
+        promotionEntitlementId: entitlementId,
+      }),
+      { bucket: "CASH", amountMinor: "200" },
+    ]);
+  });
+
   it("does not use Promotion BONUS outside the accepted Product or Bet Type scope", async () => {
     const { drawId, betTypeCode } = await openDraw("O_PROMO_SCOPE", "2100-09-05");
     const memberId = await newMember();
@@ -1153,6 +1227,314 @@ describe.runIf(runIntegration)("Bet Order create/confirm/cancel + Receipt", () =
         bucket: "BONUS",
         amountMinor: "200",
         promotionEntitlementId: lowerPriorityEntitlementId,
+      }),
+    ]);
+  });
+
+  it("selects the nearest-expiry Promotion Entitlement before a higher-priority later expiry", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO_EXPIRY_ORDER", "2100-10-08");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const nearerExpiryEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 300n,
+      expiresAt: new Date("2100-10-20T00:00:00.000Z"),
+      priority: 1,
+    });
+    await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 300n,
+      expiresAt: new Date("2100-11-20T00:00:00.000Z"),
+      priority: 99,
+    });
+    const quoteAt = new Date("2100-10-08T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const order = await createOrderForQuote(memberId, quote.id);
+
+    await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: order.id } },
+    });
+    const snapshot = reservation.sourceAllocationSnapshot as {
+      allocations?: Array<Record<string, unknown>>;
+    };
+    expect(snapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "300",
+        promotionEntitlementId: nearerExpiryEntitlementId,
+      }),
+    ]);
+  });
+
+  it("uses Entitlement id as the stable tie-breaker when expiry and priority match", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO_TIE", "2100-10-09");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const sameExpiry = new Date("2100-12-01T00:00:00.000Z");
+    const entitlementIds = [
+      await grantPromotionBonus({
+        memberId,
+        productId,
+        betTypeCode,
+        amountMinor: 300n,
+        expiresAt: sameExpiry,
+        priority: 10,
+      }),
+      await grantPromotionBonus({
+        memberId,
+        productId,
+        betTypeCode,
+        amountMinor: 300n,
+        expiresAt: sameExpiry,
+        priority: 10,
+      }),
+    ];
+    const expectedEntitlementId = [...entitlementIds].sort((left, right) => left.localeCompare(right))[0]!;
+    const quoteAt = new Date("2100-10-09T08:00:00.000Z");
+    const quote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const order = await createOrderForQuote(memberId, quote.id);
+
+    await orders.confirmOrder({
+      memberId,
+      orderId: order.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: order.id } },
+    });
+    const snapshot = reservation.sourceAllocationSnapshot as {
+      allocations?: Array<Record<string, unknown>>;
+    };
+    expect(snapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "300",
+        promotionEntitlementId: expectedEntitlementId,
+      }),
+    ]);
+  });
+
+  it("does not attribute later Bet funding to an exhausted Promotion Entitlement", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO_REMAIN", "2100-10-12");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const sameExpiry = new Date("2100-12-01T00:00:00.000Z");
+    const firstEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 300n,
+      expiresAt: sameExpiry,
+      priority: 99,
+    });
+    const secondEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 500n,
+      expiresAt: sameExpiry,
+      priority: 1,
+    });
+    const quoteAt = new Date("2100-10-12T08:00:00.000Z");
+
+    const firstQuote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const firstOrder = await createOrderForQuote(memberId, firstQuote.id);
+    await orders.confirmOrder({
+      memberId,
+      orderId: firstOrder.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const secondQuote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const secondOrder = await createOrderForQuote(memberId, secondQuote.id);
+    await orders.confirmOrder({
+      memberId,
+      orderId: secondOrder.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const firstReservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: firstOrder.id } },
+    });
+    const secondReservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: secondOrder.id } },
+    });
+    const firstSnapshot = firstReservation.sourceAllocationSnapshot as {
+      allocations?: Array<Record<string, unknown>>;
+    };
+    const secondSnapshot = secondReservation.sourceAllocationSnapshot as {
+      allocations?: Array<Record<string, unknown>>;
+    };
+
+    expect(firstSnapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "300",
+        promotionEntitlementId: firstEntitlementId,
+      }),
+    ]);
+    expect(secondSnapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "300",
+        promotionEntitlementId: secondEntitlementId,
+      }),
+    ]);
+  });
+
+  it("serializes competing Promotion-funded Bets so one Entitlement cannot be attributed twice", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO_RACE", "2100-10-19");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const sameExpiry = new Date("2100-12-01T00:00:00.000Z");
+    const firstEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 300n,
+      expiresAt: sameExpiry,
+      priority: 99,
+    });
+    const secondEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 300n,
+      expiresAt: sameExpiry,
+      priority: 1,
+    });
+    const quoteAt = new Date("2100-10-19T08:00:00.000Z");
+    const [firstQuote, secondQuote] = await Promise.all([
+      authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt }),
+      authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt }),
+    ]);
+    const [firstOrder, secondOrder] = await Promise.all([
+      createOrderForQuote(memberId, firstQuote.id),
+      createOrderForQuote(memberId, secondQuote.id),
+    ]);
+
+    await Promise.all([
+      orders.confirmOrder({
+        memberId,
+        orderId: firstOrder.id,
+        expectedVersion: 1,
+        idempotencyKey: `c-${randomUUID()}`,
+        now: quoteAt,
+      }),
+      orders.confirmOrder({
+        memberId,
+        orderId: secondOrder.id,
+        expectedVersion: 1,
+        idempotencyKey: `c-${randomUUID()}`,
+        now: quoteAt,
+      }),
+    ]);
+
+    const reservations = await prisma.reservation.findMany({
+      where: { businessReference: { in: [firstOrder.id, secondOrder.id] }, purpose: "BET" },
+      select: { sourceAllocationSnapshot: true },
+    });
+    const attributedMinor = new Map<string, bigint>();
+    for (const reservation of reservations) {
+      const snapshot = reservation.sourceAllocationSnapshot as {
+        allocations?: Array<Record<string, unknown>>;
+      };
+      for (const allocation of snapshot.allocations ?? []) {
+        const entitlementId = allocation.promotionEntitlementId;
+        const amountMinor = allocation.amountMinor;
+        if (typeof entitlementId !== "string" || typeof amountMinor !== "string") continue;
+        attributedMinor.set(
+          entitlementId,
+          (attributedMinor.get(entitlementId) ?? 0n) + BigInt(amountMinor),
+        );
+      }
+    }
+
+    expect(attributedMinor.get(firstEntitlementId)).toBe(300n);
+    expect(attributedMinor.get(secondEntitlementId)).toBe(300n);
+  });
+
+  it("restores Promotion Entitlement funding capacity after the accepted stake is refunded", async () => {
+    const { drawId, productId, betTypeCode } = await openDraw("O_PROMO_REFUND", "2100-10-26");
+    const memberId = await newMember();
+    await fundCash(memberId, 1_000n);
+    const sameExpiry = new Date("2100-12-01T00:00:00.000Z");
+    const firstEntitlementId = await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 300n,
+      expiresAt: sameExpiry,
+      priority: 99,
+    });
+    await grantPromotionBonus({
+      memberId,
+      productId,
+      betTypeCode,
+      amountMinor: 300n,
+      expiresAt: sameExpiry,
+      priority: 1,
+    });
+    const quoteAt = new Date("2100-10-26T08:00:00.000Z");
+
+    const firstQuote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const firstOrder = await createOrderForQuote(memberId, firstQuote.id);
+    await orders.confirmOrder({
+      memberId,
+      orderId: firstOrder.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+    await orders.cancelOrder({
+      memberId,
+      orderId: firstOrder.id,
+      expectedVersion: 3,
+      idempotencyKey: `x-${randomUUID()}`,
+      reason: "promotion refund provenance test",
+      now: quoteAt,
+    });
+
+    const secondQuote = await authorisedQuote({ memberId, drawId, betTypeCode, serverNow: quoteAt });
+    const secondOrder = await createOrderForQuote(memberId, secondQuote.id);
+    await orders.confirmOrder({
+      memberId,
+      orderId: secondOrder.id,
+      expectedVersion: 1,
+      idempotencyKey: `c-${randomUUID()}`,
+      now: quoteAt,
+    });
+
+    const reservation = await prisma.reservation.findUniqueOrThrow({
+      where: { purpose_businessReference: { purpose: "BET", businessReference: secondOrder.id } },
+    });
+    const snapshot = reservation.sourceAllocationSnapshot as {
+      allocations?: Array<Record<string, unknown>>;
+    };
+    expect(snapshot.allocations).toEqual([
+      expect.objectContaining({
+        bucket: "BONUS",
+        amountMinor: "300",
+        promotionEntitlementId: firstEntitlementId,
       }),
     ]);
   });
