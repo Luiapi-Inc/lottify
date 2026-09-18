@@ -65,32 +65,7 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
     if (existing) {
       reservationId = existing.id;
     } else {
-      const stakeAllocation = await this.allocateStake({
-        orderId: input.orderId,
-        memberId: input.memberId,
-        amountMinor: input.amountMinor,
-        currency,
-        acceptedAt: input.acceptedAt,
-      });
-      try {
-        reservationId = await this.ledger.reserve({
-          purpose: "BET",
-          businessReference: input.orderId,
-          memberId: input.memberId,
-          currency,
-          amountMinor: input.amountMinor,
-          correlationId: input.correlationId,
-          idempotency: {
-            scope: `BET_STAKE_RESERVE:${input.orderId}`,
-            key: input.orderId,
-            fingerprint: stakeFingerprint(input),
-          },
-          allocations: stakeAllocation.allocations,
-          sourceAllocationSnapshot: stakeAllocation.snapshot as unknown as Prisma.InputJsonValue,
-        });
-      } catch (error) {
-        throw mapWalletDenial(error);
-      }
+      reservationId = await this.reserveStakeWithPromotionProvenanceLock(input);
     }
 
     const transactionId = await this.ledger.consumeReservationAndPost({
@@ -144,6 +119,91 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
   }
 
   /**
+   * Serializes Promotion-aware Bet funding against the currently eligible
+   * Entitlements for this Member. Wallet account locks alone protect the shared
+   * BONUS total, but they cannot prevent two concurrent Bets from attributing
+   * the same Entitlement value twice when another Entitlement also contributes
+   * to that shared bucket.
+   *
+   * The Entitlement rows remain locked until the Wallet Reservation commits.
+   * A waiter therefore recalculates Entitlement-specific remaining value after
+   * the prior Reservation is visible, while the Wallet repository still owns
+   * the authoritative account-level availability check.
+   */
+  private async reserveStakeWithPromotionProvenanceLock(input: {
+    orderId: string;
+    memberId: string;
+    drawId: string;
+    amountMinor: bigint;
+    currency: "THB";
+    correlationId: string;
+    acceptedAt: Date;
+  }): Promise<string> {
+    return this.prisma.$transaction(async (tx) => {
+      const lockedEntitlements = await tx.$queryRaw<LockedFundingEntitlementRow[]>`
+        SELECT
+          id,
+          campaign_version_id AS "campaignVersionId",
+          campaign_version AS "campaignVersion",
+          terms_snapshot AS "termsSnapshot",
+          reward_minor AS "rewardMinor",
+          released_minor AS "releasedMinor",
+          expired_minor AS "expiredMinor",
+          expires_at AS "expiresAt"
+        FROM promotion_entitlements
+        WHERE member_id = ${input.memberId}::uuid
+          AND state = 'ACTIVE'
+          AND expires_at > ${input.acceptedAt}
+        ORDER BY id
+        FOR UPDATE
+      `;
+
+      // A concurrent replay of the same Order may have created its Reservation
+      // while this call waited for the Entitlement lock. Reuse it before making
+      // a fresh funding decision.
+      const replay = await tx.reservation.findUnique({
+        where: {
+          purpose_businessReference: { purpose: "BET", businessReference: input.orderId },
+        },
+        select: { id: true },
+      });
+      if (replay) return replay.id;
+
+      const stakeAllocation = await this.allocateStake(
+        {
+          orderId: input.orderId,
+          memberId: input.memberId,
+          amountMinor: input.amountMinor,
+          currency: input.currency,
+          acceptedAt: input.acceptedAt,
+        },
+        tx,
+        lockedEntitlements,
+      );
+
+      try {
+        return await this.ledger.reserve({
+          purpose: "BET",
+          businessReference: input.orderId,
+          memberId: input.memberId,
+          currency: input.currency,
+          amountMinor: input.amountMinor,
+          correlationId: input.correlationId,
+          idempotency: {
+            scope: `BET_STAKE_RESERVE:${input.orderId}`,
+            key: input.orderId,
+            fingerprint: stakeFingerprint(input),
+          },
+          allocations: stakeAllocation.allocations,
+          sourceAllocationSnapshot: stakeAllocation.snapshot as unknown as Prisma.InputJsonValue,
+        });
+      } catch (error) {
+        throw mapWalletDenial(error);
+      }
+    });
+  }
+
+  /**
    * Funds the stake from the Member's spendable buckets in the accepted v1
    * promotion order: eligible BONUS first, then CASH. The returned snapshot is
    * persisted on the Reservation at reserve time so a crash/replay path never
@@ -155,8 +215,8 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
     amountMinor: bigint;
     currency: "THB";
     acceptedAt: Date;
-  }): Promise<StakeAllocationDecision> {
-    const order = await this.prisma.betOrder.findUnique({
+  }, tx: Prisma.TransactionClient, lockedEntitlements: readonly LockedFundingEntitlementRow[]): Promise<StakeAllocationDecision> {
+    const order = await tx.betOrder.findUnique({
       where: { id: input.orderId },
       select: {
         productId: true,
@@ -180,7 +240,7 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
       productId: order.productId,
       betTypeCodes: [...new Set(order.lines.map((line) => line.betTypeCode))],
       at: input.acceptedAt,
-    });
+    }, tx, lockedEntitlements);
 
     let bonusAllocatedMinor = 0n;
     for (const entitlement of eligibleEntitlements) {
@@ -246,35 +306,24 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
     productId: string;
     betTypeCodes: readonly string[];
     at: Date;
-  }): Promise<EligibleFundingEntitlement[]> {
-    const rows = await this.prisma.promotionEntitlement.findMany({
-      where: {
-        memberId: input.memberId,
-        state: "ACTIVE",
-        expiresAt: { gt: input.at },
-      },
-      select: {
-        id: true,
-        campaignVersionId: true,
-        campaignVersion: true,
-        termsSnapshot: true,
-        rewardMinor: true,
-        releasedMinor: true,
-        expiredMinor: true,
-        expiresAt: true,
-      },
-    });
+  }, tx: Prisma.TransactionClient, lockedRows: readonly LockedFundingEntitlementRow[]): Promise<EligibleFundingEntitlement[]> {
+    const usedByEntitlement = await this.usedPromotionAllocationMinorByEntitlement(
+      tx,
+      input.memberId,
+    );
 
-    return rows
+    return lockedRows
       .map((row) => {
         const terms = toTerms(row.termsSnapshot);
+        const historicalRemainingMinor = row.rewardMinor - row.releasedMinor - row.expiredMinor;
+        const alreadyAllocatedMinor = usedByEntitlement.get(row.id) ?? 0n;
         return {
           id: row.id,
           campaignVersionId: row.campaignVersionId,
           campaignVersion: row.campaignVersion,
           terms,
           expiresAt: row.expiresAt,
-          availableMinor: row.rewardMinor - row.releasedMinor - row.expiredMinor,
+          availableMinor: historicalRemainingMinor - alreadyAllocatedMinor,
         };
       })
       .filter((row) => row.availableMinor > 0n && entitlementCoversOrderScope(row.terms, input))
@@ -285,6 +334,58 @@ export class BetOrderWalletAdapter implements BetOrderWalletPort {
         if (priority !== 0) return priority;
         return left.id.localeCompare(right.id);
       });
+  }
+
+  /**
+   * Returns the Entitlement value that is still economically committed to Bet
+   * Reservations/stakes. Active Reservations count immediately. Consumed stake
+   * Reservations keep counting until their stake transaction is reversed by a
+   * cancellation/refund; a reversal restores the original Entitlement capacity.
+   */
+  private async usedPromotionAllocationMinorByEntitlement(
+    tx: Prisma.TransactionClient,
+    memberId: string,
+  ): Promise<Map<string, bigint>> {
+    const reservations = await tx.reservation.findMany({
+      where: {
+        memberId,
+        purpose: "BET",
+        releasedAt: null,
+      },
+      select: {
+        consumedAt: true,
+        sourceAllocationSnapshot: true,
+        consumingTransaction: {
+          select: {
+            correctionTransactions: {
+              where: { correctionKind: "REVERSAL" },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const totals = new Map<string, bigint>();
+    for (const reservation of reservations) {
+      if (
+        reservation.consumedAt !== null &&
+        reservation.consumingTransaction?.correctionTransactions.length
+      ) {
+        continue;
+      }
+
+      for (const allocation of promotionAllocationsFromSnapshot(
+        reservation.sourceAllocationSnapshot,
+      )) {
+        totals.set(
+          allocation.promotionEntitlementId,
+          (totals.get(allocation.promotionEntitlementId) ?? 0n) + allocation.amountMinor,
+        );
+      }
+    }
+    return totals;
   }
 }
 
@@ -378,6 +479,49 @@ interface EligibleFundingEntitlement {
   readonly terms: PromotionCampaignTerms;
   readonly expiresAt: Date;
   readonly availableMinor: bigint;
+}
+
+interface LockedFundingEntitlementRow {
+  readonly id: string;
+  readonly campaignVersionId: string;
+  readonly campaignVersion: number;
+  readonly termsSnapshot: Prisma.JsonValue;
+  readonly rewardMinor: bigint;
+  readonly releasedMinor: bigint;
+  readonly expiredMinor: bigint;
+  readonly expiresAt: Date;
+}
+
+interface HistoricalPromotionAllocation {
+  readonly promotionEntitlementId: string;
+  readonly amountMinor: bigint;
+}
+
+function promotionAllocationsFromSnapshot(snapshot: Prisma.JsonValue | null): HistoricalPromotionAllocation[] {
+  if (!isJsonObject(snapshot)) return [];
+  if (snapshot.schemaVersion !== "bet-stake-source-allocation-v1") return [];
+  if (!Array.isArray(snapshot.allocations)) return [];
+
+  const result: HistoricalPromotionAllocation[] = [];
+  for (const rawAllocation of snapshot.allocations) {
+    if (!isJsonObject(rawAllocation) || rawAllocation.bucket !== "BONUS") continue;
+    if (typeof rawAllocation.promotionEntitlementId !== "string") continue;
+    if (
+      typeof rawAllocation.amountMinor !== "string" ||
+      !/^[1-9]\d*$/.test(rawAllocation.amountMinor)
+    ) {
+      throw new Error("Bet Reservation contains invalid Promotion allocation provenance");
+    }
+    result.push({
+      promotionEntitlementId: rawAllocation.promotionEntitlementId,
+      amountMinor: BigInt(rawAllocation.amountMinor),
+    });
+  }
+  return result;
+}
+
+function isJsonObject(value: Prisma.JsonValue | null): value is Prisma.JsonObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function entitlementCoversOrderScope(
