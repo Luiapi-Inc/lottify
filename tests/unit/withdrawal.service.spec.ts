@@ -26,10 +26,13 @@ import { WithdrawalFundsUnavailableError } from "../../src/contexts/payments/app
 import { DeterministicPayoutProviderFake } from "../../src/contexts/payments/infrastructure/deterministic-payout-provider.adapter";
 import type { MemberWithdrawalRestrictionPort } from "../../src/contexts/payments/application/withdrawal-restriction.port";
 import { UnrestrictedMemberWithdrawalRestrictionAdapter } from "../../src/contexts/payments/infrastructure/unrestricted-member-withdrawal-restriction.adapter";
+import { WITHDRAWAL_OUTBOX_TOPICS } from "../../src/contexts/payments/domain/withdrawal-outbox-event";
 
 class InMemoryWithdrawalRepository implements WithdrawalRepository {
   readonly rows = new Map<string, WithdrawalRecord>();
   readonly events: WithdrawalEventRecord[] = [];
+  /** Outbox events the service asked to publish, in transition order. */
+  readonly outboxEvents: { from: string; to: string; topic: string }[] = [];
 
   async create(input: CreateWithdrawalInput): Promise<WithdrawalRecord | null> {
     for (const row of this.rows.values()) {
@@ -136,6 +139,9 @@ class InMemoryWithdrawalRepository implements WithdrawalRepository {
         row.reconciliationAttempts + (patch.countReconciliationAttempt ? 1 : 0),
     };
     this.rows.set(next.id, next);
+    if (input.outbox) {
+      this.outboxEvents.push({ from: input.from, to: input.to, topic: input.outbox.topic });
+    }
     this.events.push({
       id: randomUUID(),
       withdrawalId: next.id,
@@ -336,6 +342,39 @@ describe("WithdrawalService", () => {
       "REQUESTED",
       "RESERVING",
       "APPROVED",
+    ]);
+  });
+
+  it("publishes a reserved outbox event atomically with the reservation transition", async () => {
+    const withdrawal = await create();
+
+    // Exactly one published intent, on the milestone that owes the payout. The
+    // later RESERVING -> APPROVED transition carries no outbox event.
+    expect(withdrawals.outboxEvents).toEqual([
+      { from: "REQUESTED", to: "RESERVING", topic: WITHDRAWAL_OUTBOX_TOPICS.reserved },
+    ]);
+    expect(withdrawal.state).toBe("APPROVED");
+  });
+
+  it("publishes a rejected outbox event when the request is rejected before any reservation", async () => {
+    payoutTarget = destination({ status: "PENDING", verifiedAt: null });
+    destinationRows.set(payoutTarget.id, payoutTarget);
+
+    const withdrawal = await create();
+
+    expect(withdrawal.state).toBe("REJECTED");
+    expect(withdrawals.outboxEvents).toEqual([
+      { from: "REQUESTED", to: "REJECTED", topic: WITHDRAWAL_OUTBOX_TOPICS.rejected },
+    ]);
+  });
+
+  it("publishes a rejected outbox event when the Ledger refuses the reservation", async () => {
+    ledger.fundsUnavailableFor.add("member-1");
+
+    await expect(create()).rejects.toMatchObject({ code: "INSUFFICIENT_FUNDS" });
+
+    expect(withdrawals.outboxEvents).toEqual([
+      { from: "REQUESTED", to: "REJECTED", topic: WITHDRAWAL_OUTBOX_TOPICS.rejected },
     ]);
   });
 

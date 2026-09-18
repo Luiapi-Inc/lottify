@@ -23,6 +23,8 @@ import {
   resetEnvironmentForTests,
 } from "../../src/platform/config/env";
 import { PrismaService } from "../../src/platform/persistence/prisma.service";
+import { OutboxService } from "../../src/platform/outbox/outbox.service";
+import { WITHDRAWAL_OUTBOX_TOPICS } from "../../src/contexts/payments/domain/withdrawal-outbox-event";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
 const phonePrefix = "099"; // withdrawal integration namespace
@@ -58,7 +60,7 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
       payoutDestinations,
       new DeterministicPayoutDestinationVerificationFake(),
     );
-    withdrawals = new PrismaWithdrawalRepository(prisma);
+    withdrawals = new PrismaWithdrawalRepository(prisma, new OutboxService(prisma));
   });
 
   afterAll(async () => {
@@ -71,6 +73,15 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
 
     await prisma.paymentWithdrawalEvent.deleteMany({
       where: { withdrawal: { memberId: { in: ids } } },
+    });
+    // Outbox events are durable published intents: remove the rows this suite's
+    // namespace produced, addressed by the withdrawals they were derived from.
+    const namespaceWithdrawals = await prisma.paymentWithdrawal.findMany({
+      where: { memberId: { in: ids } },
+      select: { id: true },
+    });
+    await prisma.outboxEvent.deleteMany({
+      where: { aggregateId: { in: namespaceWithdrawals.map((withdrawal) => withdrawal.id) } },
     });
     await prisma.paymentWithdrawal.deleteMany({ where: { memberId: { in: ids } } });
     await prisma.payoutDestination.deleteMany({ where: { memberId: { in: ids } } });
@@ -196,10 +207,11 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
     const destinationId = await verifiedDestination(memberId);
     const { service, provider } = serviceWith({ [PAYOUT_PROVIDER_ID]: { outcome: "APPROVED" } });
 
+    const correlationId = randomUUID();
     const created = await service.createWithdrawal(
       memberId,
       { payoutDestinationId: destinationId, amountMinor: 40_00n, currency: "THB", idempotencyKey: randomUUID() },
-      randomUUID(),
+      correlationId,
     );
     expect(created.state).toBe("APPROVED");
     expect(created.reservationId).not.toBeNull();
@@ -207,6 +219,24 @@ describe.runIf(runIntegration)("Member Withdrawal vertical integration", () => {
     // The Ledger is the only balance authority: 100.00 posted, 40.00 reserved.
     expect(await postedCash(memberId)).toBe(100_00n);
     expect(await availableCash(memberId)).toBe(60_00n);
+
+    // The reservation transition published a durable outbox intent in the same
+    // transaction, carrying the caller's correlation id (GH #92 / W5-F3).
+    const reservedEvent = await prisma.outboxEvent.findFirst({
+      where: { aggregateId: created.id, topic: WITHDRAWAL_OUTBOX_TOPICS.reserved },
+    });
+    expect(reservedEvent).toMatchObject({
+      aggregateType: "PaymentWithdrawal",
+      aggregateId: created.id,
+      correlationId,
+    });
+    expect(reservedEvent?.payload).toMatchObject({
+      withdrawalId: created.id,
+      memberId,
+      reservationId: created.reservationId,
+      amountMinor: "4000",
+      currency: "THB",
+    });
 
     const paid = await service.requestPayout(created.id, { adminId: "admin-1" }, randomUUID());
     expect(paid.state).toBe("PAYOUT_CONFIRMED");

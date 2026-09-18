@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { OutboxService } from "../../../platform/outbox/outbox.service";
 import { PrismaService } from "../../../platform/persistence/prisma.service";
 import type {
   CreateWithdrawalInput,
@@ -11,6 +12,7 @@ import type {
   WithdrawalTransitionInput,
 } from "../domain/withdrawal.repository";
 import type { WithdrawalRecord } from "../domain/withdrawal.repository";
+import { WITHDRAWAL_OUTBOX_AGGREGATE_TYPE } from "../domain/withdrawal-outbox-event";
 import {
   withdrawalQueueFilter,
   type WithdrawalActorType,
@@ -26,6 +28,8 @@ export class PrismaWithdrawalRepository implements WithdrawalRepository {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(OutboxService)
+    private readonly outbox: OutboxService,
   ) {}
 
   async create(input: CreateWithdrawalInput): Promise<WithdrawalRecord | null> {
@@ -138,6 +142,19 @@ export class PrismaWithdrawalRepository implements WithdrawalRepository {
           correlationId: input.event.correlationId,
         },
       });
+
+      // Transactional outbox: the published intent is written by the SAME
+      // transaction as the workflow record it describes, so a rolled-back
+      // transition can never leave a claimable event behind (GH #92 / W5-F3).
+      if (input.outbox) {
+        await this.outbox.enqueue(tx, {
+          topic: input.outbox.topic,
+          aggregateType: WITHDRAWAL_OUTBOX_AGGREGATE_TYPE,
+          aggregateId: input.id,
+          payload: input.outbox.payload as Prisma.InputJsonValue,
+          correlationId: input.event.correlationId,
+        });
+      }
 
       const row = await tx.paymentWithdrawal.findUnique({ where: { id: input.id } });
       return row ? mapRow(row) : null;
