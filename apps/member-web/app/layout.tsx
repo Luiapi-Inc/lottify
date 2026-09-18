@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AppChrome } from "./components/app-chrome";
 import "./styles.css";
+import "./redesign.css";
 
 export const metadata: Metadata = {
   title: { default: "หน้าแรก | Lottify", template: "%s | Lottify" },
