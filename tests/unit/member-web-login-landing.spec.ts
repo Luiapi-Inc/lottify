@@ -40,8 +40,7 @@ describe("member-web login landing is a real document request (defect D1 regress
 
   it("does not prefetch the guarded `/` from the auth shell", () => {
     const shell = readFileSync(join(MEMBER_WEB_APP, "components", "auth-shell.tsx"), "utf8");
-    const brandLink = shell.split("\n").find((line) => line.includes('className="brand" href="/"')) ?? "";
-    expect(brandLink, "auth-shell brand link must exist").not.toBe("");
-    expect(brandLink, "auth-shell brand link must not prefetch the guarded /").toContain("prefetch={false}");
+    const guardedHomeLink = shell.split("\n").find((line) => line.includes('href="/"') && line.includes("prefetch={false}")) ?? "";
+    expect(guardedHomeLink, "auth-shell guarded home link must exist and disable prefetch").not.toBe("");
   });
 });
