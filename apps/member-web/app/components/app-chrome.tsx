@@ -1,12 +1,13 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { MobileNavigation, Navigation } from "./navigation";
 import { Topbar } from "./topbar";
 import { isAuthPath } from "../lib/auth-paths";
 
 export function AppChrome({ children }: { children: ReactNode }) {
-  const pathname = usePathnameSafe();
+  const pathname = usePathname();
   const isAuth = isAuthPath(pathname);
 
   if (isAuth) return <>{children}</>;
@@ -20,11 +21,4 @@ export function AppChrome({ children }: { children: ReactNode }) {
     </div>
     <MobileNavigation />
   </>;
-}
-
-function usePathnameSafe(): string {
-  // Kept as a tiny wrapper so AppChrome owns only shell decisions and the
-  // navigation components remain the single owner of active-route styling.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return require("next/navigation").usePathname();
 }
