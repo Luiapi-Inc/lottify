@@ -7,6 +7,23 @@ description: Coordinate delegated Lottify work using the approved specification,
 
 Use this skill when a Lottify task needs delegated agents or parallel work.
 
+## Delivery flow (canonical execution pipeline)
+
+Every delegated Lottify work item follows this flow, in order. The Lead drives it end-to-end:
+
+1. `luiapi-agent` — resolve next action from the generic core (Plan -> Intended Result -> Current State -> Gap -> Next Executable Action).
+2. `lottify` profile — apply the Lottify project profile / source of truth.
+3. Lead เลือกงาน — Lead selects the concrete task to execute.
+4. Work Order — record the task as a Work Order before any dispatch.
+5. Envelope → server — dispatch the Work Order to the server-side **agent** as a structured A2A **task envelope** (input/context that the remote agent handles as an agent). This is NOT an SSH command execution: the peer owns task execution.
+6. task_id — capture the envelope's returned task id.
+7. lifecycle — track the A2A **task lifecycle** through its states (e.g. submitted → working → input-required → completed / failed / canceled), not a shell status.
+8. result — retrieve the task result only after it reaches a terminal done state.
+9. review / evidence — independent review; evidence must match the requirement (Requirement -> Plan -> Implementation -> Test -> Actual Result).
+10. Lead acceptance — Lead makes the acceptance decision; only then is the item closed.
+
+Do not skip steps or accept a result before the review/evidence gate. Successful tests alone are not acceptance.
+
 ## Agent topology
 
 Use the following roles for Lottify delivery:
@@ -46,6 +63,10 @@ Before delegating:
 - Generate the initial execution manifest from the task description, add the active domain ticket and checkpoint, and validate source provenance with `scripts/source_alignment_check.py`.
 - Record ownership, dependencies, and allowed write scope.
 - For a graph, specify stable shared-boundary IDs, isolated Writer workspaces, immutable base SHAs, package dependencies, priority and available runtime profiles. Reject cycles and reconcile source/graph drift before dispatch.
+- For real Hermes A2A project work, dispatch with `hermes_fleet_dispatch_work_order`; do not use a free-form `hermes_fleet_dispatch` prompt as the execution contract.
+- The work order must include a stable `task_id`, an explicit fleet-authorized `target_profile`, `objective`, `workspace`, `inputs`, `constraints`, `acceptance_checks`, `deliverables`, and explicit `authorization` consistent with the assigned ownership/write scope. Use `lottify` as the target profile only when the peer authority manifest explicitly permits it; otherwise fix profile authority first or use an already-authorized profile while carrying the Lottify project profile/source-of-truth explicitly in the inputs. Never invent profile authority.
+- Reserve free-form fleet dispatch for lightweight probes, connectivity checks, or non-authoritative exploration that cannot change project state or create acceptance claims.
+- If dispatch times out but reports that submission may have succeeded, inspect that same `task_id` with `hermes_fleet_task` before retrying; never duplicate-dispatch the same bounded work blindly.
 
 Delegation rules:
 - One Lead owns decomposition, integration, and acceptance status.
