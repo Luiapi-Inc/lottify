@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { MobileNavigation, Navigation } from "./navigation";
@@ -15,14 +14,10 @@ export function AppChrome({ children }: { children: ReactNode }) {
 
   return <>
     <a className="skip-link" href="#main">ข้ามไปเนื้อหา</a>
-    <div className="app-shell">
-      <aside className="sidebar">
-        <Link className="brand" href="/" aria-label="Lottify หน้าแรก"><span className="brand-mark">L</span><span>Lottify</span><small>Member</small></Link>
-        <Navigation />
-        <Link className="sidebar-promo" href="/promotions"><strong>สิทธิ์โบนัสของคุณ</strong><span>ดูเงื่อนไขและความคืบหน้ายอดเล่น</span></Link>
-        <div className="sidebar-foot">Lottify Member</div>
-      </aside>
-      <div className="workspace"><Topbar />{children}</div>
+    <div className="member-shell">
+      <Topbar />
+      <div className="member-canvas">{children}</div>
+      <div className="desktop-dock" aria-label="เมนูหลักเดสก์ท็อป"><Navigation /></div>
     </div>
     <MobileNavigation />
   </>;

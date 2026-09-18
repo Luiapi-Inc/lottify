@@ -1454,10 +1454,6 @@ body.cancel-modal-open { overflow: hidden; }
 
 
 /* Quote failure-state UX */
-.quote-demo { margin: 0 0 18px; padding: 16px 18px; }
-.quote-demo .panel-title { align-items: flex-start; }
-.quote-demo .panel-title p { margin: 3px 0 0; line-height: 1.55; }
-.quote-demo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .quote-failure {
   display: grid;
   grid-template-columns: 46px minmax(0,1fr) auto;
@@ -1481,8 +1477,6 @@ body.cancel-modal-open { overflow: hidden; }
 .quote-accept-row input { margin-top: 4px; }
 .quote-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 @media (max-width: 760px) {
-  .quote-demo-actions { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; }
-  .quote-demo-actions .chip-btn { flex: 0 0 auto; }
   .quote-failure { grid-template-columns: 44px minmax(0,1fr); padding: 16px; }
   .quote-failure-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; }
   .quote-failure-actions .button { width: 100%; }
