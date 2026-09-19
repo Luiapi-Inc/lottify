@@ -5,9 +5,7 @@ does not redefine those requirements. It records the concrete implementation
 decisions taken to implement the previously-unlocked Member onboarding data
 contracts — the same role `member-identity-decisions.md` played for the
 OTP/session/device contracts (Issue 31) — because
-`docs/implementation/identity-eligibility-status.md` (gap 3) records that the
-mandatory profile field set, the Terms acceptance/version contract and the
-age/jurisdiction evidence rules were never locked by the source documents.
+`docs/implementation/identity-eligibility-status.md` records the onboarding contract boundary. The mandatory profile field set and Terms acceptance/version contract are implemented here; concrete age/jurisdiction policy bindings are explicitly deferred by Product Owner under `docs/changes/2026-09-19-age-jurisdiction-policy-deferred.md` and are not gaps this slice is expected to close.
 
 ## Scope
 
@@ -107,9 +105,7 @@ the three fields the locked Member prototype collects
   read-only; email is deliberately not added here (not collected by the locked
   prototype and not needed by this slice).
 - The `1900-01-01` lower bound is a format/typo sanity bound, not an age policy.
-  Age/jurisdiction **eligibility** stays with the capability-readiness slice
-  (Issue 64 item 5), which is where a threshold belongs; no age threshold is
-  invented here.
+  Age/jurisdiction **eligibility** policy bindings are explicitly deferred by Product Owner under `docs/changes/2026-09-19-age-jurisdiction-policy-deferred.md`; no minimum-age threshold, jurisdiction allow/deny rule, jurisdiction-specific evidence requirement, or jurisdiction-specific policy outcome is invented or required by this slice.
 - Clearing a field is allowed and is reported as missing — clearing never
   fabricates completeness. A Member profile is not a governed financial fact, so
   there is no approval/version lifecycle; last-write-wins with `profileUpdatedAt`

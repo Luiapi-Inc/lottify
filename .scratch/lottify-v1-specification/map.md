@@ -46,5 +46,6 @@ Reach a fully decided route to an implementation-ready and technically productio
 - Agent hierarchy / Master Agent → Agent → Member model for v1.
 - Multi-tenant / multi-operator architecture for v1.
 - Jurisdiction selection, gambling/lottery licensing strategy, legal opinions, and Malta/GLO operating-model research are outside this engineering Wayfinder.
+- Concrete age/jurisdiction eligibility bindings (minimum-age threshold, jurisdiction allow/deny policy, jurisdiction-specific evidence requirements, and jurisdiction-specific policy outcomes) are explicitly deferred from the current v1 engineering implementation and acceptance scope by `docs/changes/2026-09-19-age-jurisdiction-policy-deferred.md`.
 - Production visual-design-system styling and component-level visual polish are implementation/design-system work beyond this Wayfinder Destination; the required Member/Admin UX flows and interaction semantics are already locked by the resolved prototype tickets.
 - Product-code implementation during this Wayfinder effort.

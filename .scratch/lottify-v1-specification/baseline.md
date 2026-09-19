@@ -118,6 +118,7 @@ This file persists the decisions explicitly confirmed before the Wayfinder map w
 - Q102: Compliance rules such as KYC thresholds, withdrawal review, retention, and responsible-gaming limits are versioned policy configuration with effective periods and audit.
 - Q107: KYC supports multiple provider adapters plus normalized results and manual review/escalation.
 - Q108: Centralized eligibility policy checks age/account restrictions/responsible-gaming/self-exclusion/jurisdiction before Quote and again before Confirm.
+- Change impact (2026-09-19): `docs/changes/2026-09-19-age-jurisdiction-policy-deferred.md` explicitly defers the concrete age threshold, jurisdiction allow/deny policy, jurisdiction-specific evidence requirements, and jurisdiction-specific policy outcomes from the current v1 engineering implementation/acceptance scope. The remaining Q108 restriction/responsible-gaming/eligibility architecture remains unchanged; deferred bindings must not be invented.
 - Q116: Self-exclusion blocks betting immediately and is not normally Admin-overridable; eligible withdrawal remains subject to compliance policy.
 
 ## Promotion, bonus and referral

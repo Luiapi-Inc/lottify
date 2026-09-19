@@ -34,13 +34,17 @@ What exact policy model governs OTP registration/login, sessions/devices, onboar
 - Eligibility/Risk Decisions are point-in-time results with policy version, evidence references, evaluation time, and bounded freshness. Critical operations re-evaluate at the execution point rather than treating an old decision as permanently valid.
 - Policy precedence is deny-first: hard restriction/self-exclusion, then compliance requirements, then risk decisions, then capability/business policy, then allow. Lower-priority rules cannot override a hard block.
 
+### Change impact — 2026-09-19 Product Owner deferral
+
+`docs/changes/2026-09-19-age-jurisdiction-policy-deferred.md` supersedes this ticket only for the concrete age/jurisdiction policy bindings. References in this ticket to age/jurisdiction remain historical domain intent and architecture context, but the current v1 engineering implementation and acceptance scope does not require a minimum-age threshold, jurisdiction allow/deny policy, jurisdiction-specific eligibility evidence requirements, or jurisdiction-specific policy outcomes. Their absence is not an Identity/Eligibility or Production GO blocker for the approved engineering scope, and implementation must not invent them. All other identity, KYC/risk, restriction, responsible-gaming, session/device, payout-destination, and recovery requirements remain unchanged.
+
 ## Answer
 
 Lottify v1 uses versioned, capability-specific identity and risk policy rather than one global account/KYC status. Authentication, verification, eligibility and restrictions remain separately modeled and are re-evaluated at sensitive execution points.
 
 1. OTP policy is versioned per purpose with expiry, attempt/resend/rate-limit controls, anti-enumeration and risk escalation. OTP proves possession, not high-assurance identity.
 2. Sessions use short-lived access tokens, rotating refresh tokens, logical Device records and scoped revocation. Device anomalies feed Risk Signals but device evidence alone does not prove identity or duplicate-account status.
-3. Member readiness is capability-based. Phone verification, terms, profile requirements, age/jurisdiction, restrictions and action-specific KYC independently govern deposit, betting, withdrawal and promotion access.
+3. Member readiness is capability-based. Phone verification, terms, profile requirements, restrictions and action-specific KYC independently govern deposit, betting, withdrawal and promotion access. Historical age/jurisdiction eligibility intent is preserved, but its concrete policy bindings are deferred by the 2026-09-19 Product Owner Change Request and do not gate the current engineering scope.
 4. KYC/Risk returns machine-readable Eligibility Decisions with outcome, reason codes, policy version and evidence references. Betting rechecks before Quote and Confirm; other critical actions re-evaluate at execution time.
 5. Capability restrictions are independent controls such as betting, withdrawal, deposit, login and promotion blocks, each with source, reason and effective period.
 6. KYC requirements are threshold/capability driven and can escalate to enhanced verification or manual review without coupling registration itself to KYC.
